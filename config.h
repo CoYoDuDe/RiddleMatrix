@@ -1,0 +1,278 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#include <Wire.h>
+#include <RTClib.h>
+#include <PxMatrix.h>
+#include <ESP8266WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <EEPROM.h>
+#include <map>
+#include <Ticker.h>
+#include "letters.h"
+
+// **EEPROM Speichergröße**
+#define EEPROM_SIZE 512
+
+// **RS485 & RTC Pins**
+#define GPIO_RS485_ENABLE 10
+#define I2C_SDA 3
+#define I2C_SCL 1
+#define RS485_RX 3
+#define RS485_TX 1
+
+// **LED-Matrix Pins**
+#define P_A D1
+#define P_B D2
+#define P_C D8
+#define P_D D6
+#define P_E D3
+#define P_CLK D5
+#define P_LAT D0
+#define P_OE D4
+#define P_R1 D7
+
+// **Standard-WiFi-Daten (werden bei Erststart gesetzt)**
+String wifi_ssid;
+String wifi_password;
+String hostname;
+
+// **Globale Variablen für die Anzeige**
+
+extern Ticker display_ticker;
+extern bool triggerActive;
+extern unsigned long letterStartTime;
+
+// **Buchstaben für Wochentage (Standardwerte)**
+char dailyLetters[7] = {'A', 'B', 'C', 'D', 'E', 'F', 'G'};
+
+// **Buchstabenfarben für die Wochentage (Standard: Weiß)**
+String dailyLetterColors[7] = {"#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"};
+
+// **Alle auswählbaren Buchstaben (A-Z & `*`)**
+const char availableLetters[] = {
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '*', '#', '~', '&', '?'};
+
+// **Konfiguration für Buchstabenanzeige**
+int display_brightness;           // Standard: 100
+int letter_display_time;           // Standard: 10 Sekunden
+int letter_trigger_delay_1; // Verzögerung für Trigger 1
+int letter_trigger_delay_2; // Verzögerung für Trigger 2
+int letter_trigger_delay_3; // Verzögerung für Trigger 3
+int letter_auto_display_interval; // Standard: 5 Minuten
+
+// **Modus für Buchstabenanzeige (Auto/Trigger)**
+bool autoDisplayMode;
+
+// **RTC-Instanz**
+RTC_DS1307 rtc;
+bool rtc_ok = false;
+String startTime;
+
+// **LED-Matrix Instanz**
+PxMATRIX display(64, 64, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
+
+// **Webserver**
+extern AsyncWebServer server;
+
+// **WiFi Status**
+bool wifiConnected = false;
+
+// **Wochentags-Array**
+const char* daysOfTheWeek[7] = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"};
+
+// **Buchstaben-Datenbank für RAW-Dateien**
+std::map<char, uint8_t*> converted_buchstaben;
+
+// **💾 Einstellungen speichern in EEPROM**
+void saveConfig() {
+    Serial.println("💾 Speichere Einstellungen in EEPROM...");
+    
+    char ssidArr[50] = {0};  
+    char passArr[50] = {0};
+    char hostArr[50] = {0};
+    char colorArr[7][8] = {0};
+
+    wifi_ssid.toCharArray(ssidArr, sizeof(ssidArr));
+    wifi_password.toCharArray(passArr, sizeof(passArr));
+    hostname.toCharArray(hostArr, sizeof(hostArr));
+
+    // Farben umwandeln und speichern
+    for (int i = 0; i < 7; i++) {
+        dailyLetterColors[i].toCharArray(colorArr[i], sizeof(colorArr[i]));
+    }
+
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.put(0, ssidArr);
+    EEPROM.put(50, passArr);
+    EEPROM.put(100, hostArr);
+    EEPROM.put(150, dailyLetters);
+    EEPROM.put(200, colorArr);
+    EEPROM.put(300, display_brightness);
+    EEPROM.put(304, letter_display_time);
+    EEPROM.put(308, letter_trigger_delay_1);
+    EEPROM.put(312, letter_trigger_delay_2);
+    EEPROM.put(316, letter_trigger_delay_3);
+    EEPROM.put(320, letter_auto_display_interval);
+    uint8_t autoModeByte = autoDisplayMode ? 1 : 0;
+    EEPROM.put(324, autoModeByte);    EEPROM.commit();
+
+    Serial.println("✅ Einstellungen erfolgreich gespeichert!");
+}
+
+// **📂 Einstellungen aus EEPROM laden**
+void loadConfig() {
+    Serial.println("📂 Lade Einstellungen aus EEPROM...");
+    
+    char ssidArr[50] = {0};
+    char passArr[50] = {0};
+    char hostArr[50] = {0};
+    char colorArr[7][8] = {0};
+    char colorBuffer[8] = {0};
+
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.get(0, ssidArr);
+    EEPROM.get(50, passArr);
+    EEPROM.get(100, hostArr);
+    EEPROM.get(150, dailyLetters);
+    EEPROM.get(200, colorArr);
+
+    Serial.println("📂 Lade Farben aus EEPROM:");
+    for (int i = 0; i < 7; i++) {
+        memset(colorBuffer, 0, sizeof(colorBuffer));  // Puffer löschen
+        EEPROM.get(200 + (i * 8), colorBuffer);
+        dailyLetterColors[i] = String(colorBuffer);
+        Serial.print("Wochentag ");
+        Serial.print(i);
+        Serial.print(" → Geladene Farbe: ");
+        Serial.println(dailyLetterColors[i]);  // Debugging
+    }
+
+
+    EEPROM.get(300, display_brightness);
+    EEPROM.get(304, letter_display_time);
+    EEPROM.get(308, letter_trigger_delay_1);
+    EEPROM.get(312, letter_trigger_delay_2);
+    EEPROM.get(316, letter_trigger_delay_3);
+    EEPROM.get(320, letter_auto_display_interval);
+    uint8_t autoModeByte;
+    EEPROM.get(324, autoModeByte);
+    autoDisplayMode = (autoModeByte == 1);
+
+    wifi_ssid = String(ssidArr);
+    wifi_password = String(passArr);
+    hostname = String(hostArr);
+
+    for (int i = 0; i < 7; i++) {
+        dailyLetterColors[i] = String(colorArr[i]);
+    }
+
+    Serial.println("✅ EEPROM-Daten geladen!");
+
+    bool eepromUpdated = false;
+
+    // **Falls EEPROM leer oder beschädigt, Standardwerte setzen**
+    if (wifi_ssid.length() == 0 || ssidArr[0] == '\xFF') {  
+        Serial.println("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte...");
+        wifi_ssid = "Traumland_Maerchen";
+        wifi_password = "MaerchenByLothar";
+        hostname = "traumland.maerchen";
+        eepromUpdated = true;
+    }
+
+    if (dailyLetters[0] == '\xFF' || dailyLetters[0] == '\0') {
+        Serial.println("🛑 Fehler: EEPROM hat ungültige Buchstaben gespeichert. Setze Standardwerte.");
+        char defaultLetters[7] = {'A', 'B', 'C', 'D', 'E', 'F', 'G'};
+        memcpy(dailyLetters, defaultLetters, sizeof(defaultLetters));
+        eepromUpdated = true;
+    }
+
+    // Farben prüfen & Standard setzen
+    for (int i = 0; i < 7; i++) {
+        if (dailyLetterColors[i] == "" || dailyLetterColors[i] == "#000000" || dailyLetterColors[i].length() < 3) {  
+            Serial.println("🛑 Ungültige Farben! Setze Standardwerte...");
+            String defaultColors[7] = {"#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500"};
+            dailyLetterColors[i] = defaultColors[i];
+            eepromUpdated = true;
+        }
+    }
+
+    // **Anzeigeeinstellungen prüfen und setzen**
+    if (display_brightness < 1 || display_brightness > 255) {
+        Serial.println("🛑 Ungültige Helligkeit! Setze Standardwert...");
+        display_brightness = 100;
+        eepromUpdated = true;
+    }
+
+    if (letter_display_time < 1 || letter_display_time > 60) {
+        Serial.println("🛑 Ungültige Buchstaben-Anzeigezeit! Setze Standardwert...");
+        letter_display_time = 10;  // **10 Sekunden**
+        eepromUpdated = true;
+    }
+
+    if (letter_trigger_delay_1 < 0 || letter_trigger_delay_1 > 999) {
+      letter_trigger_delay_1 = 180;
+      eepromUpdated = true;
+      }
+
+    if (letter_trigger_delay_2 < 0 || letter_trigger_delay_2 > 999) {
+      letter_trigger_delay_2 = 180;
+            eepromUpdated = true;
+      }
+
+    if (letter_trigger_delay_3 < 0 || letter_trigger_delay_3 > 999) {
+      letter_trigger_delay_3 = 180;
+            eepromUpdated = true;
+      }
+
+    if (letter_auto_display_interval < 1 || letter_auto_display_interval > 999) {
+        Serial.println("🛑 Ungültiges Automodus-Intervall! Setze Standardwert...");
+        letter_auto_display_interval = 300;  // **5 Minuten**
+        eepromUpdated = true;
+    }
+
+    // Falls ungültiger Wert im EEPROM -> Standard setzen
+    if (autoModeByte > 1) {
+        Serial.println("⚠️ Ungültiger Wert für autoDisplayMode! Setze Standard auf false.");
+        autoDisplayMode = false;
+        eepromUpdated = true;
+    }
+
+    if (eepromUpdated) {
+        Serial.println("💾 Standardwerte wurden gesetzt und gespeichert!");
+        saveConfig();
+    }
+}
+
+void resetEEPROM() {
+    Serial.println("⚠️ EEPROM wird vollständig gelöscht...");
+    EEPROM.begin(EEPROM_SIZE);
+    for (int i = 0; i < EEPROM_SIZE; i++) {
+        EEPROM.write(i, 0);
+    }
+    EEPROM.commit();
+    Serial.println("✅ EEPROM gelöscht! Neustart erforderlich.");
+}
+
+void display_updater() {
+    display.display();
+}
+
+// **LED-Matrix Setup-Funktion**
+void setupMatrix() {
+    display.begin(32);  // 1/32 Scan für 64x64 Panels
+    display.setBrightness(display_brightness);
+    display.setFastUpdate(false);
+    display.setDriverChip(FM6126A);
+    display_ticker.attach(0.005, display_updater);
+    display.clearDisplay();
+    display.display();
+}
+
+void checkMemoryUsage() {
+    Serial.print("📝 Freier Speicher: ");
+    Serial.println(ESP.getFreeHeap());  // Nur für ESP-Mikrocontroller
+}
+
+#endif
