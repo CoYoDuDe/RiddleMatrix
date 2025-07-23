@@ -1,0 +1,16 @@
+# Ignore Arduino build directories
+build/
+
+# Ignore compiled binary files
+*.bin
+*.elf
+*.map
+
+# Additional Arduino IDE temporary files
+*.hex
+*.eep
+*.o
+*.d
+
+# Mac OS and other system files
+.DS_Store

@@ -173,11 +173,11 @@ void loadConfig() {
     bool eepromUpdated = false;
 
     // **Falls EEPROM leer oder beschädigt, Standardwerte setzen**
-    if (wifi_ssid.length() == 0 || ssidArr[0] == '\xFF') {  
+    if (wifi_ssid.length() == 0 || ssidArr[0] == '\xFF') {
         Serial.println("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte...");
-        wifi_ssid = "RiddleMatrix_AP";
-        wifi_password = "RiddleMatrix-Setup!";
-        hostname = "traumland.maerchen";
+        wifi_ssid = "YOUR_WIFI_SSID";
+        wifi_password = "YOUR_WIFI_PASSWORD";
+        hostname = "your-device-hostname";
         eepromUpdated = true;
     }
 
