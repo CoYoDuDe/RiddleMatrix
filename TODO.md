@@ -2,7 +2,7 @@
 
 Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben für die Firmware.
 
-## To‑Do List
+## To‑Do
 - [ ] Web‑UI absichern (Authentifizierung, Schutzmechanismen)
 - [ ] Zeitsynchronisation per NTP
 - [ ] OTA/Remote‑Firmware‑Update
