@@ -1,4 +1,5 @@
 # RiddleMatrix
+![Firmware build](https://github.com/OWNER/REPO/actions/workflows/firmware-build.yml/badge.svg)
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 RiddleMatrix is firmware for an ESP8266 microcontroller that drives a 64x64 RGB LED matrix. The display shows one configurable letter for each day of the week. Letters may appear automatically on a schedule or be triggered manually over RS485. WiFi connectivity enables a web interface for configuration and storing settings to EEPROM.
@@ -29,10 +30,9 @@ See [TODO.md](TODO.md) for the project roadmap.
 
 ### PlatformIO
 
-1. Create a new project for platform `esp8266` and board `nodemcuv2`.
-2. Add the above libraries to `platformio.ini`.
-3. Copy the source files into the `src` folder.
-4. Run `platformio run` to build and `platformio run -t upload` to flash.
+1. PlatformIO is pre-configured using `platformio.ini` and the sources in `src/`.
+2. Run `pio run` to build the firmware.
+3. Use `pio run -t upload` to flash it to the board.
 
 ## Additional Setup
 

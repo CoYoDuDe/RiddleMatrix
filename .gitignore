@@ -14,3 +14,7 @@ build/
 
 # Mac OS and other system files
 .DS_Store
+
+# PlatformIO
+.pio/
+.vscode/
