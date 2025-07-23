@@ -39,3 +39,10 @@ RiddleMatrix is firmware for an ESP8266 microcontroller that drives a 64x64 RGB 
 - Check the serial console at 19200 baud for debug messages.
 
 Once configured, the firmware automatically displays letters each day and can be managed via the web interface.
+
+## Configuration
+
+The `config.h` file contains placeholder WiFi credentials used when no
+settings are stored in EEPROM. Real network credentials should **not** be
+committed to the repository. Instead, provide them through the initial EEPROM
+setup or via the device's configuration screen.
