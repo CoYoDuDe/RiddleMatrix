@@ -87,7 +87,7 @@ std::map<char, uint8_t*> converted_buchstaben;
 
 // **💾 Einstellungen speichern in EEPROM**
 void saveConfig() {
-    Serial.println("💾 Speichere Einstellungen in EEPROM...");
+    Serial.println(F("💾 Speichere Einstellungen in EEPROM..."));
     
     char ssidArr[50] = {0};  
     char passArr[50] = {0};
@@ -118,12 +118,12 @@ void saveConfig() {
     uint8_t autoModeByte = autoDisplayMode ? 1 : 0;
     EEPROM.put(324, autoModeByte);    EEPROM.commit();
 
-    Serial.println("✅ Einstellungen erfolgreich gespeichert!");
+    Serial.println(F("✅ Einstellungen erfolgreich gespeichert!"));
 }
 
 // **📂 Einstellungen aus EEPROM laden**
 void loadConfig() {
-    Serial.println("📂 Lade Einstellungen aus EEPROM...");
+    Serial.println(F("📂 Lade Einstellungen aus EEPROM..."));
     
     char ssidArr[50] = {0};
     char passArr[50] = {0};
@@ -138,14 +138,14 @@ void loadConfig() {
     EEPROM.get(150, dailyLetters);
     EEPROM.get(200, colorArr);
 
-    Serial.println("📂 Lade Farben aus EEPROM:");
+    Serial.println(F("📂 Lade Farben aus EEPROM:"));
     for (int i = 0; i < 7; i++) {
         memset(colorBuffer, 0, sizeof(colorBuffer));  // Puffer löschen
         EEPROM.get(200 + (i * 8), colorBuffer);
         dailyLetterColors[i] = String(colorBuffer);
-        Serial.print("Wochentag ");
+        Serial.print(F("Wochentag "));
         Serial.print(i);
-        Serial.print(" → Geladene Farbe: ");
+        Serial.print(F(" → Geladene Farbe: "));
         Serial.println(dailyLetterColors[i]);  // Debugging
     }
 
@@ -168,13 +168,13 @@ void loadConfig() {
         dailyLetterColors[i] = String(colorArr[i]);
     }
 
-    Serial.println("✅ EEPROM-Daten geladen!");
+    Serial.println(F("✅ EEPROM-Daten geladen!"));
 
     bool eepromUpdated = false;
 
     // **Falls EEPROM leer oder beschädigt, Standardwerte setzen**
     if (wifi_ssid.length() == 0 || ssidArr[0] == '\xFF') {
-        Serial.println("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte...");
+        Serial.println(F("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte..."));
         wifi_ssid = "YOUR_WIFI_SSID";
         wifi_password = "YOUR_WIFI_PASSWORD";
         hostname = "your-device-hostname";
@@ -182,7 +182,7 @@ void loadConfig() {
     }
 
     if (dailyLetters[0] == '\xFF' || dailyLetters[0] == '\0') {
-        Serial.println("🛑 Fehler: EEPROM hat ungültige Buchstaben gespeichert. Setze Standardwerte.");
+        Serial.println(F("🛑 Fehler: EEPROM hat ungültige Buchstaben gespeichert. Setze Standardwerte."));
         char defaultLetters[7] = {'A', 'B', 'C', 'D', 'E', 'F', 'G'};
         memcpy(dailyLetters, defaultLetters, sizeof(defaultLetters));
         eepromUpdated = true;
@@ -191,7 +191,7 @@ void loadConfig() {
     // Farben prüfen & Standard setzen
     for (int i = 0; i < 7; i++) {
         if (dailyLetterColors[i] == "" || dailyLetterColors[i] == "#000000" || dailyLetterColors[i].length() < 3) {  
-            Serial.println("🛑 Ungültige Farben! Setze Standardwerte...");
+            Serial.println(F("🛑 Ungültige Farben! Setze Standardwerte..."));
             String defaultColors[7] = {"#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500"};
             dailyLetterColors[i] = defaultColors[i];
             eepromUpdated = true;
@@ -200,13 +200,13 @@ void loadConfig() {
 
     // **Anzeigeeinstellungen prüfen und setzen**
     if (display_brightness < 1 || display_brightness > 255) {
-        Serial.println("🛑 Ungültige Helligkeit! Setze Standardwert...");
+        Serial.println(F("🛑 Ungültige Helligkeit! Setze Standardwert..."));
         display_brightness = 100;
         eepromUpdated = true;
     }
 
     if (letter_display_time < 1 || letter_display_time > 60) {
-        Serial.println("🛑 Ungültige Buchstaben-Anzeigezeit! Setze Standardwert...");
+        Serial.println(F("🛑 Ungültige Buchstaben-Anzeigezeit! Setze Standardwert..."));
         letter_display_time = 10;  // **10 Sekunden**
         eepromUpdated = true;
     }
@@ -227,32 +227,32 @@ void loadConfig() {
       }
 
     if (letter_auto_display_interval < 1 || letter_auto_display_interval > 999) {
-        Serial.println("🛑 Ungültiges Automodus-Intervall! Setze Standardwert...");
+        Serial.println(F("🛑 Ungültiges Automodus-Intervall! Setze Standardwert..."));
         letter_auto_display_interval = 300;  // **5 Minuten**
         eepromUpdated = true;
     }
 
     // Falls ungültiger Wert im EEPROM -> Standard setzen
     if (autoModeByte > 1) {
-        Serial.println("⚠️ Ungültiger Wert für autoDisplayMode! Setze Standard auf false.");
+        Serial.println(F("⚠️ Ungültiger Wert für autoDisplayMode! Setze Standard auf false."));
         autoDisplayMode = false;
         eepromUpdated = true;
     }
 
     if (eepromUpdated) {
-        Serial.println("💾 Standardwerte wurden gesetzt und gespeichert!");
+        Serial.println(F("💾 Standardwerte wurden gesetzt und gespeichert!"));
         saveConfig();
     }
 }
 
 void resetEEPROM() {
-    Serial.println("⚠️ EEPROM wird vollständig gelöscht...");
+    Serial.println(F("⚠️ EEPROM wird vollständig gelöscht..."));
     EEPROM.begin(EEPROM_SIZE);
     for (int i = 0; i < EEPROM_SIZE; i++) {
         EEPROM.write(i, 0);
     }
     EEPROM.commit();
-    Serial.println("✅ EEPROM gelöscht! Neustart erforderlich.");
+    Serial.println(F("✅ EEPROM gelöscht! Neustart erforderlich."));
 }
 
 void display_updater() {
@@ -271,7 +271,7 @@ void setupMatrix() {
 }
 
 void checkMemoryUsage() {
-    Serial.print("📝 Freier Speicher: ");
+    Serial.print(F("📝 Freier Speicher: "));
     Serial.println(ESP.getFreeHeap());  // Nur für ESP-Mikrocontroller
 }
 
