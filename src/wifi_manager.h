@@ -70,11 +70,15 @@ void connectWiFi() {
     WiFi.hostname(hostname.c_str());
     WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
 
-    int attempt = 0;
-    while (WiFi.status() != WL_CONNECTED && attempt < 3200) {
-        attempt++;
-        delay(50);
-        if (attempt % 40 == 0) Serial.print(F("."));
+    unsigned long startAttempt = millis();
+    unsigned long lastDot = startAttempt;
+    while (WiFi.status() != WL_CONNECTED &&
+           (millis() - startAttempt < (wifi_connect_timeout * 1000UL))) {
+        if (millis() - lastDot >= 2000) {
+            Serial.print(".");
+            lastDot = millis();
+        }
+        delay(10);
     }
 
     if (WiFi.status() == WL_CONNECTED) {

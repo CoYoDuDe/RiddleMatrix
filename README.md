@@ -15,7 +15,7 @@ See [TODO.md](TODO.md) for the project roadmap.
 
 ## WiFi Configuration
 
-1. Open `config.h` and edit `wifi_ssid`, `wifi_password` and `hostname` in `saveConfig()`.
+1. Open `config.h` and edit `wifi_ssid`, `wifi_password`, `hostname` and optionally `wifi_connect_timeout` in `saveConfig()`.
 2. Compile and upload the firmware.
 3. Once connected to your network, visit `http://<hostname>` and use the web page to store updated credentials in EEPROM.
 
@@ -28,6 +28,8 @@ See [TODO.md](TODO.md) for the project roadmap.
 3. Open `Firmware.ino`, verify, and upload.
 
 ### PlatformIO
+
+Install PlatformIO using `pip install platformio` and ensure the `platformio` command is available in your PATH before running `pio run`.
 
 1. PlatformIO is pre-configured using `platformio.ini` and the sources in `src/`.
 2. Run `pio run` to build the firmware.
@@ -48,3 +50,5 @@ The `config.h` file contains placeholder WiFi credentials used when no
 settings are stored in EEPROM. Real network credentials should **not** be
 committed to the repository. Instead, provide them through the initial EEPROM
 setup or via the device's configuration screen.
+The `wifi_connect_timeout` setting controls how long the device will attempt to
+connect to WiFi before giving up. The default is 30 seconds.
