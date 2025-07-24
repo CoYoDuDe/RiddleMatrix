@@ -83,8 +83,6 @@ bool wifiConnected = false;
 // **Wochentags-Array**
 const char* daysOfTheWeek[7] = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"};
 
-// **Buchstaben-Datenbank für RAW-Dateien**
-std::map<char, uint8_t*> converted_buchstaben;
 
 // **💾 Einstellungen speichern in EEPROM**
 void saveConfig() {
