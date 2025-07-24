@@ -10,7 +10,6 @@ Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben f�
 - [ ] Fehler‑ und Speichermonitoring
 - [ ] Code‑Cleanup und Struktur (weniger globale Variablen)
 - [ ] CI aufsetzen, die den Arduino‑Code baut
-- [ ] Unbenutzte Variable `converted_buchstaben` entfernen oder implementieren
 - [ ] Dokumentation für Setup und Troubleshooting erweitern
 
 ## Implementierte Features
