@@ -36,6 +36,7 @@
 String wifi_ssid;
 String wifi_password;
 String hostname;
+int wifi_connect_timeout = 30; // Timeout for WiFi connection in seconds
 
 // **Globale Variablen für die Anzeige**
 
@@ -116,7 +117,9 @@ void saveConfig() {
     EEPROM.put(316, letter_trigger_delay_3);
     EEPROM.put(320, letter_auto_display_interval);
     uint8_t autoModeByte = autoDisplayMode ? 1 : 0;
-    EEPROM.put(324, autoModeByte);    EEPROM.commit();
+    EEPROM.put(324, autoModeByte);
+    EEPROM.put(328, wifi_connect_timeout);
+    EEPROM.commit();
 
     Serial.println("✅ Einstellungen erfolgreich gespeichert!");
 }
@@ -158,6 +161,7 @@ void loadConfig() {
     EEPROM.get(320, letter_auto_display_interval);
     uint8_t autoModeByte;
     EEPROM.get(324, autoModeByte);
+    EEPROM.get(328, wifi_connect_timeout);
     autoDisplayMode = (autoModeByte == 1);
 
     wifi_ssid = String(ssidArr);
@@ -178,6 +182,7 @@ void loadConfig() {
         wifi_ssid = "YOUR_WIFI_SSID";
         wifi_password = "YOUR_WIFI_PASSWORD";
         hostname = "your-device-hostname";
+        wifi_connect_timeout = 30;
         eepromUpdated = true;
     }
 
@@ -229,6 +234,12 @@ void loadConfig() {
     if (letter_auto_display_interval < 1 || letter_auto_display_interval > 999) {
         Serial.println("🛑 Ungültiges Automodus-Intervall! Setze Standardwert...");
         letter_auto_display_interval = 300;  // **5 Minuten**
+        eepromUpdated = true;
+    }
+
+    if (wifi_connect_timeout < 1 || wifi_connect_timeout > 300) {
+        Serial.println("🛑 Ungültiger WiFi-Timeout! Setze Standardwert...");
+        wifi_connect_timeout = 30;  // **30 Sekunden**
         eepromUpdated = true;
     }
 
