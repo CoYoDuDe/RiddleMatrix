@@ -65,8 +65,13 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             .catch(error => alert('❌ Fehler: ' + error));
     }
 
+    // 👉 Einzelnen Buchstaben anzeigen
+    function displayLetter(ch) {
+        fetch('/displayLetter?char=' + encodeURIComponent(ch));
+    }
+
     // 🚀 Automatische Aktualisierung der Uhrzeit
-    fetchRTC(); 
+    fetchRTC();
     setInterval(fetchRTC, 5000); // Alle 5 Sekunden aktualisieren
 )rawliteral";
 
