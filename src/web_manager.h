@@ -66,8 +66,21 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     }
 
     // 🚀 Automatische Aktualisierung der Uhrzeit
-    fetchRTC(); 
+    fetchRTC();
     setInterval(fetchRTC, 5000); // Alle 5 Sekunden aktualisieren
+
+    // 📦 Speicherverbrauch abrufen
+    function fetchMemory() {
+        fetch('/memory')
+            .then(response => response.text())
+            .then(mem => {
+                document.getElementById('memoryUsage').innerText = mem + ' bytes';
+            })
+            .catch(error => console.error('❌ Fehler:', error));
+    }
+
+    fetchMemory();
+    setInterval(fetchMemory, 5000);
 )rawliteral";
 
 // **Webserver Initialisierung**
@@ -100,6 +113,7 @@ void setupWebServer() {
         // **RTC-Zeit anzeigen & ändern**
         html += "<h2>Datum & Uhrzeit setzen</h2>";
         html += "<p>Aktuelle Zeit: <span id='rtcTime'>Laden...</span></p>";
+        html += "<p>Freier RAM: <span id='memoryUsage'>Laden...</span></p>";
         html += "<form id='rtcForm'>";
         html += "Datum (YYYY-MM-DD): <input type='date' name='date'><br>";
         html += "Uhrzeit (HH:MM:SS): <input type='time' name='time' step='1'><br>";
@@ -232,15 +246,19 @@ server.on("/updateAllLetters", HTTP_POST, [](AsyncWebServerRequest *request) {
 });
 
     server.on("/setTime", HTTP_POST, [](AsyncWebServerRequest *request) {
-    if (request->hasParam("date", true) && request->hasParam("time", true)) {
-        String date = request->getParam("date", true)->value();
-        String time = request->getParam("time", true)->value();
-        setRTCFromWeb(date, time);
-        request->send(200, "text/plain", "✅ Uhrzeit erfolgreich gesetzt!");
-    } else {
-        request->send(400, "text/plain", "❌ Fehler: Datum oder Zeit fehlt!");
-    }
-});
+        if (request->hasParam("date", true) && request->hasParam("time", true)) {
+            String date = request->getParam("date", true)->value();
+            String time = request->getParam("time", true)->value();
+            setRTCFromWeb(date, time);
+            request->send(200, "text/plain", "✅ Uhrzeit erfolgreich gesetzt!");
+        } else {
+            request->send(400, "text/plain", "❌ Fehler: Datum oder Zeit fehlt!");
+        }
+    });
+
+    server.on("/memory", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/plain", String(ESP.getFreeHeap()));
+    });
 
     server.begin();
 }
