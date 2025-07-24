@@ -9,7 +9,6 @@ Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben f�
 - [ ] Weitere Anzeigeoptionen (Animationen, hochauflösende Symbole)
 - [ ] Fehler‑ und Speichermonitoring
 - [ ] Code‑Cleanup und Struktur (weniger globale Variablen)
-- [ ] CI aufsetzen, die den Arduino‑Code baut
 - [ ] Dokumentation für Setup und Troubleshooting erweitern
 
 ## Implementierte Features
@@ -18,6 +17,7 @@ Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben f�
 - [x] Weboberfläche für WLAN‑Daten, Anzeigeparameter und RTC‑Zeit
 - [x] WiFi‑Symbolanzeige und automatisches Abschalten des Webservers bei Verbindungsverlust
 - [x] EEPROM‑Speicherung aller Einstellungen inklusive Farben je Wochentag
+- [x] CI aufsetzen, die den Arduino‑Code baut
 
 ## Ergänzende Ideen
 - [ ] Authentifizierungsoptionen (Passwortschutz oder OAuth)
