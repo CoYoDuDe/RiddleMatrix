@@ -10,11 +10,11 @@
 void clearDisplay() {
     
     if (alreadyCleared) {
-        Serial.println("⚠️ `clearDisplay()` wurde bereits ausgeführt, Abbruch.");
+        Serial.println(F("⚠️ `clearDisplay()` wurde bereits ausgeführt, Abbruch."));
         return;
     }
 
-    Serial.println("🧹 Buchstabe wird jetzt gelöscht!");
+    Serial.println(F("🧹 Buchstabe wird jetzt gelöscht!"));
     
     display.fillScreen(display.color565(0, 0, 0));
     display.display();
@@ -25,10 +25,11 @@ void clearDisplay() {
 
 // **Funktion: Buchstaben oder Sonderzeichen anzeigen**
 void displayLetter(char letter) {
-    Serial.println("🎨 Zeichne Buchstabe: " + String(letter));
+    Serial.print(F("🎨 Zeichne Buchstabe: "));
+    Serial.println(letter);
 
     if (triggerActive) {
-        Serial.println("⚠️ Ein Buchstabe ist bereits aktiv. Abbruch.");
+        Serial.println(F("⚠️ Ein Buchstabe ist bereits aktiv. Abbruch."));
         return;
     }
 
@@ -36,24 +37,24 @@ void displayLetter(char letter) {
 
     if (letter == '*') {
         letter = (random(2) == 0) ? '#' : '&';
-        Serial.print("🔀 `*` wurde ersetzt durch: ");
+        Serial.print(F("🔀 `*` wurde ersetzt durch: "));
         Serial.println(letter);
     }
 
     // **Heutigen Wochentag abrufen**
     int today = getRTCWeekday();  // 0 = Sonntag, 6 = Samstag
-    Serial.print("📅 Heutiger Wochentag: ");
+    Serial.print(F("📅 Heutiger Wochentag: "));
     Serial.println(today);
 
     // **Farbe aus `dailyLetterColors[today]` abrufen**
     String selectedColor = dailyLetterColors[today];  // Farbe für den heutigen Tag
 
-    Serial.print("🎨 Geladene Farbe für heute: ");
+    Serial.print(F("🎨 Geladene Farbe für heute: "));
     Serial.println(selectedColor);  // Sollte z.B. "#0000FF" sein
 
     // **Falls ungültige Farbe, Standard auf Weiß setzen**
     if (selectedColor.length() != 7 || selectedColor[0] != '#') {
-        Serial.println("⚠️ Fehler: Ungültige Farbe! Setze Standardfarbe Weiß.");
+        Serial.println(F("⚠️ Fehler: Ungültige Farbe! Setze Standardfarbe Weiß."));
         selectedColor = "#FFFFFF";
     }
 
@@ -67,11 +68,11 @@ void displayLetter(char letter) {
     uint16_t letterColor = display.color565(r, g, b);
 
     // **Debugging der Farbwerte**
-    Serial.print("🎨 Konvertierte RGB-Werte: R=");
+    Serial.print(F("🎨 Konvertierte RGB-Werte: R="));
     Serial.print(r);
-    Serial.print(", G=");
+    Serial.print(F(", G="));
     Serial.print(g);
-    Serial.print(", B=");
+    Serial.print(F(", B="));
     Serial.println(b);
 
     // **Display vor Zeichnung komplett leeren**
@@ -80,14 +81,14 @@ void displayLetter(char letter) {
     delay(10);
 
     if (letterData.find(letter) == letterData.end()) {
-        Serial.println("⚠️ Fehler: Buchstabe nicht gefunden!");
+        Serial.println(F("⚠️ Fehler: Buchstabe nicht gefunden!"));
         triggerActive = false;
         return;
     }
 
     const uint8_t* bitmap = letterData[letter];
 
-    Serial.println("🖊️ Beginne Zeichnung...");
+    Serial.println(F("🖊️ Beginne Zeichnung..."));
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {
             uint8_t rowValue = pgm_read_byte(&bitmap[y * 4 + (x / 8)]);
@@ -98,20 +99,20 @@ void displayLetter(char letter) {
         }
     }
 
-    Serial.println("✅ Buchstabe auf Display gezeichnet!");
+    Serial.println(F("✅ Buchstabe auf Display gezeichnet!"));
     display.display();
 
     // **Anzeigezeit speichern**
     letterStartTime = millis();
-    Serial.print("⏳ Anzeigezeit startet jetzt für ");
+    Serial.print(F("⏳ Anzeigezeit startet jetzt für "));
     Serial.print(letter_display_time);
-    Serial.println(" Sekunden!");
+    Serial.println(F(" Sekunden!"));
 }
 
 
 void handleTrigger(char triggerType, bool isAutoMode = false) {
     if (wifiConnected && !isAutoMode) {  
-        Serial.println("⛔ WiFi wird abgeschaltet wegen Trigger!");
+        Serial.println(F("⛔ WiFi wird abgeschaltet wegen Trigger!"));
         WiFi.disconnect();
         wifiConnected = false;
         server.end();
@@ -121,9 +122,9 @@ void handleTrigger(char triggerType, bool isAutoMode = false) {
     
     if (today >= 0 && today < 7) {
         char letter = dailyLetters[today];
-        Serial.print("📅 Heute ist ");
+        Serial.print(F("📅 Heute ist "));
         Serial.print(daysOfTheWeek[today]);
-        Serial.print(" → Zeige Buchstabe: ");
+        Serial.print(F(" → Zeige Buchstabe: "));
         Serial.println(letter);
 
         // **Verzögerung NUR für manuelle Trigger**
@@ -133,9 +134,9 @@ void handleTrigger(char triggerType, bool isAutoMode = false) {
         else if (triggerType == '2') delayTime = letter_trigger_delay_2;
         else if (triggerType == '3') delayTime = letter_trigger_delay_3;
 
-        Serial.print("⏳ Warte auf Trigger-Verzögerung: ");
+        Serial.print(F("⏳ Warte auf Trigger-Verzögerung: "));
         Serial.print(delayTime);
-        Serial.println(" Sekunden...");
+        Serial.println(F(" Sekunden..."));
         delay(delayTime * 1000);
     }
 
@@ -144,7 +145,7 @@ void handleTrigger(char triggerType, bool isAutoMode = false) {
     alreadyCleared = false;
 
     } else {
-        Serial.println("⚠️ Ungültiger Wochentag!");
+        Serial.println(F("⚠️ Ungültiger Wochentag!"));
     }
 }
 
@@ -152,10 +153,10 @@ void checkTrigger() {
     if (Serial.available() > 0) {
         char receivedChar = Serial.read();
         if (receivedChar == '1' || receivedChar == '2' || receivedChar == '3') {
-            Serial.println("🔔 Trigger erhalten: Zeige heutigen Buchstaben!");
+            Serial.println(F("🔔 Trigger erhalten: Zeige heutigen Buchstaben!"));
             handleTrigger(receivedChar, false);
         } else {
-            Serial.print("❌ Unbekannter Trigger: ");
+            Serial.print(F("❌ Unbekannter Trigger: "));
             Serial.println(receivedChar);
         }
     }
@@ -166,7 +167,7 @@ void checkAutoDisplay() {
 
     if (autoDisplayMode && millis() - lastDisplayTime > (letter_auto_display_interval * 1000)) {
         lastDisplayTime = millis();
-        Serial.println("🕒 Automodus aktiv: Zeige heutigen Buchstaben automatisch!");
+        Serial.println(F("🕒 Automodus aktiv: Zeige heutigen Buchstaben automatisch!"));
 
         handleTrigger('1', true);
     }

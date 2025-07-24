@@ -14,7 +14,7 @@ AsyncWebServer server(80);
 void setup() {
   Serial.begin(19200);
   delay(500);
-  Serial.println("🚀 Systemstart...");
+  Serial.println(F("🚀 Systemstart..."));
   // resetEEPROM();
   // clearDisplay();
 
@@ -25,11 +25,12 @@ void setup() {
   enableRTC();
   if (!rtc.begin()) {
     rtc_ok = false;
-    Serial.println("⚠️ RTC nicht gefunden!");
+    Serial.println(F("⚠️ RTC nicht gefunden!"));
   } else {
     rtc_ok = true;
     startTime = getRTCTime();
-    Serial.println("⏰ Startzeit: " + startTime);
+    Serial.print(F("⏰ Startzeit: "));
+    Serial.println(startTime);
   }
   enableRS485();
 
@@ -49,13 +50,13 @@ void loop() {
 
         // **Nur alle 1000 ms (1 Sekunde) eine Debug-Ausgabe**
         if (millis() - lastDebugTime > 1000) {
-            Serial.print("⏳ Anzeige läuft... Verstrichene Zeit: ");
+            Serial.print(F("⏳ Anzeige läuft... Verstrichene Zeit: "));
             Serial.println(elapsedTime / 1000);
             lastDebugTime = millis();  // **Speichert den Zeitpunkt der letzten Ausgabe**
         }
 
         if (elapsedTime >= (letter_display_time * 1000)) {
-            Serial.println("🧹 Anzeigezeit abgelaufen, Buchstabe wird gelöscht!");
+            Serial.println(F("🧹 Anzeigezeit abgelaufen, Buchstabe wird gelöscht!"));
             clearDisplay();
             triggerActive = false;
         }
@@ -70,7 +71,7 @@ void loop() {
         if (receivedChar == '1' || receivedChar == '2' || receivedChar == '3') {
             handleTrigger(receivedChar, false);
         } else {
-            Serial.print("❌ Falscher Trigger empfangen: ");
+            Serial.print(F("❌ Falscher Trigger empfangen: "));
             Serial.println(receivedChar);
         }
     }

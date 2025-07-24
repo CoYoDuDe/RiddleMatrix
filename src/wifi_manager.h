@@ -11,7 +11,7 @@ extern bool triggerActive;
 
 // **WiFi-Manager: Lade WiFi-Daten aus EEPROM, falls vorhanden**
 void loadWiFiConfig() {
-    Serial.println("🔄 Lade WiFi-Konfiguration aus EEPROM...");
+    Serial.println(F("🔄 Lade WiFi-Konfiguration aus EEPROM..."));
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.get(0, wifi_ssid);
     EEPROM.get(50, wifi_password);
@@ -19,20 +19,20 @@ void loadWiFiConfig() {
 
     // **Falls EEPROM leer, bleiben die Werte aus config.h bestehen**
     if (wifi_ssid.length() == 0 || wifi_ssid == " " || wifi_ssid == "\0") {
-        Serial.println("⚠️ Kein gültiges WiFi im EEPROM gefunden. Nutze Standardwerte aus config.h.");
+        Serial.println(F("⚠️ Kein gültiges WiFi im EEPROM gefunden. Nutze Standardwerte aus config.h."));
     } else {
-        Serial.println("✅ WiFi-Konfiguration geladen!");
+        Serial.println(F("✅ WiFi-Konfiguration geladen!"));
     }
 }
 
 // **❌ WiFi-Symbol entfernen, wenn die Verbindung abbricht**
 void clearWiFiSymbol() {
     if (!triggerActive) {
-        Serial.println("🚫 WiFi-Symbol wird entfernt.");
+        Serial.println(F("🚫 WiFi-Symbol wird entfernt."));
         display.fillScreen(display.color565(0, 0, 0));
         display.display();
     } else {
-        Serial.println("⏳ WiFi-Symbol bleibt, weil ein Buchstabe aktiv ist.");
+        Serial.println(F("⏳ WiFi-Symbol bleibt, weil ein Buchstabe aktiv ist."));
     }
 }
 
@@ -41,7 +41,7 @@ void clearWiFiSymbol() {
 
 void drawWiFiSymbol() {
     if (wifiConnected) {  
-        Serial.println("📶 WiFi-Symbol wird angezeigt.");
+        Serial.println(F("📶 WiFi-Symbol wird angezeigt."));
         
         if (!triggerActive) {
             display.fillScreen(display.color565(0, 0, 255));
@@ -59,14 +59,14 @@ void drawWiFiSymbol() {
             }
             display.display();
         } else {
-            Serial.println("⏳ WiFi-Symbol NICHT angezeigt, weil ein Buchstabe aktiv ist.");
+            Serial.println(F("⏳ WiFi-Symbol NICHT angezeigt, weil ein Buchstabe aktiv ist."));
         }
     }
 }
 
 // **🌐 WiFi verbinden**
 void connectWiFi() {
-    Serial.println("🌐 Verbinde mit WiFi...");
+    Serial.println(F("🌐 Verbinde mit WiFi..."));
     WiFi.hostname(hostname.c_str());
     WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
 
@@ -74,18 +74,18 @@ void connectWiFi() {
     while (WiFi.status() != WL_CONNECTED && attempt < 3200) {
         attempt++;
         delay(50);
-        if (attempt % 40 == 0) Serial.print(".");
+        if (attempt % 40 == 0) Serial.print(F("."));
     }
 
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("\n✅ WiFi verbunden!");
-        Serial.print("IP-Adresse: ");
+        Serial.println(F("\n✅ WiFi verbunden!"));
+        Serial.print(F("IP-Adresse: "));
         Serial.println(WiFi.localIP());
         wifiConnected = true;
         drawWiFiSymbol();
         setupWebServer();
     } else {
-        Serial.println("\n⛔ WiFi Timeout! Verbindung fehlgeschlagen. WiFi bleibt aus.");
+        Serial.println(F("\n⛔ WiFi Timeout! Verbindung fehlgeschlagen. WiFi bleibt aus."));
         wifiConnected = false;
         WiFi.disconnect();
         WiFi.mode(WIFI_OFF);  
@@ -96,7 +96,7 @@ void connectWiFi() {
 void checkWiFi() {
     if (WiFi.status() != WL_CONNECTED) {
         if (!wifiDisabled) {
-            Serial.println("⚠️ WLAN-Verbindung verloren. Schalte WiFi & Webserver aus...");
+            Serial.println(F("⚠️ WLAN-Verbindung verloren. Schalte WiFi & Webserver aus..."));
             wifiConnected = false;
             
             if (!triggerActive) {
@@ -107,14 +107,14 @@ void checkWiFi() {
             WiFi.mode(WIFI_OFF);
             
             server.end();
-            Serial.println("🌐 Webserver gestoppt. Neustart erforderlich für neue Verbindung.");
+            Serial.println(F("🌐 Webserver gestoppt. Neustart erforderlich für neue Verbindung."));
             
             wifiDisabled = true;
         }
     } else {
         if (!wifiConnected) {
-            Serial.println("✅ WLAN verbunden!");
-            Serial.print("IP-Adresse: ");
+            Serial.println(F("✅ WLAN verbunden!"));
+            Serial.print(F("IP-Adresse: "));
             Serial.println(WiFi.localIP());
 
             wifiConnected = true;

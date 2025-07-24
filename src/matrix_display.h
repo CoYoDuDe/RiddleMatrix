@@ -6,7 +6,7 @@
 
 // **LED-Test mit Röhren-TV-Effekt**
 void testLEDMatrix() {
-    Serial.println("🔴 LED-Test gestartet...");
+    Serial.println(F("🔴 LED-Test gestartet..."));
 
     display.fillScreen(display.color565(255, 0, 0)); 
     display.display();
@@ -35,7 +35,7 @@ void testLEDMatrix() {
     display.clearDisplay();
     display.display();
 
-    Serial.println("✅ LED-Test beendet!");
+    Serial.println(F("✅ LED-Test beendet!"));
 }
 
 #endif

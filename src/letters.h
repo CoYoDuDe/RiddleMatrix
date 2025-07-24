@@ -1063,7 +1063,7 @@ std::map<char, const uint8_t*> letterData;
 
 // **Buchstaben-Daten initialisieren**
 void loadLetterData() {
-    Serial.println("📦 Lade Buchstaben-Daten...");
+    Serial.println(F("📦 Lade Buchstaben-Daten..."));
     letterData['A'] = letter_A;
     letterData['B'] = letter_B;
     letterData['C'] = letter_C;
