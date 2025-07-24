@@ -29,6 +29,8 @@ See [TODO.md](TODO.md) for the project roadmap.
 
 ### PlatformIO
 
+Install PlatformIO using `pip install platformio` and ensure the `platformio` command is available in your PATH before running `pio run`.
+
 1. PlatformIO is pre-configured using `platformio.ini` and the sources in `src/`.
 2. Run `pio run` to build the firmware.
 3. Use `pio run -t upload` to flash it to the board.
