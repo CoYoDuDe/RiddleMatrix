@@ -1,5 +1,4 @@
 # RiddleMatrix
-![Firmware build](https://github.com/OWNER/REPO/actions/workflows/firmware-build.yml/badge.svg)
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 RiddleMatrix is firmware for an ESP8266 microcontroller that drives a 64x64 RGB LED matrix. The display shows one configurable letter for each day of the week. Letters may appear automatically on a schedule or be triggered manually over RS485. WiFi connectivity enables a web interface for configuration and storing settings to EEPROM.
