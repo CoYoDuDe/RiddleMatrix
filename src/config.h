@@ -157,7 +157,7 @@ void loadConfig() {
     EEPROM.get(312, letter_trigger_delay_2);
     EEPROM.get(316, letter_trigger_delay_3);
     EEPROM.get(320, letter_auto_display_interval);
-    uint8_t autoModeByte;
+    uint8_t autoModeByte = 0;
     EEPROM.get(324, autoModeByte);
     EEPROM.get(328, wifi_connect_timeout);
     autoDisplayMode = (autoModeByte == 1);
