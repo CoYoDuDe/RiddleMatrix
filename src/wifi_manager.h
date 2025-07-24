@@ -9,21 +9,6 @@
 bool wifiDisabled = false;
 extern bool triggerActive; 
 
-// **WiFi-Manager: Lade WiFi-Daten aus EEPROM, falls vorhanden**
-void loadWiFiConfig() {
-    Serial.println(F("🔄 Lade WiFi-Konfiguration aus EEPROM..."));
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.get(0, wifi_ssid);
-    EEPROM.get(50, wifi_password);
-    EEPROM.get(100, hostname);
-
-    // **Falls EEPROM leer, bleiben die Werte aus config.h bestehen**
-    if (wifi_ssid.length() == 0 || wifi_ssid == " " || wifi_ssid == "\0") {
-        Serial.println(F("⚠️ Kein gültiges WiFi im EEPROM gefunden. Nutze Standardwerte aus config.h."));
-    } else {
-        Serial.println(F("✅ WiFi-Konfiguration geladen!"));
-    }
-}
 
 // **❌ WiFi-Symbol entfernen, wenn die Verbindung abbricht**
 void clearWiFiSymbol() {
