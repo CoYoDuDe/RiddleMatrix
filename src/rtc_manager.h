@@ -47,14 +47,14 @@ void setRTCFromWeb(String date, String time) {
     sscanf(time.c_str(), "%d:%d:%d", &hour, &minute, &second);
     rtc.adjust(DateTime(year, month, day, hour, minute, second));
     enableRS485();
-    Serial.println("🕒 RTC wurde aktualisiert!");
+    Serial.println(F("🕒 RTC wurde aktualisiert!"));
 }
 
 void resetRTC() {
     enableRTC();
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     enableRS485();
-    Serial.println("🔄 RTC wurde auf das aktuelle Datum/Zeit gesetzt!");
+    Serial.println(F("🔄 RTC wurde auf das aktuelle Datum/Zeit gesetzt!"));
 }
 
 #endif
