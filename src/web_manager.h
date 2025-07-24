@@ -66,21 +66,26 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     }
 
     // 🚀 Automatische Aktualisierung der Uhrzeit
-    fetchRTC();
-    setInterval(fetchRTC, 5000); // Alle 5 Sekunden aktualisieren
+    let rtcInterval;
 
-    // 📦 Speicherverbrauch abrufen
-    function fetchMemory() {
-        fetch('/memory')
-            .then(response => response.text())
-            .then(mem => {
-                document.getElementById('memoryUsage').innerText = mem + ' bytes';
-            })
-            .catch(error => console.error('❌ Fehler:', error));
+    function startRTCUpdates() {
+        rtcInterval = setInterval(fetchRTC, 5000); // Alle 5 Sekunden aktualisieren
     }
 
-    fetchMemory();
-    setInterval(fetchMemory, 5000);
+    function stopRTCUpdates() {
+        clearInterval(rtcInterval);
+    }
+
+    fetchRTC();
+    startRTCUpdates();
+
+    const dateInput = document.querySelector("input[name='date']");
+    const timeInput = document.querySelector("input[name='time']");
+
+    dateInput.addEventListener('focus', stopRTCUpdates);
+    dateInput.addEventListener('blur', startRTCUpdates);
+    timeInput.addEventListener('focus', stopRTCUpdates);
+    timeInput.addEventListener('blur', startRTCUpdates);
 )rawliteral";
 
 // **Webserver Initialisierung**
