@@ -254,15 +254,6 @@ void loadConfig() {
     }
 }
 
-void resetEEPROM() {
-    Serial.println(F("⚠️ EEPROM wird vollständig gelöscht..."));
-    EEPROM.begin(EEPROM_SIZE);
-    for (int i = 0; i < EEPROM_SIZE; i++) {
-        EEPROM.write(i, 0);
-    }
-    EEPROM.commit();
-    Serial.println(F("✅ EEPROM gelöscht! Neustart erforderlich."));
-}
 
 void display_updater() {
     display.display();

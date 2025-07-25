@@ -1,7 +1,6 @@
 #include "config.h"
 #include "rtc_manager.h"
 #include "wifi_manager.h"
-#include "matrix_display.h"
 #include "trigger_handler.h"
 #include "web_manager.h"
 
@@ -15,7 +14,6 @@ void setup() {
   Serial.begin(19200);
   delay(500);
   Serial.println(F("🚀 Systemstart..."));
-  // resetEEPROM();
   // clearDisplay();
 
   pinMode(GPIO_RS485_ENABLE, OUTPUT);
@@ -35,7 +33,6 @@ void setup() {
   enableRS485();
 
   setupMatrix();
-  // testLEDMatrix();
   loadLetterData();
   checkMemoryUsage();
 
