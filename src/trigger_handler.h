@@ -2,7 +2,6 @@
 #define TRIGGER_HANDLER_H
 
 #include "config.h"
-#include "matrix_display.h"
 #include "letters.h"
 
   static bool alreadyCleared;
