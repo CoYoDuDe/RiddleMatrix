@@ -2,7 +2,6 @@
 #define WIFI_MANAGER_H
 
 #include "config.h"
-#include "matrix_display.h"
 #include "web_manager.h"
 #include <ESP8266WiFi.h>
 

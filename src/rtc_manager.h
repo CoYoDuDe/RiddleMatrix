@@ -50,11 +50,5 @@ void setRTCFromWeb(String date, String time) {
     Serial.println(F("🕒 RTC wurde aktualisiert!"));
 }
 
-void resetRTC() {
-    enableRTC();
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    enableRS485();
-    Serial.println(F("🔄 RTC wurde auf das aktuelle Datum/Zeit gesetzt!"));
-}
 
 #endif
