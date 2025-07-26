@@ -54,7 +54,7 @@ void loop() {
             lastDebugTime = millis();  // **Speichert den Zeitpunkt der letzten Ausgabe**
         }
 
-        if (elapsedTime >= (letter_display_time * 1000)) {
+        if (elapsedTime >= ((unsigned long)letter_display_time * 1000UL)) {
             Serial.println(F("🧹 Anzeigezeit abgelaufen, Buchstabe wird gelöscht!"));
             clearDisplay();
             triggerActive = false;
