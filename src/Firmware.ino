@@ -11,6 +11,7 @@ Ticker display_ticker;
 AsyncWebServer server(80);
 
 bool wifiDisabled = false;
+bool alreadyCleared = false;
 
 void setup() {
   Serial.begin(19200);
