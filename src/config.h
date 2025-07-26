@@ -7,6 +7,7 @@
 #include <ESP8266WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <EEPROM.h>
+#include <cstring>
 #include <map>
 #include <Ticker.h>
 #include "letters.h"
@@ -33,9 +34,9 @@
 #define P_R1 D7
 
 // **Standard-WiFi-Daten (werden bei Erststart gesetzt)**
-String wifi_ssid;
-String wifi_password;
-String hostname;
+char wifi_ssid[50] = "";
+char wifi_password[50] = "";
+char hostname[50] = "";
 int wifi_connect_timeout = 30; // Timeout für die WLAN-Verbindung in Sekunden
 
 // **Globale Variablen für die Anzeige**
@@ -48,7 +49,7 @@ extern unsigned long letterStartTime;
 char dailyLetters[7] = {'A', 'B', 'C', 'D', 'E', 'F', 'G'};
 
 // **Buchstabenfarben für die Wochentage (Standard: Weiß)**
-String dailyLetterColors[7] = {"#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"};
+char dailyLetterColors[7][8] = {"#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"};
 
 // **Alle auswählbaren Buchstaben (A-Z & `*`)**
 const char availableLetters[] = {
@@ -88,26 +89,12 @@ const char* daysOfTheWeek[7] = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Do
 void saveConfig() {
     Serial.println(F("💾 Speichere Einstellungen in EEPROM..."));
     
-    char ssidArr[50] = {0};  
-    char passArr[50] = {0};
-    char hostArr[50] = {0};
-    char colorArr[7][8] = {0};
-
-    wifi_ssid.toCharArray(ssidArr, sizeof(ssidArr));
-    wifi_password.toCharArray(passArr, sizeof(passArr));
-    hostname.toCharArray(hostArr, sizeof(hostArr));
-
-    // Farben umwandeln und speichern
-    for (int i = 0; i < 7; i++) {
-        dailyLetterColors[i].toCharArray(colorArr[i], sizeof(colorArr[i]));
-    }
-
     EEPROM.begin(EEPROM_SIZE);
-    EEPROM.put(0, ssidArr);
-    EEPROM.put(50, passArr);
-    EEPROM.put(100, hostArr);
+    EEPROM.put(0, wifi_ssid);
+    EEPROM.put(50, wifi_password);
+    EEPROM.put(100, hostname);
     EEPROM.put(150, dailyLetters);
-    EEPROM.put(200, colorArr);
+    EEPROM.put(200, dailyLetterColors);
     EEPROM.put(300, display_brightness);
     EEPROM.put(304, letter_display_time);
     EEPROM.put(308, letter_trigger_delay_1);
@@ -126,24 +113,15 @@ void saveConfig() {
 void loadConfig() {
     Serial.println(F("📂 Lade Einstellungen aus EEPROM..."));
     
-    char ssidArr[50] = {0};
-    char passArr[50] = {0};
-    char hostArr[50] = {0};
-    char colorArr[7][8] = {0};
-    char colorBuffer[8] = {0};
-
     EEPROM.begin(EEPROM_SIZE);
-    EEPROM.get(0, ssidArr);
-    EEPROM.get(50, passArr);
-    EEPROM.get(100, hostArr);
+    EEPROM.get(0, wifi_ssid);
+    EEPROM.get(50, wifi_password);
+    EEPROM.get(100, hostname);
     EEPROM.get(150, dailyLetters);
-    EEPROM.get(200, colorArr);
+    EEPROM.get(200, dailyLetterColors);
 
     Serial.println(F("📂 Lade Farben aus EEPROM:"));
     for (int i = 0; i < 7; i++) {
-        memset(colorBuffer, 0, sizeof(colorBuffer));  // Puffer löschen
-        EEPROM.get(200 + (i * 8), colorBuffer);
-        dailyLetterColors[i] = String(colorBuffer);
         Serial.print(F("Wochentag "));
         Serial.print(i);
         Serial.print(F(" → Geladene Farbe: "));
@@ -162,24 +140,16 @@ void loadConfig() {
     EEPROM.get(328, wifi_connect_timeout);
     autoDisplayMode = (autoModeByte == 1);
 
-    wifi_ssid = String(ssidArr);
-    wifi_password = String(passArr);
-    hostname = String(hostArr);
-
-    for (int i = 0; i < 7; i++) {
-        dailyLetterColors[i] = String(colorArr[i]);
-    }
-
     Serial.println(F("✅ EEPROM-Daten geladen!"));
 
     bool eepromUpdated = false;
 
     // **Falls EEPROM leer oder beschädigt, Standardwerte setzen**
-    if (wifi_ssid.length() == 0 || ssidArr[0] == '\xFF') {
+    if (strlen(wifi_ssid) == 0 || wifi_ssid[0] == '\xFF') {
         Serial.println(F("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte..."));
-        wifi_ssid = "YOUR_WIFI_SSID";
-        wifi_password = "YOUR_WIFI_PASSWORD";
-        hostname = "your-device-hostname";
+        strncpy(wifi_ssid, "YOUR_WIFI_SSID", sizeof(wifi_ssid));
+        strncpy(wifi_password, "YOUR_WIFI_PASSWORD", sizeof(wifi_password));
+        strncpy(hostname, "your-device-hostname", sizeof(hostname));
         wifi_connect_timeout = 30;
         eepromUpdated = true;
     }
@@ -193,10 +163,10 @@ void loadConfig() {
 
     // Farben prüfen & Standard setzen
     for (int i = 0; i < 7; i++) {
-        if (dailyLetterColors[i] == "" || dailyLetterColors[i] == "#000000" || dailyLetterColors[i].length() < 3) {  
+        if (strlen(dailyLetterColors[i]) == 0 || strcmp(dailyLetterColors[i], "#000000") == 0 || strlen(dailyLetterColors[i]) < 3) {
             Serial.println(F("🛑 Ungültige Farben! Setze Standardwerte..."));
-            String defaultColors[7] = {"#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500"};
-            dailyLetterColors[i] = defaultColors[i];
+            const char* defaultColors[7] = {"#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500"};
+            strncpy(dailyLetterColors[i], defaultColors[i], sizeof(dailyLetterColors[i]));
             eepromUpdated = true;
         }
     }

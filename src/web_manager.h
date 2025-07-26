@@ -110,9 +110,9 @@ void setupWebServer() {
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
         html += "<form id='wifiForm'>";
-        html += "SSID: <input type='text' name='ssid' value='" + wifi_ssid + "'><br>";
+        html += "SSID: <input type='text' name='ssid' value='" + String(wifi_ssid) + "'><br>";
         html += "Passwort: <input type='password' name='password'><br>";
-        html += "Hostname: <input type='text' name='hostname' value='" + hostname + "'><br>";
+        html += "Hostname: <input type='text' name='hostname' value='" + String(hostname) + "'><br>";
         html += "<button type='button' onclick='saveWiFi()'>Speichern</button>";
         html += "</form>";
 
@@ -160,7 +160,7 @@ void setupWebServer() {
             html += "<option value='&' " + String(dailyLetters[i] == '&' ? "selected" : "") + ">Rad</option>";
             html += "<option value='?' " + String(dailyLetters[i] == '?' ? "selected" : "") + ">Riddler</option>";
             html += "</select>";
-            html += "<br><input type='color' id='color" + String(i) + "' name='color" + String(i) + "' value='" + dailyLetterColors[i] + "'>";
+            html += "<br><input type='color' id='color" + String(i) + "' name='color" + String(i) + "' value='" + String(dailyLetterColors[i]) + "'>";
             html += "<br><button type='button' onclick='displayLetter(\"" + String(dailyLetters[i]) + "\")'>Anzeigen</button>";
             html += "</td>";
         }
@@ -184,12 +184,12 @@ server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest *request) {
 // **WiFi-Daten speichern**
 server.on("/updateWiFi", HTTP_POST, [](AsyncWebServerRequest *request) {
     if (request->hasParam("ssid", true) && request->hasParam("hostname", true)) {
-        wifi_ssid = request->getParam("ssid", true)->value();
-        hostname = request->getParam("hostname", true)->value();
+        strncpy(wifi_ssid, request->getParam("ssid", true)->value().c_str(), sizeof(wifi_ssid));
+        strncpy(hostname, request->getParam("hostname", true)->value().c_str(), sizeof(hostname));
 
         // Passwort nur aktualisieren, wenn ein neuer Wert eingegeben wurde!
         if (request->hasParam("password", true) && request->getParam("password", true)->value() != "") {
-            wifi_password = request->getParam("password", true)->value();
+            strncpy(wifi_password, request->getParam("password", true)->value().c_str(), sizeof(wifi_password));
         }
 
         saveConfig();  // Speichert ins EEPROM
@@ -234,7 +234,7 @@ server.on("/updateAllLetters", HTTP_POST, [](AsyncWebServerRequest *request) {
 
         if (request->hasParam(letterParam, true) && request->hasParam(colorParam, true)) {
             dailyLetters[i] = request->getParam(letterParam, true)->value()[0];
-            dailyLetterColors[i] = request->getParam(colorParam, true)->value();
+            strncpy(dailyLetterColors[i], request->getParam(colorParam, true)->value().c_str(), sizeof(dailyLetterColors[i]));
         } else {
             success = false;
         }
