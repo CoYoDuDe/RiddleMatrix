@@ -164,7 +164,7 @@ void checkTrigger() {
 void checkAutoDisplay() {
     static unsigned long lastDisplayTime = 0;
 
-    if (autoDisplayMode && millis() - lastDisplayTime > (letter_auto_display_interval * 1000)) {
+    if (autoDisplayMode && (millis() - lastDisplayTime > ((unsigned long)letter_auto_display_interval * 1000UL))) {
         lastDisplayTime = millis();
         Serial.println(F("🕒 Automodus aktiv: Zeige heutigen Buchstaben automatisch!"));
 
