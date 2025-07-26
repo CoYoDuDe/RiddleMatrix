@@ -36,7 +36,7 @@
 String wifi_ssid;
 String wifi_password;
 String hostname;
-int wifi_connect_timeout = 30; // Timeout for WiFi connection in seconds
+int wifi_connect_timeout = 30; // Timeout für die WLAN-Verbindung in Sekunden
 
 // **Globale Variablen für die Anzeige**
 
@@ -147,7 +147,7 @@ void loadConfig() {
         Serial.print(F("Wochentag "));
         Serial.print(i);
         Serial.print(F(" → Geladene Farbe: "));
-        Serial.println(dailyLetterColors[i]);  // Debugging
+        Serial.println(dailyLetterColors[i]);  // Debug-Ausgabe
     }
 
 
