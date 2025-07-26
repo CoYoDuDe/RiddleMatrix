@@ -4,7 +4,7 @@
 #include "config.h"
 #include "letters.h"
 
-  static bool alreadyCleared;
+extern bool alreadyCleared;
 
 void clearDisplay() {
     
