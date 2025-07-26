@@ -65,13 +65,4 @@ void loop() {
     checkTrigger();
     checkAutoDisplay();
 
-    if (Serial.available() > 0) {
-        char receivedChar = Serial.read();
-        if (receivedChar == '1' || receivedChar == '2' || receivedChar == '3') {
-            handleTrigger(receivedChar, false);
-        } else {
-            Serial.print(F("❌ Falscher Trigger empfangen: "));
-            Serial.println(receivedChar);
-        }
-    }
 }
