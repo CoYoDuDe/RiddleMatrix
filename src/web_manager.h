@@ -7,6 +7,7 @@
 #include <ESPAsyncWebServer.h>
 #include <EEPROM.h>
 #include <ArduinoJson.h>
+#include <stdlib.h>
 
 const char scriptJS[] PROGMEM = R"rawliteral(
     // 🕒 Aktuelle Uhrzeit abrufen
@@ -209,11 +210,11 @@ server.on("/updateWiFi", HTTP_POST, [](AsyncWebServerRequest *request) {
             request->hasParam("auto_interval", true)) {
 
             display_brightness = request->getParam("brightness", true)->value().toInt();
-            letter_display_time = request->getParam("letter_time", true)->value().toInt();
-            letter_trigger_delay_1 = request->getParam("trigger_delay_1", true)->value().toInt();
-            letter_trigger_delay_2 = request->getParam("trigger_delay_2", true)->value().toInt();
-            letter_trigger_delay_3 = request->getParam("trigger_delay_3", true)->value().toInt();
-            letter_auto_display_interval = request->getParam("auto_interval", true)->value().toInt();
+            letter_display_time = strtoul(request->getParam("letter_time", true)->value().c_str(), nullptr, 10);
+            letter_trigger_delay_1 = strtoul(request->getParam("trigger_delay_1", true)->value().c_str(), nullptr, 10);
+            letter_trigger_delay_2 = strtoul(request->getParam("trigger_delay_2", true)->value().c_str(), nullptr, 10);
+            letter_trigger_delay_3 = strtoul(request->getParam("trigger_delay_3", true)->value().c_str(), nullptr, 10);
+            letter_auto_display_interval = strtoul(request->getParam("auto_interval", true)->value().c_str(), nullptr, 10);
 
             String autoModeValue = request->hasParam("auto_mode", true) ? request->getParam("auto_mode", true)->value() : "off";
             autoDisplayMode = (autoModeValue == "on");
