@@ -19,6 +19,16 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             .catch(error => console.error('❌ Fehler:', error));
     }
 
+    // 📝 Freien RAM abrufen
+    function fetchMemory() {
+        fetch('/memory')
+            .then(response => response.text())
+            .then(memory => {
+                document.getElementById('memoryUsage').innerText = memory + ' bytes';
+            })
+            .catch(error => console.error('❌ Fehler:', error));
+    }
+
     // 🕒 RTC-Zeit setzen
     function setRTC() {
         let form = new FormData(document.getElementById('rtcForm'));
@@ -67,16 +77,20 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     // 🚀 Automatische Aktualisierung der Uhrzeit
     let rtcInterval;
+    let memoryInterval;
 
     function startRTCUpdates() {
         rtcInterval = setInterval(fetchRTC, 5000); // Alle 5 Sekunden aktualisieren
+        memoryInterval = setInterval(fetchMemory, 5000);
     }
 
     function stopRTCUpdates() {
         clearInterval(rtcInterval);
+        clearInterval(memoryInterval);
     }
 
     fetchRTC();
+    fetchMemory();
     startRTCUpdates();
 
     const dateInput = document.querySelector("input[name='date']");
