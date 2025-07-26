@@ -1,58 +1,52 @@
 # RiddleMatrix
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-RiddleMatrix is firmware for an ESP8266 microcontroller that drives a 64x64 RGB LED matrix. The display shows one configurable letter for each day of the week. Letters may appear automatically on a schedule or be triggered manually over RS485. WiFi connectivity enables a web interface for configuration and storing settings to EEPROM.
+Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details.
+RiddleMatrix ist eine Firmware für den ESP8266, die eine 64x64 RGB-LED-Matrix ansteuert. Für jeden Wochentag kann ein Buchstabe festgelegt werden. Die Buchstaben erscheinen entweder zeitgesteuert oder per RS485-Trigger. Über WLAN lässt sich das Gerät konfigurieren; alle Einstellungen werden im EEPROM gespeichert.
 
-See [TODO.md](TODO.md) for the project roadmap.
+Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
-## Hardware Requirements
+## Hardware-Voraussetzungen
 
-- **ESP8266 board** (NodeMCU v2 recommended)
-- **64x64 RGB LED matrix** with FM6126A driver (1/32 scan)
-- **DS1307 RTC module**
-- **RS485 transceiver** for external triggers
-- Wiring as defined in `config.h`
+- **ESP8266-Board** (NodeMCU v2 empfohlen)
+- **64x64-RGB-LED-Matrix** mit FM6126A-Treiber (1/32-Scan)
+- **DS1307-RTC-Modul**
+- **RS485-Transceiver** für externe Trigger
+- Verdrahtung gemäß `config.h`
 
-## WiFi Configuration
+## WLAN-Konfiguration
 
-1. Open `config.h` and edit `wifi_ssid`, `wifi_password`, `hostname` and optionally `wifi_connect_timeout` in `saveConfig()`.
-2. Compile and upload the firmware.
-3. Once connected to your network, visit `http://<hostname>` and use the web page to store updated credentials in EEPROM.
+1. In `config.h` `wifi_ssid`, `wifi_password`, `hostname` und optional `wifi_connect_timeout` anpassen.
+2. Firmware kompilieren und hochladen.
+3. Nach erfolgreicher Verbindung `http://<hostname>` aufrufen und die Zugangsdaten im EEPROM speichern.
 
-## Building & Uploading
+## Kompilieren und Hochladen
 
 ### Arduino IDE
 
-1. Install libraries: **PxMatrix**, **ESPAsyncWebServer**, **ArduinoJson**, **RTClib**, and **Ticker** (built-in).
-2. Select **NodeMCU 1.0 (ESP-12E Module)** under *Tools → Board*.
-3. Open `Firmware.ino`, verify, and upload.
+1. Bibliotheken installieren: **PxMatrix**, **ESPAsyncWebServer**, **ArduinoJson**, **RTClib** und **Ticker** (bereits enthalten).
+2. Unter *Werkzeuge → Board* **NodeMCU 1.0 (ESP-12E Module)** auswählen.
+3. `Firmware.ino` öffnen, prüfen und hochladen.
 
 ### PlatformIO
 
-Install PlatformIO using `pip install platformio` and ensure the `platformio` command is available in your PATH before running `pio run`.
+`platformio` mit `pip install platformio` installieren und sicherstellen, dass der Befehl im `PATH` liegt.
 
-1. PlatformIO is pre-configured using `platformio.ini` and the sources in `src/`.
-2. Install the **PxMatrix** library used by `platformio.ini`:
-   - Online: run `pio lib install 2dom/PxMatrix`.
-   - Offline: clone the [PxMatrix repository](https://github.com/2dom/PxMatrix)
-     and place it inside the `lib/` directory.
-3. Run `pio run` to build the firmware.
-4. Use `pio run -t upload` to flash it to the board.
+1. `platformio.ini` und die Quellen in `src/` sind bereits vorkonfiguriert.
+2. Die Bibliothek **PxMatrix** installieren:
+   - Online: `pio lib install 2dom/PxMatrix`
+   - Offline: das [PxMatrix-Repository](https://github.com/2dom/PxMatrix) klonen und in `lib/` ablegen.
+3. Mit `pio run` kompilieren.
+4. Mit `pio run -t upload` auf das Board flashen.
 
-## Additional Setup
+## Weitere Schritte
 
-- Connect the LED matrix pins according to `config.h`.
-- Attach the RTC to pins `I2C_SDA` and `I2C_SCL`.
-- Wire the RS485 enable pin to `GPIO_RS485_ENABLE`.
-- Check the serial console at 19200 baud for debug messages.
+- LED-Matrix gemäß `config.h` anschließen.
+- RTC an `I2C_SDA` und `I2C_SCL` anschließen.
+- RS485-Enable-Pin an `GPIO_RS485_ENABLE` verbinden.
+- Serielle Konsole bei 19200 Baud für Debug-Ausgaben prüfen.
 
-Once configured, the firmware automatically displays letters each day and can be managed via the web interface.
+Nach der Einrichtung zeigt die Firmware die Buchstaben automatisch an und kann über die Weboberfläche gesteuert werden.
 
-## Configuration
+## Konfiguration
 
-The `config.h` file contains placeholder WiFi credentials used when no
-settings are stored in EEPROM. Real network credentials should **not** be
-committed to the repository. Instead, provide them through the initial EEPROM
-setup or via the device's configuration screen.
-The `wifi_connect_timeout` setting controls how long the device will attempt to
-connect to WiFi before giving up. The default is 30 seconds.
+`config.h` enthält Platzhalter-WLAN-Daten, falls noch nichts im EEPROM gespeichert ist. Echte Zugangsdaten sollten **nicht** ins Repository gelangen. Sie können initial über das EEPROM oder die Konfigurationsseite gesetzt werden. Der Parameter `wifi_connect_timeout` bestimmt, wie lange die Verbindung versucht wird (Standard 30 Sekunden).
