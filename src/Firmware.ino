@@ -10,6 +10,8 @@ Ticker display_ticker;
 
 AsyncWebServer server(80);
 
+bool wifiDisabled = false;
+
 void setup() {
   Serial.begin(19200);
   delay(500);
