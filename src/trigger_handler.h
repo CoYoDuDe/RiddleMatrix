@@ -46,7 +46,7 @@ void displayLetter(char letter) {
     Serial.println(today);
 
     // **Farbe aus `dailyLetterColors[today]` abrufen**
-    String selectedColor = dailyLetterColors[today];  // Farbe für den heutigen Tag
+    String selectedColor(dailyLetterColors[today]);  // Farbe für den heutigen Tag
 
     Serial.print(F("🎨 Geladene Farbe für heute: "));
     Serial.println(selectedColor);  // Sollte z.B. "#0000FF" sein

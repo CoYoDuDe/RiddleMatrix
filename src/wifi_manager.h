@@ -51,8 +51,8 @@ void drawWiFiSymbol() {
 // **🌐 WiFi verbinden**
 void connectWiFi() {
     Serial.println(F("🌐 Verbinde mit WiFi..."));
-    WiFi.hostname(hostname.c_str());
-    WiFi.begin(wifi_ssid.c_str(), wifi_password.c_str());
+    WiFi.hostname(hostname);
+    WiFi.begin(wifi_ssid, wifi_password);
 
     unsigned long startAttempt = millis();
     unsigned long lastDot = startAttempt;
