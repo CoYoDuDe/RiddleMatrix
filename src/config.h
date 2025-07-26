@@ -58,11 +58,11 @@ const char availableLetters[] = {
 
 // **Konfiguration für Buchstabenanzeige**
 int display_brightness;           // Standard: 100
-int letter_display_time;           // Standard: 10 Sekunden
-int letter_trigger_delay_1; // Verzögerung für Trigger 1
-int letter_trigger_delay_2; // Verzögerung für Trigger 2
-int letter_trigger_delay_3; // Verzögerung für Trigger 3
-int letter_auto_display_interval; // Standard: 5 Minuten
+unsigned long letter_display_time;           // Standard: 10 Sekunden
+unsigned long letter_trigger_delay_1; // Verzögerung für Trigger 1
+unsigned long letter_trigger_delay_2; // Verzögerung für Trigger 2
+unsigned long letter_trigger_delay_3; // Verzögerung für Trigger 3
+unsigned long letter_auto_display_interval; // Standard: 5 Minuten
 
 // **Modus für Buchstabenanzeige (Auto/Trigger)**
 bool autoDisplayMode;
@@ -184,20 +184,20 @@ void loadConfig() {
         eepromUpdated = true;
     }
 
-    if (letter_trigger_delay_1 < 0 || letter_trigger_delay_1 > 999) {
-      letter_trigger_delay_1 = 180;
-      eepromUpdated = true;
-      }
+    if (letter_trigger_delay_1 > 999) {
+        letter_trigger_delay_1 = 180;
+        eepromUpdated = true;
+    }
 
-    if (letter_trigger_delay_2 < 0 || letter_trigger_delay_2 > 999) {
-      letter_trigger_delay_2 = 180;
-            eepromUpdated = true;
-      }
+    if (letter_trigger_delay_2 > 999) {
+        letter_trigger_delay_2 = 180;
+        eepromUpdated = true;
+    }
 
-    if (letter_trigger_delay_3 < 0 || letter_trigger_delay_3 > 999) {
-      letter_trigger_delay_3 = 180;
-            eepromUpdated = true;
-      }
+    if (letter_trigger_delay_3 > 999) {
+        letter_trigger_delay_3 = 180;
+        eepromUpdated = true;
+    }
 
     if (letter_auto_display_interval < 1 || letter_auto_display_interval > 999) {
         Serial.println("🛑 Ungültiges Automodus-Intervall! Setze Standardwert...");
