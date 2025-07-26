@@ -23,4 +23,3 @@ Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben f�
 - [ ] Authentifizierungsoptionen (Passwortschutz oder OAuth)
 - [ ] Upload eigener Bitmaps zum Erweitern der Buchstaben/Symbole
 - [ ] Weitere Triggerquellen (z.B. HTTP‑API oder MQTT)
-- [ ] Mehrsprachige Weboberfläche
