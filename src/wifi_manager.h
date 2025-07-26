@@ -5,7 +5,7 @@
 #include "web_manager.h"
 #include <ESP8266WiFi.h>
 
-bool wifiDisabled = false;
+extern bool wifiDisabled;
 extern bool triggerActive; 
 
 
