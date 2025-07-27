@@ -35,7 +35,7 @@ void drawWiFiSymbol() {
 
             for (int y = 0; y < 32; y++) {
                 for (int x = 0; x < 32; x++) {
-                    uint8_t rowValue = pgm_read_byte(&letterData['~'][y * 4 + (x / 8)]);
+                    uint8_t rowValue = pgm_read_byte(&letterData[(uint8_t)'~'][y * 4 + (x / 8)]);
                     if (rowValue & (1 << (7 - (x % 8)))) {
                         display.fillRect(x_pos + x * SCALE_FACTOR, y_pos + y * SCALE_FACTOR, SCALE_FACTOR, SCALE_FACTOR, display.color565(0, 0, 0));
                     }

@@ -79,13 +79,13 @@ void displayLetter(char letter) {
     display.display();
     delay(10);
 
-    if (letterData.find(letter) == letterData.end()) {
+    if (letterData[(uint8_t)letter] == nullptr) {
         Serial.println(F("⚠️ Fehler: Buchstabe nicht gefunden!"));
         triggerActive = false;
         return;
     }
 
-    const uint8_t* bitmap = letterData[letter];
+    const uint8_t* bitmap = letterData[(uint8_t)letter];
 
     Serial.println(F("🖊️ Beginne Zeichnung..."));
     for (int y = 0; y < 32; y++) {
