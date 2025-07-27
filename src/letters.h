@@ -1,11 +1,10 @@
 #ifndef LETTERS_H
 #define LETTERS_H
 
-#include <map>
 #include <Arduino.h>
 
 // **Buchstaben-Datenbank (Deklaration für externe Nutzung)**
-extern std::map<char, const uint8_t*> letterData;
+extern const uint8_t* letterData[128];
 
 // **Buchstaben A-Z + #**
 const uint8_t letter_SUN[128] PROGMEM = {
