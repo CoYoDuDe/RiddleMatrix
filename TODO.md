@@ -4,7 +4,6 @@ Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben f�
 
 ## To‑Do
 - [ ] Web‑UI absichern (Authentifizierung, Schutzmechanismen)
-- [ ] Zeitsynchronisation per NTP
 - [ ] OTA/Remote‑Firmware‑Update
 - [ ] Weitere Anzeigeoptionen (Animationen, hochauflösende Symbole)
 - [ ] Fehler‑ und Speichermonitoring
@@ -18,6 +17,7 @@ Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben f�
 - [x] WiFi‑Symbolanzeige und automatisches Abschalten des Webservers bei Verbindungsverlust
 - [x] EEPROM‑Speicherung aller Einstellungen inklusive Farben je Wochentag
 - [x] CI aufsetzen, die den Arduino‑Code baut
+- [x] Zeitsynchronisation per NTP
 
 ## Ergänzende Ideen
 - [ ] Authentifizierungsoptionen (Passwortschutz oder OAuth)
