@@ -39,6 +39,14 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             .catch(error => alert('❌ Fehler: ' + error));
     }
 
+    // 🌐 Zeit per NTP synchronisieren
+    function syncNTP() {
+        fetch('/syncNTP')
+            .then(response => response.text())
+            .then(alert)
+            .catch(error => alert('❌ Fehler: ' + error));
+    }
+
     // 🔔 Buchstaben-Trigger über Webinterface
     function triggerLetter() {
         fetch('/triggerLetter')
@@ -139,6 +147,7 @@ void setupWebServer() {
         html += "Uhrzeit (HH:MM:SS): <input type='time' name='time' step='1'><br>";
         html += "<button type='button' onclick='setRTC()'>Speichern</button>";
         html += "</form>";
+        html += "<button type='button' onclick='syncNTP()'>Zeit mit NTP synchronisieren</button>";
 
         // **Buchstabenauswahl pro Wochentag**
         html += "<h2>Buchstaben pro Wochentag</h2>";
@@ -274,6 +283,11 @@ server.on("/updateAllLetters", HTTP_POST, [](AsyncWebServerRequest *request) {
         } else {
             request->send(400, "text/plain", "❌ Fehler: Datum oder Zeit fehlt!");
         }
+    });
+
+    server.on("/syncNTP", HTTP_GET, [](AsyncWebServerRequest *request) {
+        syncTimeWithNTP();
+        request->send(200, "text/plain", "NTP Synchronisierung ausgeführt");
     });
 
     server.on("/memory", HTTP_GET, [](AsyncWebServerRequest *request) {
