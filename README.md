@@ -29,14 +29,29 @@ Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
 ### PlatformIO
 
-`platformio` mit `pip install platformio` installieren und sicherstellen, dass der Befehl im `PATH` liegt.
+PlatformIO lässt sich über `pip` installieren. Für diese Anleitung wurde Version
+**6.1.18** verwendet:
 
-1. `platformio.ini` und die Quellen in `src/` sind bereits vorkonfiguriert.
+```bash
+pip install platformio==6.1.18
+```
+
+Nach der Installation muss der Befehl `pio` im `PATH` verfügbar sein.
+
+1. `platformio.ini` und die Quellen in `src/` sind bereits vorkonfiguriert. Sämtliche
+   Abhängigkeiten werden beim ersten Build automatisch aus dieser Datei
+   installiert.
 2. Die Bibliothek **PxMatrix** installieren:
    - Online: `pio lib install 2dom/PxMatrix`
    - Offline: das [PxMatrix-Repository](https://github.com/2dom/PxMatrix) klonen und in `lib/` ablegen.
-3. Mit `pio run` kompilieren.
-4. Mit `pio run -t upload` auf das Board flashen.
+3. Firmware kompilieren:
+   ```bash
+   pio run
+   ```
+4. Firmware auf das Board flashen:
+   ```bash
+   pio run -t upload
+   ```
 
 ## Weitere Schritte
 
