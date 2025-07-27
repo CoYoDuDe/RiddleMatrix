@@ -69,5 +69,4 @@ void syncTimeWithNTP() {
     }
 }
 
-
 #endif
