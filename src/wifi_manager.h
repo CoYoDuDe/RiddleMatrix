@@ -71,6 +71,7 @@ void connectWiFi() {
         Serial.println(WiFi.localIP());
         wifiConnected = true;
         drawWiFiSymbol();
+        syncTimeWithNTP();
         setupWebServer();
     } else {
         Serial.println(F("\n⛔ WiFi Timeout! Verbindung fehlgeschlagen. WiFi bleibt aus."));
