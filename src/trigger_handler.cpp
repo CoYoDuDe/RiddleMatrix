@@ -94,6 +94,18 @@ void displayLetter(char letter) {
 }
 
 void handleTrigger(char triggerType, bool isAutoMode, bool keepWiFi) {
+    if (triggerActive || triggerPending) {
+        Serial.println(F("⚠️ Trigger bereits aktiv oder in Vorbereitung. Abbruch."));
+        return;
+    }
+
+    bool manualLock = false;
+    if (!isAutoMode && keepWiFi) {
+        triggerPending = true;
+        manualLock = true;
+        Serial.println(F("🔒 Trigger-Sperre gesetzt, WiFi bleibt aktiv."));
+    }
+
     if (wifiConnected && !isAutoMode && !keepWiFi) {
         Serial.println(F("⛔ WiFi wird abgeschaltet wegen Trigger!"));
         WiFi.disconnect();
@@ -103,32 +115,41 @@ void handleTrigger(char triggerType, bool isAutoMode, bool keepWiFi) {
 
     int today = getRTCWeekday();
 
-    if (today >= 0 && today < 7) {
-        char letter = dailyLetters[today];
-        Serial.print(F("📅 Heute ist "));
-        Serial.print(daysOfTheWeek[today]);
-        Serial.print(F(" → Zeige Buchstabe: "));
-        Serial.println(letter);
-
-        int delayTime = 0;
-        if (!isAutoMode) {
-            if (triggerType == '1') delayTime = letter_trigger_delay_1;
-            else if (triggerType == '2') delayTime = letter_trigger_delay_2;
-            else if (triggerType == '3') delayTime = letter_trigger_delay_3;
-
-            Serial.print(F("⏳ Warte auf Trigger-Verzögerung: "));
-            Serial.print(delayTime);
-            Serial.println(F(" Sekunden..."));
-            delay(delayTime * 1000);
-        }
-
-        displayLetter(letter);
-
-        alreadyCleared = false;
-
-    } else {
+    if (today < 0 || today >= 7) {
         Serial.println(F("⚠️ Ungültiger Wochentag!"));
+        if (manualLock) {
+            triggerPending = false;
+            Serial.println(F("🔓 Trigger-Sperre aufgehoben."));
+        }
+        return;
     }
+
+    char letter = dailyLetters[today];
+    Serial.print(F("📅 Heute ist "));
+    Serial.print(daysOfTheWeek[today]);
+    Serial.print(F(" → Zeige Buchstabe: "));
+    Serial.println(letter);
+
+    int delayTime = 0;
+    if (!isAutoMode) {
+        if (triggerType == '1') delayTime = letter_trigger_delay_1;
+        else if (triggerType == '2') delayTime = letter_trigger_delay_2;
+        else if (triggerType == '3') delayTime = letter_trigger_delay_3;
+
+        Serial.print(F("⏳ Warte auf Trigger-Verzögerung: "));
+        Serial.print(delayTime);
+        Serial.println(F(" Sekunden..."));
+        delay(delayTime * 1000);
+    }
+
+    displayLetter(letter);
+
+    if (manualLock) {
+        triggerPending = false;
+        Serial.println(F("🔓 Trigger-Sperre aufgehoben."));
+    }
+
+    alreadyCleared = false;
 }
 
 void checkTrigger() {

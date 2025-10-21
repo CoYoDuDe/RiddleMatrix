@@ -255,8 +255,8 @@ void setupWebServer() {
     });
 
     server.on("/triggerLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (triggerActive) {
-            request->send(409, "text/plain", "❌ Fehler: Bereits aktiver Buchstabe verhindert neuen Trigger!");
+        if (triggerActive || triggerPending) {
+            request->send(409, "text/plain", "❌ Fehler: Trigger bereits aktiv oder wird vorbereitet!");
             return;
         }
 

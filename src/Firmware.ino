@@ -5,6 +5,7 @@
 #include "web_manager.h"
 
 bool triggerActive = false;
+bool triggerPending = false;
 unsigned long letterStartTime = 0;
 Ticker display_ticker;
 
