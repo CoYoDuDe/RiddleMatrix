@@ -5,6 +5,7 @@ PERSIST_ROOT="/mnt/persist"
 PERSIST_USR_LOCAL="${PERSIST_ROOT}/usr_local"
 PERSIST_USR_LOCAL_BIN="${PERSIST_USR_LOCAL}/bin"
 PERSIST_USR_LOCAL_ETC="${PERSIST_USR_LOCAL}/etc"
+PERSIST_USR_LOCAL_VENV="${PERSIST_USR_LOCAL}/venv"
 
 echo "🚀 Starte minimale Debian-Einrichtung für Märchen Manager..."
 
@@ -15,9 +16,11 @@ apt install -y python3 python3-pip python3-venv dnsmasq hostapd rfkill xserver-x
 
 ## 🐍 Python-Abhängigkeiten in virtueller Umgebung
 echo "🐍 Erstelle virtuelle Umgebung und installiere Python-Abhängigkeiten..."
-mkdir -p /usr/local/venv
-python3 -m venv /usr/local/venv/maerchen
-/usr/local/venv/maerchen/bin/pip install flask beautifulsoup4 requests
+mkdir -p "$PERSIST_USR_LOCAL_VENV" /usr/local/venv
+python3 -m venv "$PERSIST_USR_LOCAL_VENV/maerchen"
+"$PERSIST_USR_LOCAL_VENV/maerchen/bin/pip" install flask beautifulsoup4 requests
+rm -rf /usr/local/venv/maerchen
+cp -a "$PERSIST_USR_LOCAL_VENV/maerchen" /usr/local/venv/
 
 ## 🔍 Dynamische Erkennung der ersten Partition des USB-Sticks
 echo "🔍 Suche nach erster Partition des USB-Sticks für Persistenz..."
@@ -51,7 +54,7 @@ fi
 
 ## 📁 Projektverzeichnis & Dateien
 mkdir -p /usr/local/bin /usr/local/etc "$PERSIST_ROOT/boxen_config" /home/kioskuser/.X.d \
-    "$PERSIST_USR_LOCAL_BIN" "$PERSIST_USR_LOCAL_ETC"
+    "$PERSIST_USR_LOCAL_BIN" "$PERSIST_USR_LOCAL_ETC" "$PERSIST_USR_LOCAL_VENV"
 
 ## 📝 Erstelle webserver.py
 echo "📝 Erstelle webserver.py..."
@@ -670,7 +673,7 @@ PERSIST_USR_LOCAL="${PERSIST_ROOT}/usr_local"
 
 if [ -d "$PERSIST_USR_LOCAL" ]; then
     echo "♻️ Synchronisiere persistente /usr/local-Dateien..."
-    mkdir -p /usr/local/bin /usr/local/etc
+    mkdir -p /usr/local /usr/local/bin /usr/local/etc /usr/local/venv
     cp -a "$PERSIST_USR_LOCAL/." /usr/local/
 fi
 
@@ -835,12 +838,13 @@ echo "📝 Erstelle bootlocal.service..."
 cat > /etc/systemd/system/bootlocal.service <<'EOF'
 [Unit]
 Description=Start bootlocal.sh
-After=network.target
+After=local-fs.target network.target
 Before=webserver.service
+RequiresMountsFor=/mnt/persist
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/bootlocal.sh
+ExecStart=/mnt/persist/usr_local/bin/bootlocal.sh
 RemainAfterExit=yes
 
 [Install]
