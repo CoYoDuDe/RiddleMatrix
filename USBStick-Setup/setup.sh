@@ -124,7 +124,9 @@ ensure_directories() {
     "$TARGET_ROOT/var/lib/misc"
     "$TARGET_ROOT/home/kioskuser"
     "$TARGET_ROOT/usr/local/bin"
+    "$TARGET_ROOT/usr/local/libexec"
     "$TARGET_ROOT/etc/systemd/system"
+    "$TARGET_ROOT/etc/usbstick"
   )
   for dir in "${dirs[@]}"; do
     if ((DRY_RUN)); then
@@ -141,6 +143,8 @@ set_permissions() {
     "usr/local/bin/webserver.py"
     "home/kioskuser/start_firefox.sh"
     "etc/hostapd/ifupdown.sh"
+    "root/install_public_ap.sh"
+    "root/install_public_ap_setuphelper.sh"
   )
   for rel in "${exec_paths[@]}"; do
     local target="$TARGET_ROOT/$rel"
