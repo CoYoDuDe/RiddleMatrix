@@ -1,9 +1,112 @@
 #include "web_manager.h"
 
+const char scriptJS[] PROGMEM = R"rawliteral(
+    // 🕒 Aktuelle Uhrzeit abrufen
+    function fetchRTC() {
+        fetch('/getTime')
+            .then(response => response.text())
+            .then(time => {
+                document.getElementById('rtcTime').innerText = time;
+            })
+            .catch(error => console.error('❌ Fehler:', error));
+    }
+
+    // 📝 Freien RAM abrufen
+    function fetchMemory() {
+        fetch('/memory')
+            .then(response => response.text())
+            .then(memory => {
+                document.getElementById('memoryUsage').innerText = memory + ' bytes';
+            })
+            .catch(error => console.error('❌ Fehler:', error));
+    }
+
+    // 🕒 RTC-Zeit setzen
+    function setRTC() {
+        let form = new FormData(document.getElementById('rtcForm'));
+        fetch('/setTime', { method: 'POST', body: form })
+            .then(response => response.text())
+            .then(alert)
+            .catch(error => alert('❌ Fehler: ' + error));
+    }
+
+    // 🌐 Zeit per NTP synchronisieren
+    function syncNTP() {
+        fetch('/syncNTP')
+            .then(response => response.text())
+            .then(alert)
+            .catch(error => alert('❌ Fehler: ' + error));
+    }
+
+    // 🔔 Buchstaben-Trigger über Webinterface
+    function triggerLetter() {
+        fetch('/triggerLetter')
+            .then(response => response.text())
+            .then(alert)
+            .catch(error => alert('❌ Fehler: ' + error));
+    }
+
+    // 💾 WiFi-Daten speichern
+    function saveWiFi() {
+        let form = new FormData(document.getElementById('wifiForm'));
+        fetch('/updateWiFi', { method: 'POST', body: form })
+            .then(response => response.text())
+            .then(alert)
+            .catch(error => alert('❌ Fehler: ' + error));
+    }
+
+    // 💾 Anzeige-Einstellungen speichern
+    function saveDisplaySettings() {
+        let form = new FormData(document.getElementById('displayForm'));
+        let autoModeChecked = document.getElementById('auto_mode').checked;
+        form.set('auto_mode', autoModeChecked ? 'on' : 'off');
+        fetch('/updateDisplaySettings', { method: 'POST', body: form })
+            .then(response => response.text())
+            .then(alert)
+            .catch(error => alert('❌ Fehler: ' + error));
+    }
+
+    // 💾 Alle Buchstaben & Farben speichern
+    function saveAllLetters() {
+        let formData = new FormData(document.getElementById('lettersForm'));
+        fetch('/updateAllLetters', { method: 'POST', body: formData })
+            .then(response => response.text())
+            .then(alert)
+            .catch(error => alert('❌ Fehler: ' + error));
+    }
+
+    // 🚀 Automatische Aktualisierung der Uhrzeit
+    let rtcInterval;
+    let memoryInterval;
+
+    function startRTCUpdates() {
+        rtcInterval = setInterval(fetchRTC, 5000); // Alle 5 Sekunden aktualisieren
+        memoryInterval = setInterval(fetchMemory, 5000);
+    }
+
+    function stopRTCUpdates() {
+        clearInterval(rtcInterval);
+        clearInterval(memoryInterval);
+    }
+
+    fetchRTC();
+    fetchMemory();
+    startRTCUpdates();
+
+    const dateInput = document.querySelector("input[name='date']");
+    const timeInput = document.querySelector("input[name='time']");
+
+    dateInput.addEventListener('focus', stopRTCUpdates);
+    dateInput.addEventListener('blur', startRTCUpdates);
+    timeInput.addEventListener('focus', stopRTCUpdates);
+    timeInput.addEventListener('blur', startRTCUpdates);
+)rawliteral";
+
 void setupWebServer() {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         String html = "<h1>Märchen Einstellungen</h1>";
 
+        // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
         html += "<form id='wifiForm'>";
         html += "SSID: <input type='text' name='ssid' value='" + String(wifi_ssid) + "'><br>";
@@ -12,18 +115,31 @@ void setupWebServer() {
         html += "<button type='button' onclick='saveWiFi()'>Speichern</button>";
         html += "</form>";
 
-        html += "<h2>Anzeigeeinstellungen</h2>";
+        // **Anzeige-Einstellungen**
+        html += "<h2>Anzeige-Einstellungen</h2>";
         html += "<form id='displayForm'>";
-        html += "Helligkeit: <input type='number' name='brightness' value='" + String(display_brightness) + "'><br>";
-        html += "Anzeigezeit (s): <input type='number' name='letter_time' value='" + String(letter_display_time) + "'><br>";
-        html += "Trigger-Delay 1 (s): <input type='number' name='trigger_delay_1' value='" + String(letter_trigger_delay_1) + "'><br>";
-        html += "Trigger-Delay 2 (s): <input type='number' name='trigger_delay_2' value='" + String(letter_trigger_delay_2) + "'><br>";
-        html += "Trigger-Delay 3 (s): <input type='number' name='trigger_delay_3' value='" + String(letter_trigger_delay_3) + "'><br>";
-        html += "Auto-Intervall (s): <input type='number' name='auto_interval' value='" + String(letter_auto_display_interval) + "'><br>";
-        html += "Automodus: <input type='checkbox' id='auto_mode' name='auto_mode'" + String(autoDisplayMode ? " checked" : "") + "><br>";
-        html += "<button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
+        html += "Helligkeit: <input type='number' name='brightness' min='1' max='255' value='" + String(display_brightness) + "'><br>";
+        html += "Buchstaben-Anzeigezeit (Sekunden): <input type='number' name='letter_time' min='1' max='60' value='" + String(letter_display_time) + "'><br>";
+        html += "Trigger 1 Verzögerung (Sekunden): <input type='number' name='trigger_delay_1' min='0' max='600' value='" + String(letter_trigger_delay_1) + "'><br>";
+        html += "Trigger 2 Verzögerung (Sekunden): <input type='number' name='trigger_delay_2' min='0' max='600' value='" + String(letter_trigger_delay_2) + "'><br>";
+        html += "Trigger 3 Verzögerung (Sekunden): <input type='number' name='trigger_delay_3' min='0' max='600' value='" + String(letter_trigger_delay_3) + "'><br>";
+        html += "Automodus Intervall (Sekunden): <input type='number' name='auto_interval' min='30' max='600' value='" + String(letter_auto_display_interval) + "'><br>";
+        html += "<label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> Automodus aktivieren</label>";
+        html += "<br><button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
         html += "</form>";
 
+        // **RTC-Zeit anzeigen & ändern**
+        html += "<h2>Datum & Uhrzeit setzen</h2>";
+        html += "<p>Aktuelle Zeit: <span id='rtcTime'>Laden...</span></p>";
+        html += "<p>Freier RAM: <span id='memoryUsage'>Laden...</span></p>";
+        html += "<form id='rtcForm'>";
+        html += "Datum (YYYY-MM-DD): <input type='date' name='date'><br>";
+        html += "Uhrzeit (HH:MM:SS): <input type='time' name='time' step='1'><br>";
+        html += "<button type='button' onclick='setRTC()'>Speichern</button>";
+        html += "</form>";
+        html += "<button type='button' onclick='syncNTP()'>Zeit mit NTP synchronisieren</button>";
+
+        // **Buchstabenauswahl pro Wochentag**
         html += "<h2>Buchstaben pro Wochentag</h2>";
         html += "<form id='lettersForm'>";
         html += "<table border='1' style='width:100%; text-align:center;'>";
@@ -52,9 +168,11 @@ void setupWebServer() {
         html += "<br><button type='button' onclick='saveAllLetters()'>Alle speichern</button>";
         html += "</form>";
 
+        // **Manuellen Trigger starten**
         html += "<h2>Manueller Trigger</h2>";
         html += "<button type='button' onclick='triggerLetter()'>Buchstaben anzeigen</button>";
 
+        // **JavaScript-Datei einbinden**
         html += "<script src='/script.js'></script>";
         request->send(200, "text/html", html);
     });
@@ -152,10 +270,14 @@ void setupWebServer() {
         }
     });
 
+    server.on("/syncNTP", HTTP_GET, [](AsyncWebServerRequest *request) {
+        syncTimeWithNTP();
+        request->send(200, "text/plain", "NTP Synchronisierung ausgeführt");
+    });
+
     server.on("/memory", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "text/plain", String(ESP.getFreeHeap()));
     });
 
     server.begin();
 }
-
