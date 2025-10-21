@@ -12,6 +12,10 @@ build/
 *.o
 *.d
 
+# Allow configuration directories moved under USBStick-Setup/files
+!USBStick-Setup/files/
+!USBStick-Setup/files/**
+
 # Mac OS and other system files
 .DS_Store
 
