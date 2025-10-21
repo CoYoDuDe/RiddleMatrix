@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+PERSIST_ROOT="/mnt/persist"
+PERSIST_USR_LOCAL="${PERSIST_ROOT}/usr_local"
+PERSIST_USR_LOCAL_BIN="${PERSIST_USR_LOCAL}/bin"
+PERSIST_USR_LOCAL_ETC="${PERSIST_USR_LOCAL}/etc"
+
 echo "🚀 Starte minimale Debian-Einrichtung für Märchen Manager..."
 
 ## 📦 Minimale Pakete installieren
@@ -13,9 +18,6 @@ echo "🐍 Erstelle virtuelle Umgebung und installiere Python-Abhängigkeiten...
 mkdir -p /usr/local/venv
 python3 -m venv /usr/local/venv/maerchen
 /usr/local/venv/maerchen/bin/pip install flask beautifulsoup4 requests
-
-## 📁 Projektverzeichnis & Dateien
-mkdir -p /usr/local/bin /usr/local/etc /mnt/persist/boxen_config /home/kioskuser/.X.d
 
 ## 🔍 Dynamische Erkennung der ersten Partition des USB-Sticks
 echo "🔍 Suche nach erster Partition des USB-Sticks für Persistenz..."
@@ -34,12 +36,10 @@ done
 
 if [ -z "$PERSIST_PART" ]; then
     echo "⚠️ Warnung: Keine erste ext4-Partition auf USB-Stick gefunden. boxen_config.json wird im RAM gespeichert."
-    CONFIG_MOUNT="/mnt/persist"
-    mkdir -p /mnt/persist
+    mkdir -p "$PERSIST_ROOT"
 else
     echo "✅ Gefundene Partition: $PERSIST_PART"
-    CONFIG_MOUNT="/mnt/persist"
-    mkdir -p /mnt/persist
+    mkdir -p "$PERSIST_ROOT"
     # Prüfe, ob die Partition bereits als Root-Dateisystem gemountet ist
     if mount | grep "$PERSIST_PART on / "; then
         echo "ℹ️ $PERSIST_PART ist bereits als Root-Dateisystem gemountet. Verwende /mnt/persist direkt."
@@ -49,9 +49,13 @@ else
     fi
 fi
 
+## 📁 Projektverzeichnis & Dateien
+mkdir -p /usr/local/bin /usr/local/etc "$PERSIST_ROOT/boxen_config" /home/kioskuser/.X.d \
+    "$PERSIST_USR_LOCAL_BIN" "$PERSIST_USR_LOCAL_ETC"
+
 ## 📝 Erstelle webserver.py
 echo "📝 Erstelle webserver.py..."
-cat > /usr/local/bin/webserver.py <<'EOF'
+cat > "$PERSIST_USR_LOCAL_BIN/webserver.py" <<'EOF'
 #!/usr/bin/env python3
 from flask import Flask, jsonify, request
 from bs4 import BeautifulSoup
@@ -240,8 +244,11 @@ if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
 EOF
 
+install -m 0755 "$PERSIST_USR_LOCAL_BIN/webserver.py" /usr/local/bin/webserver.py
+chmod 0755 "$PERSIST_USR_LOCAL_BIN/webserver.py"
+
 echo "📝 Erstelle index.html..."
-cat > /usr/local/etc/index.html <<'EOF'
+cat > "$PERSIST_USR_LOCAL_ETC/index.html" <<'EOF'
 <script type="text/javascript">
         var gk_isXlsx = false;
         var gk_xlsxFileLookup = {};
@@ -651,9 +658,22 @@ function checkIfDone() {
 </html>
 EOF
 
+install -m 0644 "$PERSIST_USR_LOCAL_ETC/index.html" /usr/local/etc/index.html
+
 echo "📝 Erstelle bootlocal.sh..."
-cat > /usr/local/bin/bootlocal.sh <<'EOF'
+cat > "$PERSIST_USR_LOCAL_BIN/bootlocal.sh" <<'EOF'
 #!/bin/bash
+set -e
+
+PERSIST_ROOT="/mnt/persist"
+PERSIST_USR_LOCAL="${PERSIST_ROOT}/usr_local"
+
+if [ -d "$PERSIST_USR_LOCAL" ]; then
+    echo "♻️ Synchronisiere persistente /usr/local-Dateien..."
+    mkdir -p /usr/local/bin /usr/local/etc
+    cp -a "$PERSIST_USR_LOCAL/." /usr/local/
+fi
+
 # Initialisiere WLAN-Interface
 rfkill unblock wifi
 WIFI_IFACE=$(iw dev | awk '$1=="Interface"{print $2}' | head -n1)
@@ -685,9 +705,10 @@ chmod 777 /var/lib/misc/dnsmasq.leases
 # Starte systemd-Services
 systemctl start hostapd
 systemctl start dnsmasq
-systemctl start webserver
 EOF
 
+install -m 0755 "$PERSIST_USR_LOCAL_BIN/bootlocal.sh" /usr/local/bin/bootlocal.sh
+chmod 0755 "$PERSIST_USR_LOCAL_BIN/bootlocal.sh"
 chmod +x /usr/local/bin/bootlocal.sh
 chmod +x /usr/local/bin/webserver.py
 
@@ -696,7 +717,8 @@ echo "📝 Erstelle webserver.service..."
 cat > /etc/systemd/system/webserver.service <<'EOF'
 [Unit]
 Description=Märchen Manager Webserver
-After=network.target
+After=network.target bootlocal.service
+Requires=bootlocal.service
 
 [Service]
 ExecStart=/usr/local/venv/maerchen/bin/python3 /usr/local/bin/webserver.py
@@ -709,10 +731,16 @@ EOF
 
 systemctl enable webserver.service
 
-## 📁 tmpfs für RAM-basierte Ausführung
-echo "🛠️ Konfiguriere tmpfs für RAM-basierte Ausführung..."
-echo "tmpfs /usr/local tmpfs defaults,noatime,mode=0755 0 0" >> /etc/fstab
-echo "tmpfs /var/lib/misc tmpfs defaults,noatime,mode=0755 0 0" >> /etc/fstab
+## ♻️ Persistenz für lokale Werkzeuge
+echo "🛠️ Stelle sicher, dass /usr/local persistent bleibt..."
+sed -i '/^[^#]*[[:space:]]\/usr\/local[[:space:]]tmpfs/d' /etc/fstab
+if mountpoint -q /usr/local && mount | grep -q "on /usr/local type tmpfs"; then
+    umount /usr/local
+fi
+
+if ! grep -qE '^[^#]*[[:space:]]/var/lib/misc[[:space:]]+tmpfs' /etc/fstab; then
+    echo "tmpfs /var/lib/misc tmpfs defaults,noatime,mode=0755 0 0" >> /etc/fstab
+fi
 
 ## 🖥️ Xorg-Konfiguration
 echo "📝 Erstelle Xorg-Konfiguration..."
@@ -781,6 +809,7 @@ cat > /etc/systemd/system/bootlocal.service <<'EOF'
 [Unit]
 Description=Start bootlocal.sh
 After=network.target
+Before=webserver.service
 
 [Service]
 Type=oneshot
