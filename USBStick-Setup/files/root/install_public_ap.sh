@@ -1,9 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-PERSIST_ROOT="/mnt/persist"
-PERSIST_USR_LOCAL="${PERSIST_ROOT}/usr_local"
-
 PUBLIC_AP_HELPER="/usr/local/libexec/public_ap.sh"
 if [[ ! -f "$PUBLIC_AP_HELPER" ]]; then
     echo "❌ Fehlendes Helferskript $PUBLIC_AP_HELPER" >&2
@@ -15,15 +12,12 @@ source "$PUBLIC_AP_HELPER"
 
 public_ap_load_env
 
-if [[ -d "$PERSIST_USR_LOCAL" ]]; then
-    echo "♻️ Synchronisiere persistente /usr/local-Dateien..."
-    mkdir -p /usr/local/bin /usr/local/etc
-    cp -a "$PERSIST_USR_LOCAL/." /usr/local/
+echo "🔐 Wende Zugangsdaten für Hotspot \"$SSID\" an..."
+
+WIFI_IFACE="${1:-}"
+if [[ -z "$WIFI_IFACE" ]]; then
+    WIFI_IFACE="$(public_ap_detect_wifi_iface || true)"
 fi
-
-rfkill unblock wifi || true
-
-WIFI_IFACE="$(public_ap_detect_wifi_iface || true)"
 if [[ -z "$WIFI_IFACE" ]]; then
     WIFI_IFACE="wlan0"
     echo "⚠️ Konnte WLAN-Interface nicht automatisch erkennen, verwende Standard: $WIFI_IFACE"
@@ -49,3 +43,5 @@ chmod 777 /var/lib/misc/dnsmasq.leases
 systemctl restart hostapd
 systemctl restart dnsmasq
 systemctl restart webserver || true
+
+echo "✅ Hotspot-Konfiguration wurde aktualisiert."
