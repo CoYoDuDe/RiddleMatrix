@@ -1,0 +1,355 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = jsonData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= jsonData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+</script>
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Boxen verwalten</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; display: flex; height: 100vh; }
+    #sidebar {
+      width: 250px; background: #333; color: white; padding: 10px; display: flex;
+      flex-direction: column; justify-content: space-between;
+    }
+    #deviceList { flex-grow: 1; overflow-y: auto; }
+    .device { padding: 8px; cursor: pointer; border-bottom: 1px solid #555; }
+    .device:hover { background: #444; }
+    #shutdown, #setupBtn {
+      margin-top: 10px; padding: 10px; font-size: 14px; cursor: pointer;
+    }
+    #shutdown { background: red; color: white; }
+    #setupBtn { background: #555; color: white; width: 100%; }
+    #content {
+      flex-grow: 1; background: #f4f4f4; padding: 0; overflow-y: auto; position: relative;
+    }
+    #content iframe {
+      width: 100%; height: 100%; border: none;
+    }
+    .box-card {
+      background: #fff; border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;
+    }
+    .weekday-row {
+      display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap;
+    }
+    .weekday-col {
+      display: flex; flex-direction: column; align-items: center; min-width: 80px;
+    }
+    .weekday-col select, .weekday-col input[type="color"], .weekday-col input[type="text"] {
+      margin-top: 4px; width: 100%; box-sizing: border-box;
+    }
+    .word-input {
+      margin-bottom: 10px; padding: 5px; width: 100%; max-width: 300px;
+      transition: border-color 0.3s;
+    }
+    .word-input.pending { border: 2px solid red; }
+    .word-input.saved { border: 2px solid green; }
+    .action-buttons button {
+      padding: 10px; margin-right: 10px; font-size: 14px;
+    }
+    .status { font-weight: bold; }
+    .statusEntry { margin-bottom: 5px; }
+    .order-buttons button {
+      padding: 5px; margin-left: 5px; font-size: 12px; cursor: pointer;
+    }
+    .box-order {
+      font-weight: bold; margin-right: 10px;
+    }
+  </style>
+</head>
+<body onload="init()">
+<div id="sidebar">
+  <div>
+    <h3>Märchen</h3>
+    <button id="setupBtn" onclick="showSetup()">Boxen verwalten</button>
+    <div id="deviceList">Lade...</div>
+  </div>
+  <button id="shutdown" onclick="shutdown()">Herunterfahren</button>
+</div>
+<div id="content"><p>Willkommen im Märchen-Manager</p></div>
+<script>
+let knownBoxes = {};
+let connectedBoxes = [];
+let transferQueue = {};
+let transferring = false;
+let statusArea;
+let boxOrder = [];
+
+function init() {
+  fetchDevices();
+  setInterval(fetchDevices, 1000); // Prüfe alle 1 Sekunde
+}
+
+async function fetchDevices() {
+  try {
+    const res = await fetch("/devices");
+    const data = await res.json();
+    const newKnownBoxes = data.boxen || {};
+    const newConnectedBoxes = data.connected || [];
+    const newBoxOrder = data.boxOrder || Object.keys(newKnownBoxes);
+
+    // Prüfe auf Änderungen
+    const hasChanges =
+      JSON.stringify(knownBoxes) !== JSON.stringify(newKnownBoxes) ||
+      JSON.stringify(connectedBoxes) !== JSON.stringify(newConnectedBoxes) ||
+      JSON.stringify(boxOrder) !== JSON.stringify(newBoxOrder);
+
+    knownBoxes = newKnownBoxes;
+    connectedBoxes = newConnectedBoxes;
+    boxOrder = newBoxOrder;
+
+    renderDeviceList();
+    // Nur showSetup() aufrufen, wenn kein Textfeld oder Dropdown-Menü fokussiert ist
+    if (hasChanges && statusArea && !transferring && 
+        !document.activeElement.classList.contains("word-input") && 
+        document.activeElement.tagName !== "SELECT") {
+      showSetup();
+    }
+  } catch (e) {
+    console.error("Fehler beim Abrufen der Geräte:", e);
+    if (statusArea) statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Laden der Boxen.</div>';
+  }
+}
+
+function renderDeviceList() {
+  const list = document.getElementById("deviceList");
+  list.innerHTML = connectedBoxes.length ? "" : "Keine verbundenen Boxen";
+  connectedBoxes.forEach(({ hostname, ip }) => {
+    const div = document.createElement("div");
+    div.className = "device";
+    div.innerText = `${hostname} (${ip})`;
+    div.onclick = () => openBox(ip);
+    list.appendChild(div);
+  });
+}
+
+function openBox(ip) {
+  document.getElementById("content").innerHTML = `<iframe src="http://${ip}"></iframe>`;
+}
+
+function shutdown() {
+  fetch("/shutdown", { method: "POST" });
+}
+
+function showSetup() {
+  const letterLabels = {"*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
+  let html = '<h2>Boxen verwalten</h2>';
+  const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
+  const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  const maxLength = boxOrder.length;
+
+  html += '<div class="box-card"><h3>Wörter für Wochentage</h3><div class="weekday-row">';
+  for (let i = 0; i < 7; i++) {
+    const currentWord = boxOrder.map(hostname => knownBoxes[hostname]?.[days[i]] || "").join("");
+    html += `
+      <div class="weekday-col">
+        <label>${dayNames[i]}</label>
+        <input type="text" class="word-input" placeholder="Wort eingeben (max ${maxLength} Zeichen)" 
+          value="${currentWord}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this)" 
+          onkeydown="handleKeydown(event, '${days[i]}', this.value, ${maxLength}, this)">
+      </div>`;
+  }
+  html += '</div></div>';
+
+  boxOrder.forEach((hostname, index) => {
+    const box = knownBoxes[hostname] || {};
+    html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${hostname}</h3><div class="weekday-row">`;
+    for (let i = 0; i < 7; i++) {
+      const letter = box[days[i]] || "";
+      const color = box["color_" + days[i]] || "#ffffff";
+      const letterOptions = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split("").map(c =>
+        `<option value="${c}" ${c === letter ? "selected" : ""}>${letterLabels[c] || c}</option>`).join("");
+
+      html += `
+        <div class="weekday-col">
+          <label>${dayNames[i]}</label>
+          <select onchange="saveField('${hostname}', '${days[i]}', this.value)" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
+            ${letterOptions}
+          </select>
+          <input type="color" value="${color}" onchange="saveField('${hostname}', 'color_${days[i]}', this.value)">
+        </div>`;
+    }
+    html += `</div>
+      <div class="order-buttons">
+        <button onclick="moveBoxUp('${hostname}')">↑</button>
+        <button onclick="moveBoxDown('${hostname}')">↓</button>
+        <button onclick="removeBox('${hostname}')">❌ Entfernen</button>
+      </div></div>`;
+  });
+
+  html += `
+  <div class="action-buttons">
+    <button onclick="transferAll()" id="transferBtn">✅ Übertragen</button>
+    <button onclick="reloadAll()">🔄 Boxen neu lernen</button>
+  </div>
+  <div id="statusArea"></div>
+  `;
+
+  document.getElementById("content").innerHTML = html;
+  statusArea = document.getElementById("statusArea");
+}
+
+function handleKeydown(event, day, word, maxLength, inputElement) {
+  if (event.key === "Enter") {
+    updateWord(day, word, maxLength, inputElement);
+  }
+}
+
+function updateWord(day, word, maxLength, inputElement) {
+  inputElement.classList.add("pending");
+  word = word.toUpperCase().replace(/[^A-Z*#~&?]/g, '').slice(0, maxLength);
+  for (let i = 0; i < boxOrder.length; i++) {
+    const letter = i < word.length ? word[i] : "*";
+    knownBoxes[boxOrder[i]] = knownBoxes[boxOrder[i]] || {};
+    knownBoxes[boxOrder[i]][day] = letter;
+    saveField(boxOrder[i], day, letter, false, inputElement);
+  }
+  showSetup();
+}
+
+function saveField(hostname, key, value, updateUI = true, inputElement = null) {
+  knownBoxes[hostname] = knownBoxes[hostname] || {};
+  knownBoxes[hostname][key] = value;
+  fetch("/update_box", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hostname, [key]: value })
+  }).then(response => {
+    if (!response.ok) {
+      statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichen.</div>';
+      if (inputElement) inputElement.classList.remove("pending");
+    } else {
+      if (inputElement) {
+        inputElement.classList.remove("pending");
+        inputElement.classList.add("saved");
+        setTimeout(() => inputElement.classList.remove("saved"), 1000);
+        statusArea.innerHTML = '<div class="statusEntry status">✅ Änderung gespeichert.</div>';
+      }
+      if (updateUI) showSetup();
+    }
+  }).catch(e => {
+    console.error("Fehler beim Speichern:", e);
+    statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern.</div>';
+    if (inputElement) inputElement.classList.remove("pending");
+  });
+}
+
+function moveBoxUp(hostname) {
+  const index = boxOrder.indexOf(hostname);
+  if (index > 0) {
+    [boxOrder[index - 1], boxOrder[index]] = [boxOrder[index], boxOrder[index - 1]];
+    saveBoxOrder();
+  }
+}
+
+function moveBoxDown(hostname) {
+  const index = boxOrder.indexOf(hostname);
+  if (index < boxOrder.length - 1) {
+    [boxOrder[index], boxOrder[index + 1]] = [boxOrder[index + 1], boxOrder[index]];
+    saveBoxOrder();
+  }
+}
+
+function saveBoxOrder() {
+  fetch("/update_box_order", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ boxOrder })
+  }).then(response => {
+    if (!response.ok) {
+      statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern der Reihenfolge.</div>';
+    } else {
+      showSetup();
+    }
+  }).catch(e => {
+    console.error("Fehler beim Speichern der Reihenfolge:", e);
+    statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern der Reihenfolge.</div>';
+  });
+}
+
+function removeBox(hostname) {
+  fetch("/remove_box", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hostname })
+  }).then(response => {
+    if (!response.ok) {
+      statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Entfernen.</div>';
+    } else {
+      showSetup();
+    }
+  }).catch(e => {
+    console.error("Fehler beim Entfernen:", e);
+    statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Entfernen.</div>';
+  });
+}
+
+async function transferBox(hostname) {
+  transferQueue[hostname] = true;
+  const transferBtn = document.getElementById("transferBtn");
+  if (!transferring) {
+    transferring = true;
+    transferBtn.disabled = true;
+    transferBtn.innerText = "Übertrage...";
+  }
+  const response = await fetch(`/transfer_box?hostname=${hostname}`);
+  const data = await response.json();
+  delete transferQueue[hostname];
+  if (Object.keys(transferQueue).length === 0) {
+    transferring = false;
+    transferBtn.disabled = false;
+    transferBtn.innerText = "✅ Übertragen";
+  }
+  statusArea.innerHTML += `<div class="statusEntry">${hostname}: ${data.status}</div>`;
+  setTimeout(() => {
+    statusArea.removeChild(statusArea.firstChild);
+  }, 3000);
+}
+
+function transferAll() {
+  boxOrder.forEach(transferBox);
+}
+
+function reloadAll() {
+  fetch("/reload_all", { method: "POST" }).then(() => fetchDevices());
+}
+</script>
+</body>
+</html>
