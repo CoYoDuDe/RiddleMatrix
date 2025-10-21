@@ -13,6 +13,7 @@ Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben f�
 ## Implementierte Features
 - [x] RS485‑Trigger mit drei einstellbaren Verzögerungen
 - [x] Automatische Buchstabenausgabe in festen Intervallen
+- [x] Mehrspurige Tageskonfiguration (Buchstaben & Farben pro Triggerleitung)
 - [x] Weboberfläche für WLAN‑Daten, Anzeigeparameter und RTC‑Zeit
 - [x] WiFi‑Symbolanzeige und automatisches Abschalten des Webservers bei Verbindungsverlust
 - [x] EEPROM‑Speicherung aller Einstellungen inklusive Farben je Wochentag

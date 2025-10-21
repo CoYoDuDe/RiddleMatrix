@@ -1,13 +1,25 @@
 #include "config.h"
 
+#include <cctype>
+
 // Definitionen globaler Variablen
 char wifi_ssid[50] = "";
 char wifi_password[50] = "";
 char hostname[50] = "";
 int wifi_connect_timeout = 30;
 
-char dailyLetters[7] = {'A', 'B', 'C', 'D', 'E', 'F', 'G'};
-char dailyLetterColors[7][8] = {"#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"};
+static const char DEFAULT_DAILY_LETTERS[NUM_TRIGGERS][NUM_DAYS] = {
+    {'A', 'B', 'C', 'D', 'E', 'F', 'G'},
+    {'H', 'I', 'J', 'K', 'L', 'M', 'N'},
+    {'O', 'P', 'Q', 'R', 'S', 'T', 'U'}};
+
+static const char DEFAULT_DAILY_COLORS[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH] = {
+    {"#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500"},
+    {"#FFFFFF", "#FFD700", "#ADFF2F", "#00CED1", "#9400D3", "#FF69B4", "#1E90FF"},
+    {"#FFA07A", "#20B2AA", "#87CEFA", "#FFE4B5", "#DA70D6", "#90EE90", "#FFDAB9"}};
+
+char dailyLetters[NUM_TRIGGERS][NUM_DAYS] = {};
+char dailyLetterColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH] = {};
 
 int display_brightness;
 unsigned long letter_display_time;
@@ -28,24 +40,53 @@ bool wifiConnected = false;
 const char* daysOfTheWeek[7] = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"};
 
 // Funktionsimplementierungen aus config.h
+namespace {
+
+bool isValidHexColor(const char *value) {
+    if (value == nullptr) {
+        return false;
+    }
+
+    size_t length = strlen(value);
+    if (length != 7 || value[0] != '#') {
+        return false;
+    }
+
+    for (size_t i = 1; i < length; ++i) {
+        if (!isxdigit(static_cast<unsigned char>(value[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void resetLettersToDefaults() {
+    memcpy(dailyLetters, DEFAULT_DAILY_LETTERS, sizeof(dailyLetters));
+    memcpy(dailyLetterColors, DEFAULT_DAILY_COLORS, sizeof(dailyLetterColors));
+}
+
+} // namespace
+
 void saveConfig() {
     Serial.println(F("💾 Speichere Einstellungen in EEPROM..."));
 
     EEPROM.begin(EEPROM_SIZE);
-    EEPROM.put(0, wifi_ssid);
-    EEPROM.put(50, wifi_password);
-    EEPROM.put(100, hostname);
-    EEPROM.put(150, dailyLetters);
-    EEPROM.put(200, dailyLetterColors);
-    EEPROM.put(300, display_brightness);
-    EEPROM.put(304, letter_display_time);
-    EEPROM.put(308, letter_trigger_delay_1);
-    EEPROM.put(312, letter_trigger_delay_2);
-    EEPROM.put(316, letter_trigger_delay_3);
-    EEPROM.put(320, letter_auto_display_interval);
+    EEPROM.put(EEPROM_OFFSET_WIFI_SSID, wifi_ssid);
+    EEPROM.put(EEPROM_OFFSET_WIFI_PASSWORD, wifi_password);
+    EEPROM.put(EEPROM_OFFSET_HOSTNAME, hostname);
+    EEPROM.put(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
+    EEPROM.put(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
+    EEPROM.put(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
+    EEPROM.put(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
+    EEPROM.put(EEPROM_OFFSET_TRIGGER_DELAY_1, letter_trigger_delay_1);
+    EEPROM.put(EEPROM_OFFSET_TRIGGER_DELAY_2, letter_trigger_delay_2);
+    EEPROM.put(EEPROM_OFFSET_TRIGGER_DELAY_3, letter_trigger_delay_3);
+    EEPROM.put(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
     uint8_t autoModeByte = autoDisplayMode ? 1 : 0;
-    EEPROM.put(324, autoModeByte);
-    EEPROM.put(328, wifi_connect_timeout);
+    EEPROM.put(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
+    EEPROM.put(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
+    uint16_t version = EEPROM_CONFIG_VERSION;
+    EEPROM.put(EEPROM_OFFSET_CONFIG_VERSION, version);
     EEPROM.commit();
 
     Serial.println(F("✅ Einstellungen erfolgreich gespeichert!"));
@@ -54,35 +95,75 @@ void saveConfig() {
 void loadConfig() {
     Serial.println(F("📂 Lade Einstellungen aus EEPROM..."));
 
-    EEPROM.begin(EEPROM_SIZE);
-    EEPROM.get(0, wifi_ssid);
-    EEPROM.get(50, wifi_password);
-    EEPROM.get(100, hostname);
-    EEPROM.get(150, dailyLetters);
-    EEPROM.get(200, dailyLetterColors);
+    resetLettersToDefaults();
 
-    Serial.println(F("📂 Lade Farben aus EEPROM:"));
-    for (int i = 0; i < 7; i++) {
-        Serial.print(F("Wochentag "));
-        Serial.print(i);
-        Serial.print(F(" → Geladene Farbe: "));
-        Serial.println(dailyLetterColors[i]);
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.get(EEPROM_OFFSET_WIFI_SSID, wifi_ssid);
+    EEPROM.get(EEPROM_OFFSET_WIFI_PASSWORD, wifi_password);
+    EEPROM.get(EEPROM_OFFSET_HOSTNAME, hostname);
+
+    uint16_t storedVersion = 0xFFFF;
+    bool migratedLegacyLayout = false;
+    EEPROM.get(EEPROM_OFFSET_CONFIG_VERSION, storedVersion);
+
+    if (storedVersion == EEPROM_CONFIG_VERSION) {
+        EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
+        EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
+    } else {
+        Serial.println(F("ℹ️ Legacy-Layout erkannt – migriere auf mehrspurige Trigger-Konfiguration."));
+        char legacyLetters[NUM_DAYS] = {};
+        char legacyColors[NUM_DAYS][COLOR_STRING_LENGTH] = {};
+        EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, legacyLetters);
+        EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, legacyColors);
+
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            char letter = legacyLetters[day];
+            if (letter == '\xFF' || letter == '\0') {
+                letter = DEFAULT_DAILY_LETTERS[0][day];
+            }
+
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                dailyLetters[trigger][day] = (trigger == 0) ? letter : DEFAULT_DAILY_LETTERS[trigger][day];
+            }
+
+            const char *legacyColor = legacyColors[day];
+            bool colorValid = isValidHexColor(legacyColor);
+
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                const char *source = (trigger == 0 && colorValid) ? legacyColor : DEFAULT_DAILY_COLORS[trigger][day];
+                strncpy(dailyLetterColors[trigger][day], source, COLOR_STRING_LENGTH);
+                dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+            }
+        }
+        migratedLegacyLayout = true;
     }
 
-    EEPROM.get(300, display_brightness);
-    EEPROM.get(304, letter_display_time);
-    EEPROM.get(308, letter_trigger_delay_1);
-    EEPROM.get(312, letter_trigger_delay_2);
-    EEPROM.get(316, letter_trigger_delay_3);
-    EEPROM.get(320, letter_auto_display_interval);
+    Serial.println(F("📂 Geladene Farben für Trigger & Tage:"));
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            Serial.print(F("Trigger "));
+            Serial.print(trigger + 1);
+            Serial.print(F(", Tag "));
+            Serial.print(day);
+            Serial.print(F(" → Farbe: "));
+            Serial.println(dailyLetterColors[trigger][day]);
+        }
+    }
+
+    EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
+    EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
+    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_1, letter_trigger_delay_1);
+    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_2, letter_trigger_delay_2);
+    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_3, letter_trigger_delay_3);
+    EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
     uint8_t autoModeByte = 0;
-    EEPROM.get(324, autoModeByte);
-    EEPROM.get(328, wifi_connect_timeout);
+    EEPROM.get(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
+    EEPROM.get(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
     autoDisplayMode = (autoModeByte == 1);
 
     Serial.println(F("✅ EEPROM-Daten geladen!"));
 
-    bool eepromUpdated = false;
+    bool eepromUpdated = migratedLegacyLayout;
 
     if (strlen(wifi_ssid) == 0 || wifi_ssid[0] == '\xFF') {
         Serial.println(F("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte..."));
@@ -93,19 +174,29 @@ void loadConfig() {
         eepromUpdated = true;
     }
 
-    if (dailyLetters[0] == '\xFF' || dailyLetters[0] == '\0') {
-        Serial.println(F("🛑 Fehler: EEPROM hat ungültige Buchstaben gespeichert. Setze Standardwerte."));
-        char defaultLetters[7] = {'A', 'B', 'C', 'D', 'E', 'F', 'G'};
-        memcpy(dailyLetters, defaultLetters, sizeof(defaultLetters));
-        eepromUpdated = true;
-    }
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            char letter = dailyLetters[trigger][day];
+            bool letterValid = false;
+            for (size_t i = 0; i < sizeof(availableLetters); ++i) {
+                if (availableLetters[i] == letter) {
+                    letterValid = true;
+                    break;
+                }
+            }
 
-    for (int i = 0; i < 7; i++) {
-        if (strlen(dailyLetterColors[i]) == 0 || strcmp(dailyLetterColors[i], "#000000") == 0 || strlen(dailyLetterColors[i]) < 3) {
-            Serial.println(F("🛑 Ungültige Farben! Setze Standardwerte..."));
-            const char* defaultColors[7] = {"#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500"};
-            strncpy(dailyLetterColors[i], defaultColors[i], sizeof(dailyLetterColors[i]));
-            eepromUpdated = true;
+            if (!letterValid) {
+                Serial.println(F("🛑 Ungültiger Buchstabe entdeckt! Setze Standardwert."));
+                dailyLetters[trigger][day] = DEFAULT_DAILY_LETTERS[trigger][day];
+                eepromUpdated = true;
+            }
+
+            if (!isValidHexColor(dailyLetterColors[trigger][day])) {
+                Serial.println(F("🛑 Ungültige Farbe! Setze Standardwert..."));
+                strncpy(dailyLetterColors[trigger][day], DEFAULT_DAILY_COLORS[trigger][day], COLOR_STRING_LENGTH);
+                dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+                eepromUpdated = true;
+            }
         }
     }
 

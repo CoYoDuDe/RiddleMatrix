@@ -1,5 +1,26 @@
 #include "web_manager.h"
 
+namespace {
+
+String getLetterOptionLabel(char letter) {
+    switch (letter) {
+        case '*':
+            return F("Sun+Rad");
+        case '#':
+            return F("Sun");
+        case '~':
+            return F("WiFi");
+        case '&':
+            return F("Rad");
+        case '?':
+            return F("Riddler");
+        default:
+            return String(letter);
+    }
+}
+
+} // namespace
+
 const char scriptJS[] PROGMEM = R"rawliteral(
     // 🕒 Aktuelle Uhrzeit abrufen
     function fetchRTC() {
@@ -39,22 +60,32 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     }
 
     // 🔔 Buchstaben-Trigger über Webinterface
-    function triggerLetter() {
-        fetch('/triggerLetter')
+    function triggerLetter(triggerIndex) {
+        let query = '';
+        if (typeof triggerIndex === 'number' && triggerIndex >= 0) {
+            query = '?trigger=' + encodeURIComponent(triggerIndex + 1);
+        }
+
+        fetch('/triggerLetter' + query)
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
     }
 
     // 👁️ Buchstaben direkt anzeigen
-    function displayLetter(letter) {
+    function displayLetter(triggerIndex, letter) {
         if (typeof letter !== 'string' || letter.length !== 1) {
             console.warn('❌ Ungültiger Buchstabe:', letter);
             alert('❌ Bitte einen einzelnen Buchstaben auswählen.');
             return;
         }
 
-        fetch('/displayLetter?char=' + encodeURIComponent(letter))
+        let url = '/displayLetter?char=' + encodeURIComponent(letter);
+        if (typeof triggerIndex === 'number' && triggerIndex >= 0) {
+            url += '&trigger=' + encodeURIComponent(triggerIndex + 1);
+        }
+
+        fetch(url)
             .then(response => response.text())
             .then(message => {
                 console.log('ℹ️ Serverantwort:', message);
@@ -169,37 +200,50 @@ void setupWebServer() {
         html += "<button type='button' onclick='syncNTP()'>Zeit mit NTP synchronisieren</button>";
 
         // **Buchstabenauswahl pro Wochentag**
-        html += "<h2>Buchstaben pro Wochentag</h2>";
+        html += "<h2>Buchstaben pro Wochentag &amp; Trigger</h2>";
         html += "<form id='lettersForm'>";
         html += "<table border='1' style='width:100%; text-align:center;'>";
-        html += "<tr>";
-        for (int i = 0; i < 7; i++) {
-            html += "<th>" + String(daysOfTheWeek[i]) + "</th>";
+        html += "<tr><th>Wochentag</th>";
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            html += "<th>Trigger " + String(trigger + 1) + "</th>";
         }
-        html += "</tr><tr>";
-        for (int i = 0; i < 7; i++) {
-            html += "<td>";
-            html += "<select id='letter" + String(i) + "' name='letter" + String(i) + "'>";
-            for (char c = 'A'; c <= 'Z'; c++) {
-                html += "<option value='" + String(c) + "' " + (dailyLetters[i] == c ? "selected" : "") + ">" + String(c) + "</option>";
+        html += "</tr>";
+
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            html += "<tr>";
+            html += "<td>" + String(daysOfTheWeek[day]) + "</td>";
+
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                String selectId = "letter_" + String(trigger) + "_" + String(day);
+                String colorId = "color_" + String(trigger) + "_" + String(day);
+                html += "<td>";
+                html += "<select id='" + selectId + "' name='" + selectId + "'>";
+                for (size_t idx = 0; idx < sizeof(availableLetters); ++idx) {
+                    char optionChar = availableLetters[idx];
+                    String optionLabel = getLetterOptionLabel(optionChar);
+                    html += "<option value='" + String(optionChar) + "' ";
+                    html += (dailyLetters[trigger][day] == optionChar) ? "selected" : "";
+                    html += ">" + optionLabel + "</option>";
+                }
+                html += "</select>";
+                html += "<br><input type='color' id='" + colorId + "' name='" + colorId + "' value='" + String(dailyLetterColors[trigger][day]) + "'>";
+                html += "<br><button type='button' onclick='displayLetter(" + String(trigger) + ", document.getElementById(\"" + selectId + "\").value)'>Anzeigen</button>";
+                html += "<br><button type='button' onclick='triggerLetter(" + String(trigger) + ")'>Triggern</button>";
+                html += "</td>";
             }
-            html += "<option value='*' " + String(dailyLetters[i] == '*' ? "selected" : "") + ">Sun+Rad</option>";
-            html += "<option value='#' " + String(dailyLetters[i] == '#' ? "selected" : "") + ">Sun</option>";
-            html += "<option value='~' " + String(dailyLetters[i] == '~' ? "selected" : "") + ">WIFI</option>";
-            html += "<option value='&' " + String(dailyLetters[i] == '&' ? "selected" : "") + ">Rad</option>";
-            html += "<option value='?' " + String(dailyLetters[i] == '?' ? "selected" : "") + ">Riddler</option>";
-            html += "</select>";
-            html += "<br><input type='color' id='color" + String(i) + "' name='color" + String(i) + "' value='" + String(dailyLetterColors[i]) + "'>";
-            html += "<br><button type='button' onclick='displayLetter(\"" + String(dailyLetters[i]) + "\")'>Anzeigen</button>";
-            html += "</td>";
+
+            html += "</tr>";
         }
-        html += "</tr></table>";
+
+        html += "</table>";
         html += "<br><button type='button' onclick='saveAllLetters()'>Alle speichern</button>";
         html += "</form>";
 
         // **Manuellen Trigger starten**
         html += "<h2>Manueller Trigger</h2>";
-        html += "<button type='button' onclick='triggerLetter()'>Buchstaben anzeigen</button>";
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            html += "<button type='button' style='margin-right:8px;' onclick='triggerLetter(" + String(trigger) + ")'>Trigger " + String(trigger + 1) + " auslösen</button>";
+        }
 
         // **JavaScript-Datei einbinden**
         html += "<script src='/script.js'></script>";
@@ -253,15 +297,24 @@ void setupWebServer() {
 
     server.on("/updateAllLetters", HTTP_POST, [](AsyncWebServerRequest *request) {
         bool success = true;
-        for (int i = 0; i < 7; i++) {
-            String letterParam = "letter" + String(i);
-            String colorParam = "color" + String(i);
 
-            if (request->hasParam(letterParam, true) && request->hasParam(colorParam, true)) {
-                dailyLetters[i] = request->getParam(letterParam, true)->value()[0];
-                strncpy(dailyLetterColors[i], request->getParam(colorParam, true)->value().c_str(), sizeof(dailyLetterColors[i]));
-            } else {
-                success = false;
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            for (size_t day = 0; day < NUM_DAYS; ++day) {
+                String letterParam = "letter_" + String(trigger) + "_" + String(day);
+                String colorParam = "color_" + String(trigger) + "_" + String(day);
+
+                if (request->hasParam(letterParam, true) && request->hasParam(colorParam, true)) {
+                    String letterValue = request->getParam(letterParam, true)->value();
+                    if (!letterValue.isEmpty()) {
+                        dailyLetters[trigger][day] = letterValue[0];
+                    }
+
+                    String colorValue = request->getParam(colorParam, true)->value();
+                    strncpy(dailyLetterColors[trigger][day], colorValue.c_str(), COLOR_STRING_LENGTH);
+                    dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+                } else {
+                    success = false;
+                }
             }
         }
 
@@ -274,13 +327,29 @@ void setupWebServer() {
     });
 
     server.on("/displayLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (request->hasParam("char")) {
-            String letter = request->getParam("char")->value();
-            displayLetter(letter[0]);
-            request->send(200, "text/plain", "Buchstabe " + letter + " angezeigt!");
-        } else {
+        if (!request->hasParam("char")) {
             request->send(400, "text/plain", "Fehlender Parameter!");
+            return;
         }
+
+        String letter = request->getParam("char")->value();
+        if (letter.length() != 1) {
+            request->send(400, "text/plain", "❌ Fehler: Buchstabe muss genau ein Zeichen sein!");
+            return;
+        }
+
+        uint8_t triggerIndex = 0;
+        if (request->hasParam("trigger")) {
+            int triggerValue = request->getParam("trigger")->value().toInt();
+            if (triggerValue < 1 || triggerValue > static_cast<int>(NUM_TRIGGERS)) {
+                request->send(400, "text/plain", "❌ Fehler: Ungültiger Trigger!");
+                return;
+            }
+            triggerIndex = static_cast<uint8_t>(triggerValue - 1);
+        }
+
+        displayLetter(triggerIndex, letter[0]);
+        request->send(200, "text/plain", "Buchstabe " + letter + " für Trigger " + String(triggerIndex + 1) + " angezeigt!");
     });
 
     server.on("/triggerLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -289,20 +358,32 @@ void setupWebServer() {
             return;
         }
 
+        uint8_t triggerIndex = 0;
+        char triggerChar = '1';
+        if (request->hasParam("trigger")) {
+            int triggerValue = request->getParam("trigger")->value().toInt();
+            if (triggerValue < 1 || triggerValue > static_cast<int>(NUM_TRIGGERS)) {
+                request->send(400, "text/plain", "❌ Fehler: Ungültiger Trigger!");
+                return;
+            }
+            triggerIndex = static_cast<uint8_t>(triggerValue - 1);
+            triggerChar = static_cast<char>('0' + triggerValue);
+        }
+
         int today = getRTCWeekday();
-        if (today < 0 || today >= 7) {
+        if (today < 0 || today >= static_cast<int>(NUM_DAYS)) {
             request->send(500, "text/plain", "❌ Fehler: Ungültiger Wochentag vom RTC-Modul!");
             return;
         }
 
-        char todayLetter = dailyLetters[today];
+        char todayLetter = dailyLetters[triggerIndex][today];
         if (todayLetter != '*' && letterData.find(todayLetter) == letterData.end()) {
             request->send(500, "text/plain", "❌ Fehler: Kein Muster für den heutigen Buchstaben vorhanden!");
             return;
         }
 
-        request->send(200, "text/plain", "✅ Buchstaben-Trigger gestartet!");
-        handleTrigger('1', false);
+        request->send(200, "text/plain", "✅ Buchstaben-Trigger für Trigger " + String(triggerIndex + 1) + " gestartet!");
+        handleTrigger(triggerChar, false);
     });
 
     server.on("/getTime", HTTP_GET, [](AsyncWebServerRequest *request) {
