@@ -42,6 +42,15 @@ const char* daysOfTheWeek[7] = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Do
 // Funktionsimplementierungen aus config.h
 namespace {
 
+static constexpr uint16_t LEGACY_EEPROM_OFFSET_DISPLAY_BRIGHTNESS = 300;
+static constexpr uint16_t LEGACY_EEPROM_OFFSET_LETTER_DISPLAY_TIME = 304;
+static constexpr uint16_t LEGACY_EEPROM_OFFSET_TRIGGER_DELAY_1 = 308;
+static constexpr uint16_t LEGACY_EEPROM_OFFSET_TRIGGER_DELAY_2 = 312;
+static constexpr uint16_t LEGACY_EEPROM_OFFSET_TRIGGER_DELAY_3 = 316;
+static constexpr uint16_t LEGACY_EEPROM_OFFSET_AUTO_INTERVAL = 320;
+static constexpr uint16_t LEGACY_EEPROM_OFFSET_AUTO_MODE = 324;
+static constexpr uint16_t LEGACY_EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT = 328;
+
 bool isValidHexColor(const char *value) {
     if (value == nullptr) {
         return false;
@@ -106,9 +115,19 @@ void loadConfig() {
     bool migratedLegacyLayout = false;
     EEPROM.get(EEPROM_OFFSET_CONFIG_VERSION, storedVersion);
 
+    uint8_t autoModeByte = 0;
+
     if (storedVersion == EEPROM_CONFIG_VERSION) {
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
+        EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
+        EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
+        EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_1, letter_trigger_delay_1);
+        EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_2, letter_trigger_delay_2);
+        EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_3, letter_trigger_delay_3);
+        EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
+        EEPROM.get(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
+        EEPROM.get(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
     } else {
         Serial.println(F("ℹ️ Legacy-Layout erkannt – migriere auf mehrspurige Trigger-Konfiguration."));
         char legacyLetters[NUM_DAYS] = {};
@@ -136,6 +155,15 @@ void loadConfig() {
             }
         }
         migratedLegacyLayout = true;
+
+        EEPROM.get(LEGACY_EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
+        EEPROM.get(LEGACY_EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
+        EEPROM.get(LEGACY_EEPROM_OFFSET_TRIGGER_DELAY_1, letter_trigger_delay_1);
+        EEPROM.get(LEGACY_EEPROM_OFFSET_TRIGGER_DELAY_2, letter_trigger_delay_2);
+        EEPROM.get(LEGACY_EEPROM_OFFSET_TRIGGER_DELAY_3, letter_trigger_delay_3);
+        EEPROM.get(LEGACY_EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
+        EEPROM.get(LEGACY_EEPROM_OFFSET_AUTO_MODE, autoModeByte);
+        EEPROM.get(LEGACY_EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
     }
 
     Serial.println(F("📂 Geladene Farben für Trigger & Tage:"));
@@ -150,15 +178,6 @@ void loadConfig() {
         }
     }
 
-    EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
-    EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
-    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_1, letter_trigger_delay_1);
-    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_2, letter_trigger_delay_2);
-    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_3, letter_trigger_delay_3);
-    EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
-    uint8_t autoModeByte = 0;
-    EEPROM.get(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
-    EEPROM.get(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
     autoDisplayMode = (autoModeByte == 1);
 
     Serial.println(F("✅ EEPROM-Daten geladen!"));
