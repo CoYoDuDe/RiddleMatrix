@@ -1,4 +1,5 @@
 #include "wifi_manager.h"
+#include "rtc_manager.h"
 
 // Funktionen aus wifi_manager.h implementiert
 
@@ -61,6 +62,7 @@ void connectWiFi() {
         Serial.println(WiFi.localIP());
         wifiConnected = true;
         drawWiFiSymbol();
+        syncTimeWithNTP();
         setupWebServer();
     } else {
         Serial.println(F("\n⛔ WiFi Timeout! Verbindung fehlgeschlagen. WiFi bleibt aus."));
