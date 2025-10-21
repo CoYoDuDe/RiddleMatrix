@@ -2,6 +2,7 @@
 set -euo pipefail
 
 VENV_DIR=""
+VENV_TARGET_PATH=""
 
 log() {
   printf '[provision] %s\n' "$1"
@@ -124,56 +125,61 @@ ensure_system_packages() {
   chroot "$TARGET_ROOT" "$apt_cmd" install -y "${missing[@]}"
 }
 
-venv_python_bin() {
-  if [[ -n "$VENV_DIR" && -x "$VENV_DIR/bin/python3" ]]; then
-    printf '%s\n' "$VENV_DIR/bin/python3"
-    return 0
+run_in_target() {
+  if [[ "$TARGET_ROOT" = "/" ]]; then
+    "$@"
+    return
   fi
-  if [[ -n "$VENV_DIR" && -x "$VENV_DIR/bin/python" ]]; then
-    printf '%s\n' "$VENV_DIR/bin/python"
-    return 0
+
+  if ! command -v chroot >/dev/null 2>&1; then
+    die "chroot not available; cannot execute commands inside target root $TARGET_ROOT"
   fi
-  return 1
+
+  chroot "$TARGET_ROOT" /usr/bin/env \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    "$@"
 }
 
 ensure_virtualenv() {
-  local host_python
-  if command -v python3 >/dev/null 2>&1; then
-    host_python="$(command -v python3)"
-  else
-    die "python3 binary not found on the host system"
-  fi
+  local target_python=""
 
   if [[ -d "$VENV_DIR/bin" ]]; then
     log "Python virtual environment already present at $VENV_DIR"
   else
     log "Creating Python virtual environment at $VENV_DIR"
     mkdir -p "$VENV_DIR"
-    "$host_python" -m venv "$VENV_DIR"
+    run_in_target python3 -m venv "$VENV_TARGET_PATH"
   fi
 
-  local venv_python
-  if ! venv_python="$(venv_python_bin)"; then
+  if [[ -x "$VENV_DIR/bin/python3" ]]; then
+    target_python="$VENV_TARGET_PATH/bin/python3"
+  elif [[ -x "$VENV_DIR/bin/python" ]]; then
+    target_python="$VENV_TARGET_PATH/bin/python"
+  else
     die "Virtual environment at $VENV_DIR is incomplete"
   fi
 
   if [[ ! -x "$VENV_DIR/bin/pip" ]]; then
     log "Ensuring pip is available inside the virtual environment"
-    "$venv_python" -m ensurepip --upgrade
+    run_in_target "$target_python" -m ensurepip --upgrade
   fi
 }
 
 install_python_dependencies() {
   local -a dependencies=(flask requests beautifulsoup4)
   local -a missing=()
-  local venv_python
+  local target_python=""
 
-  if ! venv_python="$(venv_python_bin)"; then
+  if [[ -x "$VENV_DIR/bin/python3" ]]; then
+    target_python="$VENV_TARGET_PATH/bin/python3"
+  elif [[ -x "$VENV_DIR/bin/python" ]]; then
+    target_python="$VENV_TARGET_PATH/bin/python"
+  else
     die "Virtual environment at $VENV_DIR is missing a python interpreter"
   fi
 
   for dep in "${dependencies[@]}"; do
-    if ! "$venv_python" -m pip show "$dep" >/dev/null 2>&1; then
+    if ! run_in_target "$target_python" -m pip show "$dep" >/dev/null 2>&1; then
       missing+=("$dep")
     fi
   done
@@ -184,12 +190,17 @@ install_python_dependencies() {
   fi
 
   log "Installing Python dependencies: ${missing[*]}"
-  "$venv_python" -m pip install --disable-pip-version-check --no-input "${missing[@]}"
+  run_in_target "$target_python" -m pip install --disable-pip-version-check --no-input "${missing[@]}"
 }
 
 main() {
   resolve_target_root "$1"
-  VENV_DIR="$TARGET_ROOT/usr/local/venv/maerchen"
+  VENV_TARGET_PATH="/usr/local/venv/maerchen"
+  if [[ "$TARGET_ROOT" = "/" ]]; then
+    VENV_DIR="$VENV_TARGET_PATH"
+  else
+    VENV_DIR="$TARGET_ROOT$VENV_TARGET_PATH"
+  fi
   ensure_system_packages
   ensure_virtualenv
   install_python_dependencies
