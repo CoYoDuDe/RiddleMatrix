@@ -46,6 +46,26 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             .catch(error => alert('❌ Fehler: ' + error));
     }
 
+    // 👁️ Buchstaben direkt anzeigen
+    function displayLetter(letter) {
+        if (typeof letter !== 'string' || letter.length !== 1) {
+            console.warn('❌ Ungültiger Buchstabe:', letter);
+            alert('❌ Bitte einen einzelnen Buchstaben auswählen.');
+            return;
+        }
+
+        fetch('/displayLetter?char=' + encodeURIComponent(letter))
+            .then(response => response.text())
+            .then(message => {
+                console.log('ℹ️ Serverantwort:', message);
+                alert(message);
+            })
+            .catch(error => {
+                console.error('❌ Fehler:', error);
+                alert('❌ Fehler: ' + error);
+            });
+    }
+
     // 💾 WiFi-Daten speichern
     function saveWiFi() {
         let form = new FormData(document.getElementById('wifiForm'));
@@ -96,10 +116,19 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     const dateInput = document.querySelector("input[name='date']");
     const timeInput = document.querySelector("input[name='time']");
 
-    dateInput.addEventListener('focus', stopRTCUpdates);
-    dateInput.addEventListener('blur', startRTCUpdates);
-    timeInput.addEventListener('focus', stopRTCUpdates);
-    timeInput.addEventListener('blur', startRTCUpdates);
+    if (dateInput) {
+        dateInput.addEventListener('focus', stopRTCUpdates);
+        dateInput.addEventListener('blur', startRTCUpdates);
+    } else {
+        console.warn('⚠️ Datumseingabe nicht gefunden, automatische Aktualisierung bleibt aktiv.');
+    }
+
+    if (timeInput) {
+        timeInput.addEventListener('focus', stopRTCUpdates);
+        timeInput.addEventListener('blur', startRTCUpdates);
+    } else {
+        console.warn('⚠️ Uhrzeiteingabe nicht gefunden, automatische Aktualisierung bleibt aktiv.');
+    }
 )rawliteral";
 
 void setupWebServer() {
