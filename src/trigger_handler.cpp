@@ -16,8 +16,17 @@ void clearDisplay() {
     triggerActive = false;
 }
 
-void displayLetter(char letter) {
-    Serial.print(F("🎨 Zeichne Buchstabe: "));
+void displayLetter(uint8_t triggerIndex, char letter) {
+    if (triggerIndex >= NUM_TRIGGERS) {
+        Serial.print(F("⚠️ Ungültiger Trigger-Index "));
+        Serial.print(triggerIndex);
+        Serial.println(F(" – fallback auf Trigger 1."));
+        triggerIndex = 0;
+    }
+
+    Serial.print(F("🎨 Zeichne Buchstabe für Trigger "));
+    Serial.print(triggerIndex + 1);
+    Serial.print(F(": "));
     Serial.println(letter);
 
     if (triggerActive) {
@@ -37,7 +46,13 @@ void displayLetter(char letter) {
     Serial.print(F("📅 Heutiger Wochentag: "));
     Serial.println(today);
 
-    String selectedColor(dailyLetterColors[today]);
+    if (today < 0 || today >= static_cast<int>(NUM_DAYS)) {
+        Serial.println(F("⚠️ Ungültiger Wochentag – breche Anzeige ab."));
+        triggerActive = false;
+        return;
+    }
+
+    String selectedColor(dailyLetterColors[triggerIndex][today]);
 
     Serial.print(F("🎨 Geladene Farbe für heute: "));
     Serial.println(selectedColor);
@@ -94,6 +109,16 @@ void displayLetter(char letter) {
 }
 
 void handleTrigger(char triggerType, bool isAutoMode) {
+    uint8_t triggerIndex = 0;
+    if (triggerType >= '1' && triggerType <= ('0' + NUM_TRIGGERS)) {
+        triggerIndex = static_cast<uint8_t>(triggerType - '1');
+    } else {
+        Serial.print(F("⚠️ Unbekannter Trigger-Typ "));
+        Serial.print(triggerType);
+        Serial.println(F(" – verwende Trigger 1."));
+        triggerIndex = 0;
+    }
+
     if (wifiConnected && !isAutoMode) {
         Serial.println(F("⛔ WiFi wird abgeschaltet wegen Trigger!"));
         WiFi.disconnect();
@@ -103,18 +128,24 @@ void handleTrigger(char triggerType, bool isAutoMode) {
 
     int today = getRTCWeekday();
 
-    if (today >= 0 && today < 7) {
-        char letter = dailyLetters[today];
+    if (today >= 0 && today < static_cast<int>(NUM_DAYS)) {
+        char letter = dailyLetters[triggerIndex][today];
         Serial.print(F("📅 Heute ist "));
         Serial.print(daysOfTheWeek[today]);
-        Serial.print(F(" → Zeige Buchstabe: "));
+        Serial.print(F(" → Trigger "));
+        Serial.print(triggerIndex + 1);
+        Serial.print(F(" zeigt Buchstabe: "));
         Serial.println(letter);
 
-        int delayTime = 0;
+        unsigned long delayTime = 0;
         if (!isAutoMode) {
-            if (triggerType == '1') delayTime = letter_trigger_delay_1;
-            else if (triggerType == '2') delayTime = letter_trigger_delay_2;
-            else if (triggerType == '3') delayTime = letter_trigger_delay_3;
+            if (triggerIndex == 0) {
+                delayTime = letter_trigger_delay_1;
+            } else if (triggerIndex == 1) {
+                delayTime = letter_trigger_delay_2;
+            } else {
+                delayTime = letter_trigger_delay_3;
+            }
 
             Serial.print(F("⏳ Warte auf Trigger-Verzögerung: "));
             Serial.print(delayTime);
@@ -122,7 +153,7 @@ void handleTrigger(char triggerType, bool isAutoMode) {
             delay(delayTime * 1000);
         }
 
-        displayLetter(letter);
+        displayLetter(triggerIndex, letter);
 
         alreadyCleared = false;
 

@@ -7,6 +7,7 @@
 #include <ESP8266WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <EEPROM.h>
+#include <cstddef>
 #include <cstring>
 #include <map>
 #include <Ticker.h>
@@ -33,6 +34,27 @@
 #define P_OE D4
 #define P_R1 D7
 
+// **Allgemeine Konstanten für Trigger und EEPROM**
+static constexpr size_t NUM_TRIGGERS = 3;
+static constexpr size_t NUM_DAYS = 7;
+static constexpr size_t COLOR_STRING_LENGTH = 8; // "#RRGGBB" + Terminator
+
+static constexpr uint16_t EEPROM_OFFSET_WIFI_SSID = 0;
+static constexpr uint16_t EEPROM_OFFSET_WIFI_PASSWORD = EEPROM_OFFSET_WIFI_SSID + 50;
+static constexpr uint16_t EEPROM_OFFSET_HOSTNAME = EEPROM_OFFSET_WIFI_PASSWORD + 50;
+static constexpr uint16_t EEPROM_OFFSET_DAILY_LETTERS = EEPROM_OFFSET_HOSTNAME + 50;
+static constexpr uint16_t EEPROM_OFFSET_DAILY_LETTER_COLORS = 200; // Historischer Versatz für Rückwärtskompatibilität
+static constexpr uint16_t EEPROM_OFFSET_DISPLAY_BRIGHTNESS = EEPROM_OFFSET_DAILY_LETTER_COLORS + (NUM_TRIGGERS * NUM_DAYS * COLOR_STRING_LENGTH);
+static constexpr uint16_t EEPROM_OFFSET_LETTER_DISPLAY_TIME = EEPROM_OFFSET_DISPLAY_BRIGHTNESS + sizeof(int);
+static constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_1 = EEPROM_OFFSET_LETTER_DISPLAY_TIME + sizeof(unsigned long);
+static constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_2 = EEPROM_OFFSET_TRIGGER_DELAY_1 + sizeof(unsigned long);
+static constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_3 = EEPROM_OFFSET_TRIGGER_DELAY_2 + sizeof(unsigned long);
+static constexpr uint16_t EEPROM_OFFSET_AUTO_INTERVAL = EEPROM_OFFSET_TRIGGER_DELAY_3 + sizeof(unsigned long);
+static constexpr uint16_t EEPROM_OFFSET_AUTO_MODE = EEPROM_OFFSET_AUTO_INTERVAL + sizeof(unsigned long);
+static constexpr uint16_t EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT = EEPROM_OFFSET_AUTO_MODE + sizeof(uint8_t);
+static constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION = 400;
+static constexpr uint16_t EEPROM_CONFIG_VERSION = 2;
+
 // **Standard-WiFi-Daten (werden bei Erststart gesetzt)**
 extern char wifi_ssid[50];
 extern char wifi_password[50];
@@ -46,10 +68,10 @@ extern bool triggerActive;
 extern unsigned long letterStartTime;
 
 // **Buchstaben für Wochentage (Standardwerte)**
-extern char dailyLetters[7];
+extern char dailyLetters[NUM_TRIGGERS][NUM_DAYS];
 
 // **Buchstabenfarben für die Wochentage (Standard: Weiß)**
-extern char dailyLetterColors[7][8];
+extern char dailyLetterColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH];
 
 // **Alle auswählbaren Buchstaben (A-Z & `*`)**
 const char availableLetters[] = {
