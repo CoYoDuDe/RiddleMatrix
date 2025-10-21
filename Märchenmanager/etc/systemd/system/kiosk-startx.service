@@ -1,0 +1,15 @@
+[Unit]
+Description=Start X for kioskuser
+After=getty@tty1.service
+Requires=getty@tty1.service
+
+[Service]
+Type=oneshot
+User=kioskuser
+ExecStart=/usr/bin/startx
+RemainAfterExit=yes
+StandardOutput=tty
+TTYPath=/dev/tty1
+
+[Install]
+WantedBy=multi-user.target

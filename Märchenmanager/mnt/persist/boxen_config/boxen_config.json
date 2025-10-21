@@ -1,0 +1,44 @@
+{
+    "boxen": {
+        "traumland.igel": {
+            "ip": "192.168.10.113",
+            "mo": "U",
+            "color_mo": "#ff0000",
+            "di": "A",
+            "color_di": "#00ff00",
+            "mi": "R",
+            "color_mi": "#0000ff",
+            "do": "A",
+            "color_do": "#ffff00",
+            "fr": "N",
+            "color_fr": "#ff00ff",
+            "sa": "E",
+            "color_sa": "#00ffff",
+            "so": "B",
+            "color_so": "#ffa500",
+            "hostname": "traumland.igel"
+        },
+        "traumland.wasserb": {
+            "ip": "192.168.10.143",
+            "mo": "T",
+            "color_mo": "#ffffff",
+            "di": "I",
+            "color_di": "#ffffff",
+            "mi": "E",
+            "color_mi": "#ffffff",
+            "do": "M",
+            "color_do": "#ffffff",
+            "fr": "B",
+            "color_fr": "#ffffff",
+            "sa": "R",
+            "color_sa": "#ffffff",
+            "so": "E",
+            "color_so": "#ffffff",
+            "hostname": "traumland.wasserb"
+        }
+    },
+    "boxOrder": [
+        "traumland.wasserb",
+        "traumland.igel"
+    ]
+}

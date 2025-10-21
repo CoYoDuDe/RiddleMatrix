@@ -1,0 +1,11 @@
+[Unit]
+Description=Märchen Manager Webserver
+After=network.target
+
+[Service]
+ExecStart=/usr/local/venv/maerchen/bin/python3 /usr/local/bin/webserver.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
