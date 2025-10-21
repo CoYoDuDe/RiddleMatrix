@@ -11,7 +11,7 @@ void clearDisplay();
 // **Funktion: Buchstaben oder Sonderzeichen anzeigen**
 void displayLetter(char letter);
 
-void handleTrigger(char triggerType, bool isAutoMode = false);
+void handleTrigger(char triggerType, bool isAutoMode = false, bool keepWiFi = false);
 
 void checkTrigger();
 

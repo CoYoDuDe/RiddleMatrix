@@ -273,7 +273,7 @@ void setupWebServer() {
         }
 
         request->send(200, "text/plain", "✅ Buchstaben-Trigger gestartet!");
-        handleTrigger('1', false);
+        handleTrigger('1', false, true);
     });
 
     server.on("/getTime", HTTP_GET, [](AsyncWebServerRequest *request) {

@@ -93,8 +93,8 @@ void displayLetter(char letter) {
     Serial.println(F(" Sekunden!"));
 }
 
-void handleTrigger(char triggerType, bool isAutoMode) {
-    if (wifiConnected && !isAutoMode) {
+void handleTrigger(char triggerType, bool isAutoMode, bool keepWiFi) {
+    if (wifiConnected && !isAutoMode && !keepWiFi) {
         Serial.println(F("⛔ WiFi wird abgeschaltet wegen Trigger!"));
         WiFi.disconnect();
         wifiConnected = false;
