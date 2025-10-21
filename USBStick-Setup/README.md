@@ -36,6 +36,20 @@ Individuelle Nacharbeiten lassen sich als ausführbare Shell-Skripte (Dateiendun
 werden in alphabetischer Reihenfolge mit dem Ziel-Root als einzigem Argument aufgerufen und erben die Umgebungsvariable
 `TARGET_ROOT`.
 
+### Automatische Webserver-Provisionierung
+
+Der Hook [`hooks.d/10-provision-webserver.sh`](hooks.d/10-provision-webserver.sh) kümmert sich nach dem Kopieren der Dateien
+automatisiert um alle Laufzeitabhängigkeiten des Märchen-Managers:
+
+- prüft mittels `dpkg-query`, ob benötigte Debian-Pakete wie `dnsmasq`, `hostapd`, `rfkill`, `x11-xserver-utils`, `python3`
+  (inkl. `python3-venv`) und optionale Firmware-Pakete installiert sind und stößt bei Bedarf ein `apt-get install` an
+- erzeugt das virtuelle Python-Umfeld unter `/usr/local/venv/maerchen` mit `python3 -m venv`, falls es noch nicht existiert
+- installiert fehlende Python-Abhängigkeiten (`flask`, `requests`, `beautifulsoup4`) idempotent via `pip`
+
+Die Provisionierung läuft sowohl bei einer Installation ins aktive Root-Dateisystem (`TARGET_ROOT=/`) als auch bei einem
+gemounteten Ziel (sofern `chroot` verfügbar ist). Dadurch müssen Operator:innen die Abhängigkeiten nicht mehr manuell
+nachinstallieren – der Webserver ist nach Abschluss von `setup.sh` sofort startklar.
+
 ## WLAN / Access Point
 
 Die SSID und das WPA2-Passwort für den öffentlichen Access Point werden zentral in `/etc/usbstick/public_ap.env`
