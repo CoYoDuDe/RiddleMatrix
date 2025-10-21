@@ -174,7 +174,10 @@ def transfer_box():
     if not ip:
         return jsonify({"status": "❌ IP unbekannt"})
 
-    r = requests.get(f"http://{ip}/", timeout=3)
+    try:
+        r = requests.get(f"http://{ip}/", timeout=3)
+    except requests.RequestException:
+        return jsonify({"status": "❌ Box nicht erreichbar"})
     if not r.ok:
         return jsonify({"status": "❌ Box nicht erreichbar"})
 
@@ -202,7 +205,10 @@ def transfer_box():
 
     payload = {f"letter{i}": box.get(tag, "") for i, tag in enumerate(tags)}
     payload.update({f"color{i}": box.get(f"color_{tag}", "#ffffff") for i, tag in enumerate(tags)})
-    r = requests.post(f"http://{ip}/updateAllLetters", data=payload, timeout=3)
+    try:
+        r = requests.post(f"http://{ip}/updateAllLetters", data=payload, timeout=3)
+    except requests.RequestException:
+        return jsonify({"status": "❌ Fehler bei Übertragung"})
     if not r.ok:
         return jsonify({"status": "❌ Fehler bei Übertragung"})
     
