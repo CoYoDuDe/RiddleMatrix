@@ -6,6 +6,11 @@ from pathlib import Path
 
 import pytest
 
+try:  # pragma: no cover - optional Abhängigkeit
+    import flask  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover
+    pytest.skip("Flask nicht installiert – Webserver-Tests werden übersprungen", allow_module_level=True)
+
 
 def _load_webserver(tmp_path):
     module_name = "webserver_for_tests"

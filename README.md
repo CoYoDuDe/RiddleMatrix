@@ -1,7 +1,7 @@
 # RiddleMatrix
 
 Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details.
-RiddleMatrix ist eine Firmware für den ESP8266, die eine 64x64 RGB-LED-Matrix ansteuert. Für jeden Wochentag kann ein Buchstabe festgelegt werden. Die Buchstaben erscheinen entweder zeitgesteuert oder per RS485-Trigger. Über WLAN lässt sich das Gerät konfigurieren; alle Einstellungen werden im EEPROM gespeichert.
+RiddleMatrix ist eine Firmware für den ESP8266, die eine 64x64 RGB-LED-Matrix ansteuert. Für jeden Wochentag und jede der drei RS485-Triggerleitungen lassen sich individuelle Buchstaben und Farben festlegen. Die Buchstaben erscheinen entweder zeitgesteuert oder per RS485-Trigger. Über WLAN lässt sich das Gerät konfigurieren; alle Einstellungen werden im EEPROM gespeichert.
 
 Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
@@ -65,6 +65,27 @@ Nach der Einrichtung zeigt die Firmware die Buchstaben automatisch an und kann �
 ## Konfiguration
 
 `config.h` enthält Platzhalter-WLAN-Daten, falls noch nichts im EEPROM gespeichert ist. Echte Zugangsdaten sollten **nicht** ins Repository gelangen. Sie können initial über das EEPROM oder die Konfigurationsseite gesetzt werden. Der Parameter `wifi_connect_timeout` bestimmt, wie lange die Verbindung versucht wird (Standard 30 Sekunden).
+
+### Mehrspuriges Buchstabenraster
+
+Die Tagesbuchstaben werden jetzt dreidimensional abgelegt:
+
+- `dailyLetters[trigger][tag]` speichert den Buchstaben pro Triggerleitung und Wochentag.
+- `dailyLetterColors[trigger][tag]` enthält die passende Farbe als `#RRGGBB`-String.
+
+Trigger-Index `0` entspricht RS485-Trigger 1, Index `1` Trigger 2 usw. Die Weboberfläche unter `/` zeigt die Werte als Matrix an und erlaubt das gleichzeitige Aktualisieren über `/updateAllLetters`.
+
+| Wochentag   | Trigger 1 (`#RRGGBB`) | Trigger 2 (`#RRGGBB`) | Trigger 3 (`#RRGGBB`) |
+|-------------|-----------------------|-----------------------|-----------------------|
+| Sonntag     | A (`#FF0000`)         | H (`#FFFFFF`)         | O (`#FFA07A`)         |
+| Montag      | B (`#00FF00`)         | I (`#FFD700`)         | P (`#20B2AA`)         |
+| Dienstag    | C (`#0000FF`)         | J (`#ADFF2F`)         | Q (`#87CEFA`)         |
+| Mittwoch    | D (`#FFFF00`)         | K (`#00CED1`)         | R (`#FFE4B5`)         |
+| Donnerstag  | E (`#FF00FF`)         | L (`#9400D3`)         | S (`#DA70D6`)         |
+| Freitag     | F (`#00FFFF`)         | M (`#FF69B4`)         | T (`#90EE90`)         |
+| Samstag     | G (`#FFA500`)         | N (`#1E90FF`)         | U (`#FFDAB9`)         |
+
+Die HTTP-Endpunkte `/displayLetter` und `/triggerLetter` akzeptieren optional den Parameter `trigger=<1-3>` für Tests je Leitung. Wird kein Trigger angegeben, nutzt die Firmware standardmäßig Leitung 1. Ältere EEPROM-Daten mit eindimensionalen Tagesbuchstaben werden beim ersten Start automatisch migriert.
 
 ## USB-Stick-Setup für das Boxen-Ökosystem
 

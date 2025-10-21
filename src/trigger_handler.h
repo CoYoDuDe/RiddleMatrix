@@ -9,7 +9,7 @@ extern bool alreadyCleared;
 void clearDisplay();
 
 // **Funktion: Buchstaben oder Sonderzeichen anzeigen**
-void displayLetter(char letter);
+void displayLetter(uint8_t triggerIndex, char letter);
 
 void handleTrigger(char triggerType, bool isAutoMode = false);
 
