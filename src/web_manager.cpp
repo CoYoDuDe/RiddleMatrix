@@ -254,6 +254,28 @@ void setupWebServer() {
         }
     });
 
+    server.on("/triggerLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (triggerActive) {
+            request->send(409, "text/plain", "❌ Fehler: Bereits aktiver Buchstabe verhindert neuen Trigger!");
+            return;
+        }
+
+        int today = getRTCWeekday();
+        if (today < 0 || today >= 7) {
+            request->send(500, "text/plain", "❌ Fehler: Ungültiger Wochentag vom RTC-Modul!");
+            return;
+        }
+
+        char todayLetter = dailyLetters[today];
+        if (todayLetter != '*' && letterData.find(todayLetter) == letterData.end()) {
+            request->send(500, "text/plain", "❌ Fehler: Kein Muster für den heutigen Buchstaben vorhanden!");
+            return;
+        }
+
+        request->send(200, "text/plain", "✅ Buchstaben-Trigger gestartet!");
+        handleTrigger('1', false);
+    });
+
     server.on("/getTime", HTTP_GET, [](AsyncWebServerRequest *request) {
         String currentTime = getRTCTime();
         request->send(200, "text/plain", currentTime);
