@@ -36,6 +36,23 @@ Individuelle Nacharbeiten lassen sich als ausführbare Shell-Skripte (Dateiendun
 werden in alphabetischer Reihenfolge mit dem Ziel-Root als einzigem Argument aufgerufen und erben die Umgebungsvariable
 `TARGET_ROOT`.
 
+## WLAN / Access Point
+
+Die SSID und das WPA2-Passwort für den öffentlichen Access Point werden zentral in `/etc/usbstick/public_ap.env`
+verwaltet. Dieses Environment-File wird von allen relevanten Komponenten (`bootlocal.sh`, `/root/install_public_ap.sh`,
+`/root/install_public_ap_setuphelper.sh`) eingelesen und in die Templates für `hostapd` und `dnsmasq` übertragen.
+Änderungen an den Zugangsdaten müssen daher nur an einer Stelle vorgenommen werden.
+
+**Vorgehen für bestehende Installationen:**
+
+1. `sudo vi /etc/usbstick/public_ap.env` (oder Editor der Wahl) und Werte für `SSID` bzw. `WPA_PASSPHRASE` anpassen.
+2. `sudo /root/install_public_ap.sh` ausführen oder – falls das System via SetupHelper verwaltet wird – `sudo /root/install_public_ap_setuphelper.sh` starten.
+3. Das Skript regeneriert `hostapd.conf` und `dnsmasq.conf`, setzt notwendige Rechte und startet die Services neu. Ein Reboot ist nicht erforderlich.
+
+Das ausgelieferte `hostapd.conf` im Verzeichnis `files/etc/hostapd/` dient als Template und bleibt so jederzeit mit den Laufzeitdateien synchron.
+Bei System-Updates sollte immer zuerst das Environment-File geprüft und gegebenenfalls angepasst werden; die Installer-Skripte übernehmen
+anschließend den restlichen Abgleich.
+
 ## Legacy-Skripte
 
 Die vorherigen monolithischen Installationsskripte wurden in [`archive/legacy-root-scripts/`](archive/legacy-root-scripts)
