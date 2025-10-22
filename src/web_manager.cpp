@@ -303,15 +303,68 @@ void setupWebServer() {
 
     server.on("/updateWiFi", HTTP_POST, [](AsyncWebServerRequest *request) {
         if (request->hasParam("ssid", true) && request->hasParam("hostname", true)) {
-            strncpy(wifi_ssid, request->getParam("ssid", true)->value().c_str(), sizeof(wifi_ssid));
-            strncpy(hostname, request->getParam("hostname", true)->value().c_str(), sizeof(hostname));
+            const String ssidParam = request->getParam("ssid", true)->value();
+            const String hostnameParam = request->getParam("hostname", true)->value();
+            const bool hasPasswordParam = request->hasParam("password", true) &&
+                                          request->getParam("password", true)->value() != "";
+            const String passwordParam = hasPasswordParam ? request->getParam("password", true)->value() : String();
 
-            if (request->hasParam("password", true) && request->getParam("password", true)->value() != "") {
-                strncpy(wifi_password, request->getParam("password", true)->value().c_str(), sizeof(wifi_password));
+            auto containsForbiddenChars = [](const String &value) {
+                for (size_t idx = 0; idx < value.length(); ++idx) {
+                    const unsigned char character = static_cast<unsigned char>(value.charAt(idx));
+                    if (character < 32 || character == 127) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            String validationError;
+            if (containsForbiddenChars(ssidParam)) {
+                validationError += "SSID enthält ungültige Zeichen. ";
+            }
+            if (containsForbiddenChars(hostnameParam)) {
+                validationError += "Hostname enthält ungültige Zeichen. ";
+            }
+            if (hasPasswordParam && containsForbiddenChars(passwordParam)) {
+                validationError += "Passwort enthält ungültige Zeichen. ";
+            }
+
+            if (!validationError.isEmpty()) {
+                request->send(400, "text/plain", "❌ Fehler: " + validationError);
+                return;
+            }
+
+            auto copyWithTermination = [](const String &input, char *destination, size_t destinationSize) {
+                strncpy(destination, input.c_str(), destinationSize);
+                destination[destinationSize - 1] = '\0';
+                return input.length() >= destinationSize;
+            };
+
+            const bool ssidTruncated = copyWithTermination(ssidParam, wifi_ssid, sizeof(wifi_ssid));
+            const bool hostnameTruncated = copyWithTermination(hostnameParam, hostname, sizeof(hostname));
+            bool passwordTruncated = false;
+
+            if (hasPasswordParam) {
+                passwordTruncated = copyWithTermination(passwordParam, wifi_password, sizeof(wifi_password));
+            } else {
+                wifi_password[sizeof(wifi_password) - 1] = '\0';
             }
 
             saveConfig();
-            request->send(200, "text/plain", "✅ WiFi-Einstellungen gespeichert!");
+
+            String response = "✅ WiFi-Einstellungen gespeichert!";
+            if (ssidTruncated) {
+                response += " Hinweis: SSID wurde auf " + String(sizeof(wifi_ssid) - 1) + " Zeichen gekürzt.";
+            }
+            if (hostnameTruncated) {
+                response += " Hinweis: Hostname wurde auf " + String(sizeof(hostname) - 1) + " Zeichen gekürzt.";
+            }
+            if (hasPasswordParam && passwordTruncated) {
+                response += " Hinweis: Passwort wurde auf " + String(sizeof(wifi_password) - 1) + " Zeichen gekürzt.";
+            }
+
+            request->send(200, "text/plain", response);
         } else {
             request->send(400, "text/plain", "❌ Fehler: Fehlende Parameter!");
         }
