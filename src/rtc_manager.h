@@ -7,7 +7,7 @@ void enableRTC();
 void enableRS485();
 String getRTCTime();
 int getRTCWeekday();
-void setRTCFromWeb(String date, String time);
+bool setRTCFromWeb(const String &date, const String &time);
 void syncTimeWithNTP();
 
 #endif

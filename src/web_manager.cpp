@@ -583,8 +583,11 @@ void setupWebServer() {
         if (request->hasParam("date", true) && request->hasParam("time", true)) {
             String date = request->getParam("date", true)->value();
             String time = request->getParam("time", true)->value();
-            setRTCFromWeb(date, time);
-            request->send(200, "text/plain", "✅ Uhrzeit erfolgreich gesetzt!");
+            if (setRTCFromWeb(date, time)) {
+                request->send(200, "text/plain", "✅ Uhrzeit erfolgreich gesetzt!");
+            } else {
+                request->send(400, "text/plain", "❌ Fehler: Ungültige Datum- oder Zeitangaben!");
+            }
         } else {
             request->send(400, "text/plain", "❌ Fehler: Datum oder Zeit fehlt!");
         }
