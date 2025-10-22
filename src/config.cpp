@@ -18,14 +18,17 @@ static const char DEFAULT_DAILY_COLORS[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENG
     {"#FFFFFF", "#FFD700", "#ADFF2F", "#00CED1", "#9400D3", "#FF69B4", "#1E90FF"},
     {"#FFA07A", "#20B2AA", "#87CEFA", "#FFE4B5", "#DA70D6", "#90EE90", "#FFDAB9"}};
 
+static const unsigned long DEFAULT_TRIGGER_DELAYS[NUM_TRIGGERS][NUM_DAYS] = {
+    {0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0}};
+
 char dailyLetters[NUM_TRIGGERS][NUM_DAYS] = {};
 char dailyLetterColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH] = {};
+unsigned long letter_trigger_delays[NUM_TRIGGERS][NUM_DAYS] = {};
 
 int display_brightness;
 unsigned long letter_display_time;
-unsigned long letter_trigger_delay_1;
-unsigned long letter_trigger_delay_2;
-unsigned long letter_trigger_delay_3;
 unsigned long letter_auto_display_interval;
 bool autoDisplayMode;
 
@@ -65,6 +68,14 @@ void resetLettersToDefaults() {
     memcpy(dailyLetterColors, DEFAULT_DAILY_COLORS, sizeof(dailyLetterColors));
 }
 
+void resetTriggerDelaysToDefaults() {
+    memcpy(letter_trigger_delays, DEFAULT_TRIGGER_DELAYS, sizeof(letter_trigger_delays));
+}
+
+bool isValidDelayValue(unsigned long value) {
+    return value <= 999UL;
+}
+
 } // namespace
 
 void saveConfig() {
@@ -78,9 +89,7 @@ void saveConfig() {
     EEPROM.put(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
     EEPROM.put(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
     EEPROM.put(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
-    EEPROM.put(EEPROM_OFFSET_TRIGGER_DELAY_1, letter_trigger_delay_1);
-    EEPROM.put(EEPROM_OFFSET_TRIGGER_DELAY_2, letter_trigger_delay_2);
-    EEPROM.put(EEPROM_OFFSET_TRIGGER_DELAY_3, letter_trigger_delay_3);
+    EEPROM.put(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, letter_trigger_delays);
     EEPROM.put(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
     uint8_t autoModeByte = autoDisplayMode ? 1 : 0;
     EEPROM.put(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
@@ -96,6 +105,7 @@ void loadConfig() {
     Serial.println(F("📂 Lade Einstellungen aus EEPROM..."));
 
     resetLettersToDefaults();
+    resetTriggerDelaysToDefaults();
 
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.get(EEPROM_OFFSET_WIFI_SSID, wifi_ssid);
@@ -116,6 +126,14 @@ void loadConfig() {
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, legacyLetters);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, legacyColors);
 
+        unsigned long legacyTriggerDelays[NUM_TRIGGERS] = {};
+        size_t legacyOffset = EEPROM_OFFSET_TRIGGER_DELAY_MATRIX;
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            unsigned long value = 0;
+            EEPROM.get(static_cast<int>(legacyOffset + trigger * sizeof(unsigned long)), value);
+            legacyTriggerDelays[trigger] = value;
+        }
+
         for (size_t day = 0; day < NUM_DAYS; ++day) {
             char letter = legacyLetters[day];
             if (letter == '\xFF' || letter == '\0') {
@@ -135,6 +153,19 @@ void loadConfig() {
                 dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
             }
         }
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            unsigned long legacyValue = legacyTriggerDelays[trigger];
+            bool delayValid = isValidDelayValue(legacyValue);
+            for (size_t day = 0; day < NUM_DAYS; ++day) {
+                unsigned long fallback = DEFAULT_TRIGGER_DELAYS[trigger][day];
+                letter_trigger_delays[trigger][day] = delayValid ? legacyValue : fallback;
+            }
+            if (!delayValid) {
+                Serial.print(F("⚠️ Ungültige Legacy-Verzögerung für Trigger "));
+                Serial.print(trigger + 1);
+                Serial.println(F(" – Standardwert 0 Sekunden wird verwendet."));
+            }
+        }
         migratedLegacyLayout = true;
     }
 
@@ -152,9 +183,9 @@ void loadConfig() {
 
     EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
     EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
-    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_1, letter_trigger_delay_1);
-    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_2, letter_trigger_delay_2);
-    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_3, letter_trigger_delay_3);
+    if (storedVersion == EEPROM_CONFIG_VERSION) {
+        EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, letter_trigger_delays);
+    }
     EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
     uint8_t autoModeByte = 0;
     EEPROM.get(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
@@ -212,19 +243,19 @@ void loadConfig() {
         eepromUpdated = true;
     }
 
-    if (letter_trigger_delay_1 > 999) {
-        letter_trigger_delay_1 = 180;
-        eepromUpdated = true;
-    }
-
-    if (letter_trigger_delay_2 > 999) {
-        letter_trigger_delay_2 = 180;
-        eepromUpdated = true;
-    }
-
-    if (letter_trigger_delay_3 > 999) {
-        letter_trigger_delay_3 = 180;
-        eepromUpdated = true;
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            unsigned long &delayValue = letter_trigger_delays[trigger][day];
+            if (!isValidDelayValue(delayValue)) {
+                Serial.print(F("⚠️ Ungültige Verzögerung für Trigger "));
+                Serial.print(trigger + 1);
+                Serial.print(F(", Tag "));
+                Serial.print(day);
+                Serial.println(F(" – setze Standardwert 0 Sekunden."));
+                delayValue = DEFAULT_TRIGGER_DELAYS[trigger][day];
+                eepromUpdated = true;
+            }
+        }
     }
 
     if (letter_auto_display_interval < 1 || letter_auto_display_interval > 999) {
