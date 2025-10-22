@@ -127,8 +127,14 @@ void handleTrigger(char triggerType, bool isAutoMode) {
     }
 
     int today = getRTCWeekday();
+    bool validDay = today >= 0 && today < static_cast<int>(NUM_DAYS);
+    size_t delayDayIndex = validDay ? static_cast<size_t>(today) : 0;
 
-    if (today >= 0 && today < static_cast<int>(NUM_DAYS)) {
+    if (!validDay) {
+        Serial.println(F("⚠️ Ungültiger Wochentag! Nutze Fallback-Index 0 für Verzögerungen."));
+    }
+
+    if (validDay) {
         char letter = dailyLetters[triggerIndex][today];
         Serial.print(F("📅 Heute ist "));
         Serial.print(daysOfTheWeek[today]);
@@ -139,18 +145,11 @@ void handleTrigger(char triggerType, bool isAutoMode) {
 
         unsigned long delayTime = 0;
         if (!isAutoMode) {
-            if (triggerIndex == 0) {
-                delayTime = letter_trigger_delay_1;
-            } else if (triggerIndex == 1) {
-                delayTime = letter_trigger_delay_2;
-            } else {
-                delayTime = letter_trigger_delay_3;
-            }
-
+            delayTime = letter_trigger_delays[triggerIndex][delayDayIndex];
             Serial.print(F("⏳ Warte auf Trigger-Verzögerung: "));
             Serial.print(delayTime);
             Serial.println(F(" Sekunden..."));
-            delay(delayTime * 1000);
+            delay(delayTime * 1000UL);
         }
 
         displayLetter(triggerIndex, letter);
@@ -158,7 +157,7 @@ void handleTrigger(char triggerType, bool isAutoMode) {
         alreadyCleared = false;
 
     } else {
-        Serial.println(F("⚠️ Ungültiger Wochentag!"));
+        Serial.println(F("⚠️ Ungültiger Wochentag! Anzeige wird übersprungen."));
     }
 }
 

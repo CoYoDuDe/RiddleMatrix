@@ -46,14 +46,13 @@ static constexpr uint16_t EEPROM_OFFSET_DAILY_LETTERS = EEPROM_OFFSET_HOSTNAME +
 static constexpr uint16_t EEPROM_OFFSET_DAILY_LETTER_COLORS = 200; // Historischer Versatz für Rückwärtskompatibilität
 static constexpr uint16_t EEPROM_OFFSET_DISPLAY_BRIGHTNESS = EEPROM_OFFSET_DAILY_LETTER_COLORS + (NUM_TRIGGERS * NUM_DAYS * COLOR_STRING_LENGTH);
 static constexpr uint16_t EEPROM_OFFSET_LETTER_DISPLAY_TIME = EEPROM_OFFSET_DISPLAY_BRIGHTNESS + sizeof(int);
-static constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_1 = EEPROM_OFFSET_LETTER_DISPLAY_TIME + sizeof(unsigned long);
-static constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_2 = EEPROM_OFFSET_TRIGGER_DELAY_1 + sizeof(unsigned long);
-static constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_3 = EEPROM_OFFSET_TRIGGER_DELAY_2 + sizeof(unsigned long);
-static constexpr uint16_t EEPROM_OFFSET_AUTO_INTERVAL = EEPROM_OFFSET_TRIGGER_DELAY_3 + sizeof(unsigned long);
+static constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_MATRIX = EEPROM_OFFSET_LETTER_DISPLAY_TIME + sizeof(unsigned long);
+static constexpr size_t EEPROM_TRIGGER_DELAY_MATRIX_SIZE = NUM_TRIGGERS * NUM_DAYS * sizeof(unsigned long);
+static constexpr uint16_t EEPROM_OFFSET_AUTO_INTERVAL = EEPROM_OFFSET_TRIGGER_DELAY_MATRIX + EEPROM_TRIGGER_DELAY_MATRIX_SIZE;
 static constexpr uint16_t EEPROM_OFFSET_AUTO_MODE = EEPROM_OFFSET_AUTO_INTERVAL + sizeof(unsigned long);
 static constexpr uint16_t EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT = EEPROM_OFFSET_AUTO_MODE + sizeof(uint8_t);
 static constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION = 400;
-static constexpr uint16_t EEPROM_CONFIG_VERSION = 2;
+static constexpr uint16_t EEPROM_CONFIG_VERSION = 3;
 
 // **Standard-WiFi-Daten (werden bei Erststart gesetzt)**
 extern char wifi_ssid[50];
@@ -81,9 +80,7 @@ const char availableLetters[] = {
 // **Konfiguration für Buchstabenanzeige**
 extern int display_brightness;           // Standard: 100
 extern unsigned long letter_display_time;           // Standard: 10 Sekunden
-extern unsigned long letter_trigger_delay_1; // Verzögerung für Trigger 1
-extern unsigned long letter_trigger_delay_2; // Verzögerung für Trigger 2
-extern unsigned long letter_trigger_delay_3; // Verzögerung für Trigger 3
+extern unsigned long letter_trigger_delays[NUM_TRIGGERS][NUM_DAYS];
 extern unsigned long letter_auto_display_interval; // Standard: 5 Minuten
 
 // **Modus für Buchstabenanzeige (Auto/Trigger)**

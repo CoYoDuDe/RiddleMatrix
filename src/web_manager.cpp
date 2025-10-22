@@ -117,6 +117,15 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             .catch(error => alert('❌ Fehler: ' + error));
     }
 
+    // 💾 Trigger-Verzögerungen speichern
+    function saveTriggerDelays() {
+        let form = new FormData(document.getElementById('delaysForm'));
+        fetch('/updateTriggerDelays', { method: 'POST', body: form })
+            .then(response => response.text())
+            .then(alert)
+            .catch(error => alert('❌ Fehler: ' + error));
+    }
+
     // 💾 Alle Buchstaben & Farben speichern
     function saveAllLetters() {
         let formData = new FormData(document.getElementById('lettersForm'));
@@ -180,12 +189,34 @@ void setupWebServer() {
         html += "<form id='displayForm'>";
         html += "Helligkeit: <input type='number' name='brightness' min='1' max='255' value='" + String(display_brightness) + "'><br>";
         html += "Buchstaben-Anzeigezeit (Sekunden): <input type='number' name='letter_time' min='1' max='60' value='" + String(letter_display_time) + "'><br>";
-        html += "Trigger 1 Verzögerung (Sekunden): <input type='number' name='trigger_delay_1' min='0' max='600' value='" + String(letter_trigger_delay_1) + "'><br>";
-        html += "Trigger 2 Verzögerung (Sekunden): <input type='number' name='trigger_delay_2' min='0' max='600' value='" + String(letter_trigger_delay_2) + "'><br>";
-        html += "Trigger 3 Verzögerung (Sekunden): <input type='number' name='trigger_delay_3' min='0' max='600' value='" + String(letter_trigger_delay_3) + "'><br>";
         html += "Automodus Intervall (Sekunden): <input type='number' name='auto_interval' min='30' max='600' value='" + String(letter_auto_display_interval) + "'><br>";
         html += "<label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> Automodus aktivieren</label>";
         html += "<br><button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
+        html += "</form>";
+
+        html += "<h2>Trigger-Verzögerungen pro Wochentag</h2>";
+        html += "<form id='delaysForm'>";
+        html += "<table border='1' style='width:100%; text-align:center;'>";
+        html += "<tr><th>Wochentag</th>";
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            html += "<th>Trigger " + String(trigger + 1) + " (Sekunden)</th>";
+        }
+        html += "</tr>";
+
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            html += "<tr>";
+            html += "<td>" + String(daysOfTheWeek[day]) + "</td>";
+
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                String fieldName = "delay_" + String(trigger) + "_" + String(day);
+                html += "<td><input type='number' min='0' max='999' step='1' name='" + fieldName + "' value='" + String(letter_trigger_delays[trigger][day]) + "'></td>";
+            }
+
+            html += "</tr>";
+        }
+
+        html += "</table>";
+        html += "<br><button type='button' onclick='saveTriggerDelays()'>Verzögerungen speichern</button>";
         html += "</form>";
 
         // **RTC-Zeit anzeigen & ändern**
@@ -273,16 +304,10 @@ void setupWebServer() {
     server.on("/updateDisplaySettings", HTTP_POST, [](AsyncWebServerRequest *request) {
         if (request->hasParam("brightness", true) &&
             request->hasParam("letter_time", true) &&
-            request->hasParam("trigger_delay_1", true) &&
-            request->hasParam("trigger_delay_2", true) &&
-            request->hasParam("trigger_delay_3", true) &&
             request->hasParam("auto_interval", true)) {
 
             display_brightness = request->getParam("brightness", true)->value().toInt();
             letter_display_time = strtoul(request->getParam("letter_time", true)->value().c_str(), nullptr, 10);
-            letter_trigger_delay_1 = strtoul(request->getParam("trigger_delay_1", true)->value().c_str(), nullptr, 10);
-            letter_trigger_delay_2 = strtoul(request->getParam("trigger_delay_2", true)->value().c_str(), nullptr, 10);
-            letter_trigger_delay_3 = strtoul(request->getParam("trigger_delay_3", true)->value().c_str(), nullptr, 10);
             letter_auto_display_interval = strtoul(request->getParam("auto_interval", true)->value().c_str(), nullptr, 10);
 
             String autoModeValue = request->hasParam("auto_mode", true) ? request->getParam("auto_mode", true)->value() : "off";
@@ -292,6 +317,55 @@ void setupWebServer() {
             request->send(200, "text/plain", "Anzeigeeinstellungen gespeichert!");
         } else {
             request->send(400, "text/plain", "Fehlende Parameter!");
+        }
+    });
+
+    server.on("/updateTriggerDelays", HTTP_POST, [](AsyncWebServerRequest *request) {
+        bool success = true;
+
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS && success; ++trigger) {
+            for (size_t day = 0; day < NUM_DAYS; ++day) {
+                String fieldName = "delay_" + String(trigger) + "_" + String(day);
+                if (!request->hasParam(fieldName, true)) {
+                    success = false;
+                    break;
+                }
+
+                String value = request->getParam(fieldName, true)->value();
+                if (value.isEmpty()) {
+                    success = false;
+                    break;
+                }
+
+                bool digitsOnly = true;
+                for (size_t idx = 0; idx < value.length(); ++idx) {
+                    char c = value.charAt(idx);
+                    if (c < '0' || c > '9') {
+                        digitsOnly = false;
+                        break;
+                    }
+                }
+
+                if (!digitsOnly) {
+                    success = false;
+                    break;
+                }
+
+                unsigned long parsed = static_cast<unsigned long>(value.toInt());
+                if (parsed > 999UL) {
+                    success = false;
+                    break;
+                }
+
+                letter_trigger_delays[trigger][day] = parsed;
+            }
+        }
+
+        if (success) {
+            saveConfig();
+            request->send(200, "text/plain", "✅ Verzögerungsmatrix gespeichert!");
+        } else {
+            request->send(400, "text/plain", "❌ Fehler: Ungültige oder fehlende Verzögerungswerte!");
         }
     });
 
