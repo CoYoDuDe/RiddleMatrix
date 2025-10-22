@@ -479,7 +479,6 @@ void setupWebServer() {
         }
 
         uint8_t triggerIndex = 0;
-        char triggerChar = '1';
         if (request->hasParam("trigger")) {
             int triggerValue = request->getParam("trigger")->value().toInt();
             if (triggerValue < 1 || triggerValue > static_cast<int>(NUM_TRIGGERS)) {
@@ -487,7 +486,11 @@ void setupWebServer() {
                 return;
             }
             triggerIndex = static_cast<uint8_t>(triggerValue - 1);
-            triggerChar = static_cast<char>('0' + triggerValue);
+        }
+
+        if (isTriggerPending(triggerIndex)) {
+            request->send(409, "text/plain", "❌ Fehler: Für diesen Trigger ist bereits eine Ausführung geplant!");
+            return;
         }
 
         int today = getRTCWeekday();
@@ -502,8 +505,20 @@ void setupWebServer() {
             return;
         }
 
-        request->send(200, "text/plain", "✅ Buchstaben-Trigger für Trigger " + String(triggerIndex + 1) + " gestartet!");
-        handleTrigger(triggerChar, false);
+        unsigned long delaySeconds = letter_trigger_delays[triggerIndex][static_cast<size_t>(today)];
+        if (!enqueuePendingTrigger(triggerIndex, true)) {
+            request->send(503, "text/plain", "❌ Fehler: Trigger konnte nicht eingeplant werden!");
+            return;
+        }
+
+        String response = "✅ Buchstaben-Trigger für Trigger " + String(triggerIndex + 1) + " eingeplant!";
+        if (delaySeconds == 0) {
+            response += " Start erfolgt sofort.";
+        } else {
+            response += " Start in " + String(delaySeconds) + " Sekunden.";
+        }
+
+        request->send(200, "text/plain", response);
     });
 
     server.on("/getTime", HTTP_GET, [](AsyncWebServerRequest *request) {
