@@ -45,6 +45,9 @@ const char* daysOfTheWeek[7] = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Do
 // Funktionsimplementierungen aus config.h
 namespace {
 
+constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION_LEGACY = 400;
+constexpr uint16_t EEPROM_VERSION_INVALID = 0xFFFF;
+
 bool isValidHexColor(const char *value) {
     if (value == nullptr) {
         return false;
@@ -74,6 +77,100 @@ void resetTriggerDelaysToDefaults() {
 
 bool isValidDelayValue(unsigned long value) {
     return value <= 999UL;
+}
+
+bool isLikelyValidVersion(uint16_t value) {
+    return value != EEPROM_VERSION_INVALID && value != 0x0000 && value <= EEPROM_CONFIG_VERSION;
+}
+
+uint16_t readStoredConfigVersion(uint16_t &versionOffset) {
+    uint16_t storedVersion = EEPROM_VERSION_INVALID;
+    versionOffset = EEPROM_OFFSET_CONFIG_VERSION;
+    EEPROM.get(EEPROM_OFFSET_CONFIG_VERSION, storedVersion);
+
+    if (isLikelyValidVersion(storedVersion)) {
+        return storedVersion;
+    }
+
+    uint16_t legacyVersion = EEPROM_VERSION_INVALID;
+    EEPROM.get(EEPROM_OFFSET_CONFIG_VERSION_LEGACY, legacyVersion);
+    if (isLikelyValidVersion(legacyVersion)) {
+        versionOffset = EEPROM_OFFSET_CONFIG_VERSION_LEGACY;
+        return legacyVersion;
+    }
+
+    return EEPROM_VERSION_INVALID;
+}
+
+void migrateLegacyLayout(uint16_t storedVersion, bool &migratedLegacyLayout) {
+    Serial.print(F("ℹ️ Legacy-Layout (Version "));
+    if (storedVersion == EEPROM_VERSION_INVALID) {
+        Serial.print(F("unbekannt"));
+    } else {
+        Serial.print(storedVersion);
+    }
+    Serial.println(F(") erkannt – migriere auf mehrspurige Trigger-Konfiguration."));
+
+    char legacyLetters[NUM_DAYS] = {};
+    char legacyColors[NUM_DAYS][COLOR_STRING_LENGTH] = {};
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, legacyLetters);
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, legacyColors);
+
+    unsigned long legacyTriggerDelays[NUM_TRIGGERS] = {};
+    size_t legacyOffset = EEPROM_OFFSET_TRIGGER_DELAY_MATRIX;
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        unsigned long value = 0;
+        EEPROM.get(static_cast<int>(legacyOffset + trigger * sizeof(unsigned long)), value);
+        legacyTriggerDelays[trigger] = value;
+    }
+
+    for (size_t day = 0; day < NUM_DAYS; ++day) {
+        char letter = legacyLetters[day];
+        if (letter == '\xFF' || letter == '\0') {
+            letter = DEFAULT_DAILY_LETTERS[0][day];
+        }
+
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            dailyLetters[trigger][day] = (trigger == 0) ? letter : DEFAULT_DAILY_LETTERS[trigger][day];
+        }
+
+        const char *legacyColor = legacyColors[day];
+        bool colorValid = isValidHexColor(legacyColor);
+
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            const char *source = (trigger == 0 && colorValid) ? legacyColor : DEFAULT_DAILY_COLORS[trigger][day];
+            strncpy(dailyLetterColors[trigger][day], source, COLOR_STRING_LENGTH);
+            dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+        }
+    }
+
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        unsigned long legacyValue = legacyTriggerDelays[trigger];
+        bool delayValid = isValidDelayValue(legacyValue);
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            unsigned long fallback = DEFAULT_TRIGGER_DELAYS[trigger][day];
+            letter_trigger_delays[trigger][day] = delayValid ? legacyValue : fallback;
+        }
+        if (!delayValid) {
+            Serial.print(F("⚠️ Ungültige Legacy-Verzögerung für Trigger "));
+            Serial.print(trigger + 1);
+            Serial.println(F(" – Standardwert 0 Sekunden wird verwendet."));
+        }
+    }
+
+    unsigned long recoveredMatrix[NUM_TRIGGERS][NUM_DAYS] = {};
+    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, recoveredMatrix);
+
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            unsigned long recoveredValue = recoveredMatrix[trigger][day];
+            if (isValidDelayValue(recoveredValue)) {
+                letter_trigger_delays[trigger][day] = recoveredValue;
+            }
+        }
+    }
+
+    migratedLegacyLayout = true;
 }
 
 } // namespace
@@ -112,61 +209,22 @@ void loadConfig() {
     EEPROM.get(EEPROM_OFFSET_WIFI_PASSWORD, wifi_password);
     EEPROM.get(EEPROM_OFFSET_HOSTNAME, hostname);
 
-    uint16_t storedVersion = 0xFFFF;
     bool migratedLegacyLayout = false;
-    EEPROM.get(EEPROM_OFFSET_CONFIG_VERSION, storedVersion);
+    uint16_t versionOffset = EEPROM_OFFSET_CONFIG_VERSION;
+    uint16_t storedVersion = readStoredConfigVersion(versionOffset);
+    bool usingCurrentLayout = (storedVersion == EEPROM_CONFIG_VERSION);
 
-    if (storedVersion == EEPROM_CONFIG_VERSION) {
+    if (storedVersion == EEPROM_VERSION_INVALID) {
+        Serial.println(F("ℹ️ Keine gültige Konfigurationsversion gefunden – gehe von Legacy-Layout aus."));
+    } else if (versionOffset == EEPROM_OFFSET_CONFIG_VERSION_LEGACY) {
+        Serial.println(F("ℹ️ Legacy-Versionskennung am historischen Offset 0x190 entdeckt."));
+    }
+
+    if (usingCurrentLayout) {
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
     } else {
-        Serial.println(F("ℹ️ Legacy-Layout erkannt – migriere auf mehrspurige Trigger-Konfiguration."));
-        char legacyLetters[NUM_DAYS] = {};
-        char legacyColors[NUM_DAYS][COLOR_STRING_LENGTH] = {};
-        EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, legacyLetters);
-        EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, legacyColors);
-
-        unsigned long legacyTriggerDelays[NUM_TRIGGERS] = {};
-        size_t legacyOffset = EEPROM_OFFSET_TRIGGER_DELAY_MATRIX;
-        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-            unsigned long value = 0;
-            EEPROM.get(static_cast<int>(legacyOffset + trigger * sizeof(unsigned long)), value);
-            legacyTriggerDelays[trigger] = value;
-        }
-
-        for (size_t day = 0; day < NUM_DAYS; ++day) {
-            char letter = legacyLetters[day];
-            if (letter == '\xFF' || letter == '\0') {
-                letter = DEFAULT_DAILY_LETTERS[0][day];
-            }
-
-            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-                dailyLetters[trigger][day] = (trigger == 0) ? letter : DEFAULT_DAILY_LETTERS[trigger][day];
-            }
-
-            const char *legacyColor = legacyColors[day];
-            bool colorValid = isValidHexColor(legacyColor);
-
-            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-                const char *source = (trigger == 0 && colorValid) ? legacyColor : DEFAULT_DAILY_COLORS[trigger][day];
-                strncpy(dailyLetterColors[trigger][day], source, COLOR_STRING_LENGTH);
-                dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
-            }
-        }
-        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-            unsigned long legacyValue = legacyTriggerDelays[trigger];
-            bool delayValid = isValidDelayValue(legacyValue);
-            for (size_t day = 0; day < NUM_DAYS; ++day) {
-                unsigned long fallback = DEFAULT_TRIGGER_DELAYS[trigger][day];
-                letter_trigger_delays[trigger][day] = delayValid ? legacyValue : fallback;
-            }
-            if (!delayValid) {
-                Serial.print(F("⚠️ Ungültige Legacy-Verzögerung für Trigger "));
-                Serial.print(trigger + 1);
-                Serial.println(F(" – Standardwert 0 Sekunden wird verwendet."));
-            }
-        }
-        migratedLegacyLayout = true;
+        migrateLegacyLayout(storedVersion, migratedLegacyLayout);
     }
 
     Serial.println(F("📂 Geladene Farben für Trigger & Tage:"));
@@ -183,7 +241,7 @@ void loadConfig() {
 
     EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
     EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
-    if (storedVersion == EEPROM_CONFIG_VERSION) {
+    if (usingCurrentLayout) {
         EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, letter_trigger_delays);
     }
     EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
