@@ -11,7 +11,7 @@ Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben f�
 - [ ] Dokumentation für Setup und Troubleshooting erweitern
 
 ## Implementierte Features
-- [x] RS485‑Trigger mit drei einstellbaren Verzögerungen
+- [x] RS485‑Trigger mit tagesabhängigen Verzögerungsmatrizen
 - [x] Automatische Buchstabenausgabe in festen Intervallen
 - [x] Mehrspurige Tageskonfiguration (Buchstaben & Farben pro Triggerleitung)
 - [x] Weboberfläche für WLAN‑Daten, Anzeigeparameter und RTC‑Zeit
