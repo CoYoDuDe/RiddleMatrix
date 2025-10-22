@@ -62,8 +62,9 @@ void loop() {
         }
     }
 
-    checkWiFi(); 
+    checkWiFi();
     checkTrigger();
     checkAutoDisplay();
+    processPendingTriggers();
 
 }

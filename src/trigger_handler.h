@@ -6,6 +6,14 @@
 
 extern bool alreadyCleared;
 
+struct PendingTrigger {
+    uint8_t triggerIndex;
+    unsigned long executeAt;
+    bool fromWeb;
+};
+
+extern bool pendingTriggerActive;
+
 void clearDisplay();
 
 enum class DisplayLetterError : uint8_t {
@@ -21,6 +29,12 @@ extern DisplayLetterError lastDisplayLetterError;
 bool displayLetter(uint8_t triggerIndex, char letter);
 
 void handleTrigger(char triggerType, bool isAutoMode = false);
+
+bool enqueuePendingTrigger(uint8_t triggerIndex, bool fromWeb);
+
+bool isTriggerPending(uint8_t triggerIndex);
+
+void processPendingTriggers();
 
 void checkTrigger();
 
