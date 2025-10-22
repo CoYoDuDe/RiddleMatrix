@@ -504,23 +504,26 @@ def transfer_box():
     soup = BeautifulSoup(r.text, "html.parser")
     remote_letters, remote_colors = extract_box_state_from_soup(soup)
     remote_delays = fetch_trigger_delays(ip)
+    supports_delay_transfer = remote_delays is not None
 
     stored_letters = {day: list(box["letters"][day]) for day in DAYS}
     stored_colors = {day: list(box["colors"][day]) for day in DAYS}
     stored_delays = {day: [_coerce_delay_value(value) for value in box["delays"][day]] for day in DAYS}
 
-    if (
-        remote_letters == stored_letters
-        and remote_colors == stored_colors
-        and (remote_delays is not None and remote_delays == stored_delays)
-    ):
-        return jsonify({"status": "⏭️ Bereits aktuell"})
+    if remote_letters == stored_letters and remote_colors == stored_colors:
+        delays_match = True
+        if supports_delay_transfer:
+            delays_match = remote_delays == stored_delays
+        if delays_match:
+            return jsonify({"status": "⏭️ Bereits aktuell"})
 
     payload = {
         "letters": stored_letters,
         "colors": stored_colors,
-        "delays": stored_delays,
     }
+
+    if supports_delay_transfer:
+        payload["delays"] = stored_delays
 
     try:
         r = requests.post(f"http://{ip}/updateAllLetters", json=payload, timeout=3)
