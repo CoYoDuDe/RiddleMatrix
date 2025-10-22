@@ -62,7 +62,9 @@ void connectWiFi() {
         Serial.println(WiFi.localIP());
         wifiConnected = true;
         drawWiFiSymbol();
-        syncTimeWithNTP();
+        if (!syncTimeWithNTP()) {
+            Serial.println(F("⚠️ Hinweis: NTP Synchronisierung beim Verbindungsaufbau fehlgeschlagen."));
+        }
         setupWebServer();
     } else {
         Serial.println(F("\n⛔ WiFi Timeout! Verbindung fehlgeschlagen. WiFi bleibt aus."));
