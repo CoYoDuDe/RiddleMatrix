@@ -212,7 +212,8 @@ void loadConfig() {
     bool migratedLegacyLayout = false;
     uint16_t versionOffset = EEPROM_OFFSET_CONFIG_VERSION;
     uint16_t storedVersion = readStoredConfigVersion(versionOffset);
-    bool usingCurrentLayout = (storedVersion == EEPROM_CONFIG_VERSION);
+    bool usingCurrentLayout = (storedVersion == EEPROM_CONFIG_VERSION &&
+                               versionOffset == EEPROM_OFFSET_CONFIG_VERSION);
 
     if (storedVersion == EEPROM_VERSION_INVALID) {
         Serial.println(F("ℹ️ Keine gültige Konfigurationsversion gefunden – gehe von Legacy-Layout aus."));
