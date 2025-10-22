@@ -54,9 +54,22 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     // 🌐 Zeit per NTP synchronisieren
     function syncNTP() {
         fetch('/syncNTP')
-            .then(response => response.text())
-            .then(alert)
-            .catch(error => alert('❌ Fehler: ' + error));
+            .then(response => response.text().then(message => ({ ok: response.ok, message })))
+            .then(result => {
+                const text = result.message && result.message.trim() !== ''
+                    ? result.message
+                    : (result.ok ? '✅ NTP Synchronisierung erfolgreich!' : '❌ Fehler bei der NTP Synchronisierung.');
+                if (!result.ok) {
+                    console.warn('❌ Serverfehler:', text);
+                } else {
+                    console.log('ℹ️ Serverantwort:', text);
+                }
+                alert(text);
+            })
+            .catch(error => {
+                console.error('❌ Fehler:', error);
+                alert('❌ Fehler: ' + error);
+            });
     }
 
     // 🔔 Buchstaben-Trigger über Webinterface
@@ -594,8 +607,11 @@ void setupWebServer() {
     });
 
     server.on("/syncNTP", HTTP_GET, [](AsyncWebServerRequest *request) {
-        syncTimeWithNTP();
-        request->send(200, "text/plain", "NTP Synchronisierung ausgeführt");
+        if (syncTimeWithNTP()) {
+            request->send(200, "text/plain", "✅ NTP Synchronisierung erfolgreich abgeschlossen!");
+        } else {
+            request->send(504, "text/plain", "❌ Fehler: NTP Zeit konnte nicht abgerufen werden (Zeitüberschreitung).");
+        }
     });
 
     server.on("/memory", HTTP_GET, [](AsyncWebServerRequest *request) {

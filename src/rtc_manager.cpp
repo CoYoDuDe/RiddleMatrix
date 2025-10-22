@@ -99,19 +99,21 @@ bool setRTCFromWeb(const String &date, const String &time) {
     return true;
 }
 
-void syncTimeWithNTP() {
+bool syncTimeWithNTP() {
     Serial.println(F("🔄 Synchronisiere Zeit mit NTP..."));
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 10000)) {
-        enableRTC();
-        rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
-                            timeinfo.tm_mday, timeinfo.tm_hour,
-                            timeinfo.tm_min, timeinfo.tm_sec));
-        enableRS485();
-        Serial.println(F("✅ NTP Synchronisierung erfolgreich!"));
-    } else {
+    if (!getLocalTime(&timeinfo, 10000)) {
         Serial.println(F("❌ NTP Zeit konnte nicht abgerufen werden!"));
+        return false;
     }
+
+    enableRTC();
+    rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
+                        timeinfo.tm_mday, timeinfo.tm_hour,
+                        timeinfo.tm_min, timeinfo.tm_sec));
+    enableRS485();
+    Serial.println(F("✅ NTP Synchronisierung erfolgreich!"));
+    return true;
 }
