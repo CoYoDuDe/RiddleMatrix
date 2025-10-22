@@ -6,6 +6,7 @@ import os, json, subprocess, requests
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
 TRIGGER_SLOTS = 3
 DEFAULT_COLOR = "#ffffff"
+DEFAULT_DELAY = 0.0
 
 app = Flask(__name__)
 LEASE_FILE = "/var/lib/misc/dnsmasq.leases"
@@ -77,6 +78,47 @@ def _normalize_color_list(values, legacy_value=None):
     return normalized
 
 
+def _coerce_delay_value(value):
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+    elif isinstance(value, str):
+        try:
+            numeric = float(value.strip())
+        except (ValueError, AttributeError):
+            return float(DEFAULT_DELAY)
+    else:
+        return float(DEFAULT_DELAY)
+
+    if numeric < 0:
+        return float(DEFAULT_DELAY)
+    return round(numeric, 3)
+
+
+def _normalize_delay_list(values, legacy_value=None):
+    normalized = [float(DEFAULT_DELAY) for _ in range(TRIGGER_SLOTS)]
+    if isinstance(values, list):
+        for idx in range(min(TRIGGER_SLOTS, len(values))):
+            normalized[idx] = _coerce_delay_value(values[idx])
+    elif isinstance(values, dict):
+        for key, val in values.items():
+            if str(key).isdigit():
+                idx = int(str(key))
+                if 0 <= idx < TRIGGER_SLOTS:
+                    normalized[idx] = _coerce_delay_value(val)
+    elif isinstance(values, str):
+        normalized[0] = _coerce_delay_value(values)
+    elif values is not None:
+        normalized[0] = _coerce_delay_value(values)
+
+    if legacy_value is not None and normalized[0] == float(DEFAULT_DELAY):
+        normalized[0] = _coerce_delay_value(legacy_value)
+    return normalized
+
+
+def _default_delay_matrix():
+    return {day: [float(DEFAULT_DELAY) for _ in range(TRIGGER_SLOTS)] for day in DAYS}
+
+
 def ensure_box_structure(box, remove_legacy=False):
     changed = False
     if not isinstance(box, dict):
@@ -87,6 +129,9 @@ def ensure_box_structure(box, remove_legacy=False):
         changed = True
     if "colors" not in box or not isinstance(box["colors"], dict):
         box["colors"] = {}
+        changed = True
+    if "delays" not in box or not isinstance(box["delays"], dict):
+        box["delays"] = {}
         changed = True
 
     for day_index, day in enumerate(DAYS):
@@ -104,6 +149,13 @@ def ensure_box_structure(box, remove_legacy=False):
             box["colors"][day] = normalized_colors
             changed = True
 
+        delays = box["delays"].get(day)
+        legacy_delay = box.get(f"delay_{day}")
+        normalized_delays = _normalize_delay_list(delays, legacy_delay)
+        if box["delays"].get(day) != normalized_delays:
+            box["delays"][day] = normalized_delays
+            changed = True
+
         if remove_legacy:
             if day in box:
                 del box[day]
@@ -111,6 +163,10 @@ def ensure_box_structure(box, remove_legacy=False):
             legacy_color_key = f"color_{day}"
             if legacy_color_key in box:
                 del box[legacy_color_key]
+                changed = True
+            legacy_delay_key = f"delay_{day}"
+            if legacy_delay_key in box:
+                del box[legacy_delay_key]
                 changed = True
 
     return changed
@@ -166,6 +222,30 @@ def extract_box_state_from_soup(soup):
             colors[day][slot] = color_value
 
     return letters, colors
+
+def fetch_trigger_delays(ip):
+    try:
+        response = requests.get(f"http://{ip}/api/trigger-delays", timeout=3)
+    except requests.RequestException:
+        return None
+
+    if not response.ok:
+        return None
+
+    try:
+        data = response.json()
+    except ValueError:
+        return None
+
+    delays_payload = data.get("delays")
+    if not isinstance(delays_payload, dict):
+        return None
+
+    normalized = {}
+    for day in DAYS:
+        normalized[day] = _normalize_delay_list(delays_payload.get(day))
+    return normalized
+
 
 def get_connected_devices():
     devices = []
@@ -245,10 +325,12 @@ def learn_box(ip, identifier):
             return
         soup = BeautifulSoup(r.text, "html.parser")
         letters, colors = extract_box_state_from_soup(soup)
+        delays = fetch_trigger_delays(ip)
         box = {
             "ip": ip,
             "letters": letters,
             "colors": colors,
+            "delays": delays if delays is not None else _default_delay_matrix(),
         }
         ensure_box_structure(box, remove_legacy=True)
         config["boxen"][identifier] = box
@@ -321,6 +403,22 @@ def update_box():
                 box["colors"][day] = normalized
                 updated = True
 
+    delays_payload = data.get("delays")
+    if isinstance(delays_payload, dict):
+        for day, values in delays_payload.items():
+            if day in DAYS:
+                normalized = _normalize_delay_list(values)
+                if box["delays"].get(day) != normalized:
+                    box["delays"][day] = normalized
+                    updated = True
+
+    for day in DAYS:
+        if f"delay_{day}" in data:
+            normalized = _normalize_delay_list([data.get(f"delay_{day}")])
+            if box["delays"].get(day) != normalized:
+                box["delays"][day] = normalized
+                updated = True
+
     day = data.get("day")
     trigger_index = data.get("triggerIndex")
     try:
@@ -338,6 +436,11 @@ def update_box():
             color_value = data["color"] or DEFAULT_COLOR
             if box["colors"][day][trigger_index] != color_value:
                 box["colors"][day][trigger_index] = color_value
+                updated = True
+        if "delay" in data:
+            delay_value = _coerce_delay_value(data.get("delay"))
+            if box["delays"][day][trigger_index] != delay_value:
+                box["delays"][day][trigger_index] = delay_value
                 updated = True
 
     if changed or updated:
@@ -400,16 +503,23 @@ def transfer_box():
 
     soup = BeautifulSoup(r.text, "html.parser")
     remote_letters, remote_colors = extract_box_state_from_soup(soup)
+    remote_delays = fetch_trigger_delays(ip)
 
     stored_letters = {day: list(box["letters"][day]) for day in DAYS}
     stored_colors = {day: list(box["colors"][day]) for day in DAYS}
+    stored_delays = {day: [_coerce_delay_value(value) for value in box["delays"][day]] for day in DAYS}
 
-    if remote_letters == stored_letters and remote_colors == stored_colors:
+    if (
+        remote_letters == stored_letters
+        and remote_colors == stored_colors
+        and (remote_delays is not None and remote_delays == stored_delays)
+    ):
         return jsonify({"status": "⏭️ Bereits aktuell"})
 
     payload = {
         "letters": stored_letters,
         "colors": stored_colors,
+        "delays": stored_delays,
     }
 
     try:
