@@ -70,10 +70,19 @@
       display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap;
     }
     .weekday-col {
-      display: flex; flex-direction: column; align-items: center; min-width: 80px;
+      display: flex; flex-direction: column; align-items: stretch; min-width: 120px; gap: 6px;
     }
     .weekday-col select, .weekday-col input[type="color"], .weekday-col input[type="text"] {
       margin-top: 4px; width: 100%; box-sizing: border-box;
+    }
+    .trigger-container {
+      display: flex; flex-direction: column; gap: 6px; width: 100%;
+    }
+    .trigger-entry {
+      display: flex; flex-direction: column; gap: 4px; background: #f9f9f9; padding: 4px; border-radius: 4px;
+    }
+    .trigger-entry span {
+      font-size: 12px; font-weight: bold;
     }
     .word-input {
       margin-bottom: 10px; padding: 5px; width: 100%; max-width: 300px;
@@ -81,6 +90,9 @@
     }
     .word-input.pending { border: 2px solid red; }
     .word-input.saved { border: 2px solid green; }
+    .word-trigger-selector {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
+    }
     .action-buttons button {
       padding: 10px; margin-right: 10px; font-size: 14px;
     }
@@ -111,10 +123,33 @@ let transferQueue = {};
 let transferring = false;
 let statusArea;
 let boxOrder = [];
+const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
+const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+const triggersPerDay = 3;
+const defaultColor = "#ffffff";
+const letterLabels = {"*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
+const letterOptions = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split("");
+let currentWordTrigger = 0;
 
 function init() {
   fetchDevices();
   setInterval(fetchDevices, 1000); // Prüfe alle 1 Sekunde
+}
+
+function normalizeBox(box) {
+  box = box || {};
+  box.letters = box.letters || {};
+  box.colors = box.colors || {};
+  days.forEach(day => {
+    const letters = Array.isArray(box.letters[day]) ? box.letters[day].slice(0, triggersPerDay) : [];
+    while (letters.length < triggersPerDay) letters.push("");
+    box.letters[day] = letters;
+
+    const colors = Array.isArray(box.colors[day]) ? box.colors[day].slice(0, triggersPerDay) : [];
+    while (colors.length < triggersPerDay) colors.push(defaultColor);
+    box.colors[day] = colors;
+  });
+  return box;
 }
 
 async function fetchDevices() {
@@ -125,13 +160,18 @@ async function fetchDevices() {
     const newConnectedBoxes = data.connected || [];
     const newBoxOrder = data.boxOrder || Object.keys(newKnownBoxes);
 
+    const normalizedIncoming = {};
+    Object.entries(newKnownBoxes).forEach(([hostname, box]) => {
+      normalizedIncoming[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
+    });
+
     // Prüfe auf Änderungen
     const hasChanges =
-      JSON.stringify(knownBoxes) !== JSON.stringify(newKnownBoxes) ||
+      JSON.stringify(knownBoxes) !== JSON.stringify(normalizedIncoming) ||
       JSON.stringify(connectedBoxes) !== JSON.stringify(newConnectedBoxes) ||
       JSON.stringify(boxOrder) !== JSON.stringify(newBoxOrder);
 
-    knownBoxes = newKnownBoxes;
+    knownBoxes = normalizedIncoming;
     connectedBoxes = newConnectedBoxes;
     boxOrder = newBoxOrder;
 
@@ -169,41 +209,61 @@ function shutdown() {
 }
 
 function showSetup() {
-  const letterLabels = {"*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
   let html = '<h2>Boxen verwalten</h2>';
-  const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
-  const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
   const maxLength = boxOrder.length;
 
-  html += '<div class="box-card"><h3>Wörter für Wochentage</h3><div class="weekday-row">';
-  for (let i = 0; i < 7; i++) {
-    const currentWord = boxOrder.map(hostname => knownBoxes[hostname]?.[days[i]] || "").join("");
+  html += '<div class="box-card"><h3>Wörter für Wochentage</h3>';
+  html += '<div class="word-trigger-selector">';
+  html += '<label for="wordTriggerSelect">Trigger-Spalte:</label>';
+  html += '<select id="wordTriggerSelect" onchange="changeWordTrigger(parseInt(this.value, 10))">';
+  for (let trigger = 0; trigger < triggersPerDay; trigger++) {
+    const selected = trigger === currentWordTrigger ? "selected" : "";
+    html += `<option value="${trigger}" ${selected}>Trigger ${trigger + 1}</option>`;
+  }
+  html += '</select></div>';
+
+  html += '<div class="weekday-row">';
+  for (let i = 0; i < days.length; i++) {
+    const currentWord = boxOrder.map(hostname => {
+      const letters = knownBoxes[hostname]?.letters?.[days[i]] || [];
+      return letters[currentWordTrigger] || "";
+    }).join("");
     html += `
       <div class="weekday-col">
         <label>${dayNames[i]}</label>
-        <input type="text" class="word-input" placeholder="Wort eingeben (max ${maxLength} Zeichen)" 
-          value="${currentWord}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this)" 
+        <input type="text" class="word-input" placeholder="Wort eingeben (max ${maxLength} Zeichen)"
+          value="${currentWord}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this)"
           onkeydown="handleKeydown(event, '${days[i]}', this.value, ${maxLength}, this)">
       </div>`;
   }
   html += '</div></div>';
 
   boxOrder.forEach((hostname, index) => {
-    const box = knownBoxes[hostname] || {};
+    const box = normalizeBox(knownBoxes[hostname] || {});
     html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${hostname}</h3><div class="weekday-row">`;
-    for (let i = 0; i < 7; i++) {
-      const letter = box[days[i]] || "";
-      const color = box["color_" + days[i]] || "#ffffff";
-      const letterOptions = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split("").map(c =>
-        `<option value="${c}" ${c === letter ? "selected" : ""}>${letterLabels[c] || c}</option>`).join("");
-
+    for (let i = 0; i < days.length; i++) {
+      const letters = box.letters?.[days[i]] || [];
+      const colors = box.colors?.[days[i]] || [];
       html += `
         <div class="weekday-col">
           <label>${dayNames[i]}</label>
-          <select onchange="saveField('${hostname}', '${days[i]}', this.value)" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
-            ${letterOptions}
-          </select>
-          <input type="color" value="${color}" onchange="saveField('${hostname}', 'color_${days[i]}', this.value)">
+          <div class="trigger-container">`;
+      for (let trigger = 0; trigger < triggersPerDay; trigger++) {
+        const letter = letters[trigger] || "";
+        const color = colors[trigger] || defaultColor;
+        const letterOptionsHtml = letterOptions.map(c =>
+          `<option value="${c}" ${c === letter ? "selected" : ""}>${letterLabels[c] || c}</option>`).join("");
+        html += `
+            <div class="trigger-entry">
+              <span>Trigger ${trigger + 1}</span>
+              <select onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
+                ${letterOptionsHtml}
+              </select>
+              <input type="color" value="${color}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'color')">
+            </div>`;
+      }
+      html += `
+          </div>
         </div>`;
     }
     html += `</div>
@@ -238,19 +298,33 @@ function updateWord(day, word, maxLength, inputElement) {
   for (let i = 0; i < boxOrder.length; i++) {
     const letter = i < word.length ? word[i] : "*";
     knownBoxes[boxOrder[i]] = knownBoxes[boxOrder[i]] || {};
-    knownBoxes[boxOrder[i]][day] = letter;
-    saveField(boxOrder[i], day, letter, false, inputElement);
+    saveField(boxOrder[i], day, currentWordTrigger, letter, 'letter', false, inputElement);
   }
   showSetup();
 }
 
-function saveField(hostname, key, value, updateUI = true, inputElement = null) {
-  knownBoxes[hostname] = knownBoxes[hostname] || {};
-  knownBoxes[hostname][key] = value;
+function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', updateUI = true, inputElement = null) {
+  knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
+  const slotIndex = Number(triggerIndex);
+  if (fieldType === 'letter') {
+    knownBoxes[hostname].letters[day][slotIndex] = value;
+  } else {
+    const colorValue = value || defaultColor;
+    knownBoxes[hostname].colors[day][slotIndex] = colorValue;
+    value = colorValue;
+  }
+
+  const payload = { hostname, day, triggerIndex: slotIndex };
+  if (fieldType === 'letter') {
+    payload.letter = value;
+  } else {
+    payload.color = value;
+  }
+
   fetch("/update_box", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ hostname, [key]: value })
+    body: JSON.stringify(payload)
   }).then(response => {
     if (!response.ok) {
       statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichen.</div>';
@@ -269,6 +343,17 @@ function saveField(hostname, key, value, updateUI = true, inputElement = null) {
     statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern.</div>';
     if (inputElement) inputElement.classList.remove("pending");
   });
+}
+
+function changeWordTrigger(newTrigger) {
+  if (!Number.isInteger(newTrigger)) {
+    newTrigger = parseInt(newTrigger, 10);
+  }
+  if (Number.isNaN(newTrigger) || newTrigger < 0 || newTrigger >= triggersPerDay) {
+    return;
+  }
+  currentWordTrigger = newTrigger;
+  showSetup();
 }
 
 function moveBoxUp(hostname) {
