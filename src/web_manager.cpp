@@ -67,9 +67,20 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         }
 
         fetch('/triggerLetter' + query)
-            .then(response => response.text())
-            .then(alert)
-            .catch(error => alert('❌ Fehler: ' + error));
+            .then(response => response.text().then(message => ({ ok: response.ok, message })))
+            .then(result => {
+                const text = result.message && result.message.trim() !== '' ? result.message : (result.ok ? '✅ Trigger erfolgreich!' : '❌ Unbekannter Fehler beim Trigger!');
+                if (!result.ok) {
+                    console.warn('❌ Serverfehler:', text);
+                } else {
+                    console.log('ℹ️ Serverantwort:', text);
+                }
+                alert(text);
+            })
+            .catch(error => {
+                console.error('❌ Fehler:', error);
+                alert('❌ Fehler: ' + error);
+            });
     }
 
     // 👁️ Buchstaben direkt anzeigen
@@ -86,10 +97,15 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         }
 
         fetch(url)
-            .then(response => response.text())
-            .then(message => {
-                console.log('ℹ️ Serverantwort:', message);
-                alert(message);
+            .then(response => response.text().then(message => ({ ok: response.ok, message })))
+            .then(result => {
+                const text = result.message && result.message.trim() !== '' ? result.message : (result.ok ? '✅ Buchstabe angezeigt!' : '❌ Anzeige fehlgeschlagen!');
+                if (!result.ok) {
+                    console.warn('❌ Serverfehler:', text);
+                } else {
+                    console.log('ℹ️ Serverantwort:', text);
+                }
+                alert(text);
             })
             .catch(error => {
                 console.error('❌ Fehler:', error);
@@ -422,8 +438,38 @@ void setupWebServer() {
             triggerIndex = static_cast<uint8_t>(triggerValue - 1);
         }
 
-        displayLetter(triggerIndex, letter[0]);
-        request->send(200, "text/plain", "Buchstabe " + letter + " für Trigger " + String(triggerIndex + 1) + " angezeigt!");
+        bool displayed = displayLetter(triggerIndex, letter[0]);
+
+        if (displayed) {
+            alreadyCleared = false;
+            request->send(200, "text/plain", "✅ Buchstabe " + letter + " für Trigger " + String(triggerIndex + 1) + " angezeigt!");
+            return;
+        }
+
+        int statusCode = 500;
+        String errorMessage = F("❌ Fehler: Anzeige fehlgeschlagen.");
+
+        switch (lastDisplayLetterError) {
+            case DisplayLetterError::TriggerAlreadyActive:
+                statusCode = 409;
+                errorMessage = F("❌ Fehler: Bereits aktiver Buchstabe verhindert neue Anzeige!");
+                break;
+            case DisplayLetterError::LetterNotFound:
+                statusCode = 422;
+                errorMessage = F("❌ Fehler: Kein Muster für den gewünschten Buchstaben gefunden!");
+                break;
+            case DisplayLetterError::InvalidWeekday:
+                statusCode = 503;
+                errorMessage = F("❌ Fehler: Ungültiger Wochentag vom RTC-Modul, Anzeige nicht möglich!");
+                break;
+            case DisplayLetterError::None:
+            default:
+                statusCode = 500;
+                errorMessage = F("❌ Fehler: Unbekannter Anzeige-Fehler!");
+                break;
+        }
+
+        request->send(statusCode, "text/plain", errorMessage);
     });
 
     server.on("/triggerLetter", HTTP_GET, [](AsyncWebServerRequest *request) {

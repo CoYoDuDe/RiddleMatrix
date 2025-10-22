@@ -1,6 +1,8 @@
 #include "trigger_handler.h"
 #include "rtc_manager.h"
 
+DisplayLetterError lastDisplayLetterError = DisplayLetterError::None;
+
 void clearDisplay() {
     if (alreadyCleared) {
         Serial.println(F("⚠️ `clearDisplay()` wurde bereits ausgeführt, Abbruch."));
@@ -16,7 +18,9 @@ void clearDisplay() {
     triggerActive = false;
 }
 
-void displayLetter(uint8_t triggerIndex, char letter) {
+bool displayLetter(uint8_t triggerIndex, char letter) {
+    lastDisplayLetterError = DisplayLetterError::None;
+
     if (triggerIndex >= NUM_TRIGGERS) {
         Serial.print(F("⚠️ Ungültiger Trigger-Index "));
         Serial.print(triggerIndex);
@@ -31,7 +35,8 @@ void displayLetter(uint8_t triggerIndex, char letter) {
 
     if (triggerActive) {
         Serial.println(F("⚠️ Ein Buchstabe ist bereits aktiv. Abbruch."));
-        return;
+        lastDisplayLetterError = DisplayLetterError::TriggerAlreadyActive;
+        return false;
     }
 
     triggerActive = true;
@@ -49,7 +54,8 @@ void displayLetter(uint8_t triggerIndex, char letter) {
     if (today < 0 || today >= static_cast<int>(NUM_DAYS)) {
         Serial.println(F("⚠️ Ungültiger Wochentag – breche Anzeige ab."));
         triggerActive = false;
-        return;
+        lastDisplayLetterError = DisplayLetterError::InvalidWeekday;
+        return false;
     }
 
     String selectedColor(dailyLetterColors[triggerIndex][today]);
@@ -83,7 +89,8 @@ void displayLetter(uint8_t triggerIndex, char letter) {
     if (letterData.find(letter) == letterData.end()) {
         Serial.println(F("⚠️ Fehler: Buchstabe nicht gefunden!"));
         triggerActive = false;
-        return;
+        lastDisplayLetterError = DisplayLetterError::LetterNotFound;
+        return false;
     }
 
     const uint8_t* bitmap = letterData[letter];
@@ -106,6 +113,9 @@ void displayLetter(uint8_t triggerIndex, char letter) {
     Serial.print(F("⏳ Anzeigezeit startet jetzt für "));
     Serial.print(letter_display_time);
     Serial.println(F(" Sekunden!"));
+
+    lastDisplayLetterError = DisplayLetterError::None;
+    return true;
 }
 
 void handleTrigger(char triggerType, bool isAutoMode) {
@@ -152,9 +162,28 @@ void handleTrigger(char triggerType, bool isAutoMode) {
             delay(delayTime * 1000UL);
         }
 
-        displayLetter(triggerIndex, letter);
+        bool displayed = displayLetter(triggerIndex, letter);
 
-        alreadyCleared = false;
+        if (displayed) {
+            alreadyCleared = false;
+        } else {
+            Serial.print(F("❌ Anzeige fehlgeschlagen: "));
+            switch (lastDisplayLetterError) {
+                case DisplayLetterError::TriggerAlreadyActive:
+                    Serial.println(F("Ein anderer Buchstabe wird bereits angezeigt."));
+                    break;
+                case DisplayLetterError::InvalidWeekday:
+                    Serial.println(F("Ungültiger Wochentag vom RTC-Modul."));
+                    break;
+                case DisplayLetterError::LetterNotFound:
+                    Serial.println(F("Kein Muster für den angeforderten Buchstaben."));
+                    break;
+                case DisplayLetterError::None:
+                default:
+                    Serial.println(F("Unbekannter Fehler."));
+                    break;
+            }
+        }
 
     } else {
         Serial.println(F("⚠️ Ungültiger Wochentag! Anzeige wird übersprungen."));
