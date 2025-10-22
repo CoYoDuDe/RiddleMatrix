@@ -72,7 +72,8 @@
     .weekday-col {
       display: flex; flex-direction: column; align-items: stretch; min-width: 120px; gap: 6px;
     }
-    .weekday-col select, .weekday-col input[type="color"], .weekday-col input[type="text"] {
+    .weekday-col select, .weekday-col input[type="color"], .weekday-col input[type="text"],
+    .weekday-col input[type="number"] {
       margin-top: 4px; width: 100%; box-sizing: border-box;
     }
     .trigger-container {
@@ -90,6 +91,14 @@
     }
     .word-input.pending { border: 2px solid red; }
     .word-input.saved { border: 2px solid green; }
+    .delay-input.pending { border: 2px solid red; }
+    .delay-input.saved { border: 2px solid green; }
+    .delay-input-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 12px;
+    }
     .word-trigger-selector {
       display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
     }
@@ -127,6 +136,7 @@ const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const triggersPerDay = 3;
 const defaultColor = "#ffffff";
+const defaultDelay = 0;
 const letterLabels = {"*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
 const letterOptions = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split("");
 let currentWordTrigger = 0;
@@ -140,6 +150,7 @@ function normalizeBox(box) {
   box = box || {};
   box.letters = box.letters || {};
   box.colors = box.colors || {};
+  box.delays = box.delays || {};
   days.forEach(day => {
     const letters = Array.isArray(box.letters[day]) ? box.letters[day].slice(0, triggersPerDay) : [];
     while (letters.length < triggersPerDay) letters.push("");
@@ -148,6 +159,16 @@ function normalizeBox(box) {
     const colors = Array.isArray(box.colors[day]) ? box.colors[day].slice(0, triggersPerDay) : [];
     while (colors.length < triggersPerDay) colors.push(defaultColor);
     box.colors[day] = colors;
+
+    const delays = Array.isArray(box.delays[day]) ? box.delays[day].slice(0, triggersPerDay) : [];
+    while (delays.length < triggersPerDay) delays.push(defaultDelay);
+    box.delays[day] = delays.map(value => {
+      const numeric = typeof value === "number" ? value : parseFloat(value);
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        return defaultDelay;
+      }
+      return Math.round((numeric + Number.EPSILON) * 1000) / 1000;
+    });
   });
   return box;
 }
@@ -177,8 +198,9 @@ async function fetchDevices() {
 
     renderDeviceList();
     // Nur showSetup() aufrufen, wenn kein Textfeld oder Dropdown-Menü fokussiert ist
-    if (hasChanges && statusArea && !transferring && 
-        !document.activeElement.classList.contains("word-input") && 
+    if (hasChanges && statusArea && !transferring &&
+        !document.activeElement.classList.contains("word-input") &&
+        !document.activeElement.classList.contains("delay-input") &&
         document.activeElement.tagName !== "SELECT") {
       showSetup();
     }
@@ -244,6 +266,7 @@ function showSetup() {
     for (let i = 0; i < days.length; i++) {
       const letters = box.letters?.[days[i]] || [];
       const colors = box.colors?.[days[i]] || [];
+      const delays = box.delays?.[days[i]] || [];
       html += `
         <div class="weekday-col">
           <label>${dayNames[i]}</label>
@@ -251,6 +274,10 @@ function showSetup() {
       for (let trigger = 0; trigger < triggersPerDay; trigger++) {
         const letter = letters[trigger] || "";
         const color = colors[trigger] || defaultColor;
+        const rawDelay = delays[trigger];
+        const parsedDelay = Number(rawDelay);
+        const delayValue = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : defaultDelay;
+        const delayDisplay = delayValue.toString();
         const letterOptionsHtml = letterOptions.map(c =>
           `<option value="${c}" ${c === letter ? "selected" : ""}>${letterLabels[c] || c}</option>`).join("");
         html += `
@@ -260,6 +287,10 @@ function showSetup() {
                 ${letterOptionsHtml}
               </select>
               <input type="color" value="${color}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'color')">
+              <div class="delay-input-wrapper">
+                <span>Verzögerung (s)</span>
+                <input type="number" class="delay-input" min="0" step="0.1" value="${delayDisplay}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
+              </div>
             </div>`;
       }
       html += `
@@ -306,19 +337,32 @@ function updateWord(day, word, maxLength, inputElement) {
 function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', updateUI = true, inputElement = null) {
   knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
   const slotIndex = Number(triggerIndex);
+  if (inputElement) {
+    inputElement.classList.add('pending');
+  }
   if (fieldType === 'letter') {
     knownBoxes[hostname].letters[day][slotIndex] = value;
-  } else {
+  } else if (fieldType === 'color') {
     const colorValue = value || defaultColor;
     knownBoxes[hostname].colors[day][slotIndex] = colorValue;
     value = colorValue;
+  } else if (fieldType === 'delay') {
+    let numericValue = typeof value === 'number' ? value : parseFloat(value);
+    if (!Number.isFinite(numericValue) || numericValue < 0) {
+      numericValue = defaultDelay;
+    }
+    numericValue = Math.round((numericValue + Number.EPSILON) * 1000) / 1000;
+    knownBoxes[hostname].delays[day][slotIndex] = numericValue;
+    value = numericValue;
   }
 
   const payload = { hostname, day, triggerIndex: slotIndex };
   if (fieldType === 'letter') {
     payload.letter = value;
-  } else {
+  } else if (fieldType === 'color') {
     payload.color = value;
+  } else if (fieldType === 'delay') {
+    payload.delay = value;
   }
 
   fetch("/update_box", {
