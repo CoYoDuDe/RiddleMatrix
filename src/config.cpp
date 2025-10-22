@@ -96,6 +96,7 @@ void saveConfig() {
     EEPROM.put(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
     uint16_t version = EEPROM_CONFIG_VERSION;
     EEPROM.put(EEPROM_OFFSET_CONFIG_VERSION, version);
+    EEPROM.put(EEPROM_OFFSET_CONFIG_VERSION_LEGACY, version);
     EEPROM.commit();
 
     Serial.println(F("✅ Einstellungen erfolgreich gespeichert!"));
@@ -114,9 +115,22 @@ void loadConfig() {
 
     uint16_t storedVersion = 0xFFFF;
     bool migratedLegacyLayout = false;
+    bool configVersionStoredAtLegacyOffset = false;
     EEPROM.get(EEPROM_OFFSET_CONFIG_VERSION, storedVersion);
 
+    if (storedVersion == 0xFFFF || storedVersion == 0x0000) {
+        uint16_t legacyVersion = 0xFFFF;
+        EEPROM.get(EEPROM_OFFSET_CONFIG_VERSION_LEGACY, legacyVersion);
+        if (legacyVersion != 0xFFFF && legacyVersion != 0x0000) {
+            storedVersion = legacyVersion;
+            configVersionStoredAtLegacyOffset = true;
+        }
+    }
+
     if (storedVersion == EEPROM_CONFIG_VERSION) {
+        if (configVersionStoredAtLegacyOffset) {
+            Serial.println(F("ℹ️ Legacy-Konfigurationsversions-Offset gefunden – aktualisiere auf neues Layout."));
+        }
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
     } else {
@@ -194,7 +208,7 @@ void loadConfig() {
 
     Serial.println(F("✅ EEPROM-Daten geladen!"));
 
-    bool eepromUpdated = migratedLegacyLayout;
+    bool eepromUpdated = migratedLegacyLayout || configVersionStoredAtLegacyOffset;
 
     if (strlen(wifi_ssid) == 0 || wifi_ssid[0] == '\xFF') {
         Serial.println(F("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte..."));
