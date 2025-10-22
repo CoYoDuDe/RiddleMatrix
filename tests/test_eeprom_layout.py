@@ -40,6 +40,9 @@ def test_new_letter_matrix_offsets() -> None:
     colors_end = constants["EEPROM_OFFSET_DAILY_LETTER_COLORS"] + constants["NUM_TRIGGERS"] * constants["NUM_DAYS"] * constants["COLOR_STRING_LENGTH"]
     assert colors_end <= constants["EEPROM_OFFSET_DISPLAY_BRIGHTNESS"], "Farb-Block überschneidet sich mit Display-Parametern"
 
+    matrix_end = constants["EEPROM_OFFSET_TRIGGER_DELAY_MATRIX"] + constants["EEPROM_TRIGGER_DELAY_MATRIX_SIZE"]
+    assert matrix_end <= constants["EEPROM_OFFSET_AUTO_INTERVAL"], "Verzögerungsmatrix überschneidet sich mit Auto-Intervall"
+
 
 def test_eeprom_usage_fits_into_memory() -> None:
     constants = _parse_constants()
@@ -50,4 +53,4 @@ def test_eeprom_usage_fits_into_memory() -> None:
 
     assert wifi_connect_end <= eeprom_size
     assert version_end <= eeprom_size
-    assert constants["EEPROM_CONFIG_VERSION"] >= 2
+    assert constants["EEPROM_CONFIG_VERSION"] >= 3
