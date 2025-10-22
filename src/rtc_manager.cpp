@@ -38,14 +38,65 @@ int getRTCWeekday() {
     return now.dayOfTheWeek();
 }
 
-void setRTCFromWeb(String date, String time) {
+bool setRTCFromWeb(const String &date, const String &time) {
     enableRTC();
-    int year, month, day, hour, minute, second;
-    sscanf(date.c_str(), "%d-%d-%d", &year, &month, &day);
-    sscanf(time.c_str(), "%d:%d:%d", &hour, &minute, &second);
+
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+
+    const int parsedDate = sscanf(date.c_str(), "%d-%d-%d", &year, &month, &day);
+    const int parsedTime = sscanf(time.c_str(), "%d:%d:%d", &hour, &minute, &second);
+
+    if (parsedDate != 3 || parsedTime != 3) {
+        Serial.println(F("❌ Fehler: Ungültiges Datums- oder Zeitformat übermittelt."));
+        enableRS485();
+        return false;
+    }
+
+    auto isLeapYear = [](int y) -> bool {
+        return ((y % 4 == 0) && (y % 100 != 0)) || (y % 400 == 0);
+    };
+
+    auto daysInMonth = [&](int y, int m) -> int {
+        if (m < 1 || m > 12) {
+            return 0;
+        }
+
+        const int daysPerMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        int days = daysPerMonth[m - 1];
+        if (m == 2 && isLeapYear(y)) {
+            days = 29;
+        }
+        return days;
+    };
+
+    if (year < 2000 || year > 2099) {
+        Serial.println(F("❌ Fehler: Jahr außerhalb des gültigen Bereichs (2000-2099)."));
+        enableRS485();
+        return false;
+    }
+
+    const int maxDay = daysInMonth(year, month);
+    if (maxDay == 0 || day < 1 || day > maxDay) {
+        Serial.println(F("❌ Fehler: Ungültiges Datum übermittelt."));
+        enableRS485();
+        return false;
+    }
+
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+        Serial.println(F("❌ Fehler: Ungültige Uhrzeit übermittelt."));
+        enableRS485();
+        return false;
+    }
+
     rtc.adjust(DateTime(year, month, day, hour, minute, second));
     enableRS485();
     Serial.println(F("🕒 RTC wurde aktualisiert!"));
+    return true;
 }
 
 void syncTimeWithNTP() {
