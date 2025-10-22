@@ -51,8 +51,13 @@ static constexpr size_t EEPROM_TRIGGER_DELAY_MATRIX_SIZE = NUM_TRIGGERS * NUM_DA
 static constexpr uint16_t EEPROM_OFFSET_AUTO_INTERVAL = EEPROM_OFFSET_TRIGGER_DELAY_MATRIX + EEPROM_TRIGGER_DELAY_MATRIX_SIZE;
 static constexpr uint16_t EEPROM_OFFSET_AUTO_MODE = EEPROM_OFFSET_AUTO_INTERVAL + sizeof(unsigned long);
 static constexpr uint16_t EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT = EEPROM_OFFSET_AUTO_MODE + sizeof(uint8_t);
-static constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION = 400;
+static constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION = EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT + sizeof(int);
 static constexpr uint16_t EEPROM_CONFIG_VERSION = 3;
+
+static_assert(EEPROM_OFFSET_CONFIG_VERSION >= EEPROM_OFFSET_TRIGGER_DELAY_MATRIX + EEPROM_TRIGGER_DELAY_MATRIX_SIZE,
+              "Config version offset overlaps trigger delay matrix");
+static_assert(EEPROM_OFFSET_CONFIG_VERSION + sizeof(uint16_t) <= EEPROM_SIZE,
+              "Config version exceeds allocated EEPROM size");
 
 // **Standard-WiFi-Daten (werden bei Erststart gesetzt)**
 extern char wifi_ssid[50];
