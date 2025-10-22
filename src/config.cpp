@@ -96,7 +96,10 @@ void saveConfig() {
     EEPROM.put(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
     uint16_t version = EEPROM_CONFIG_VERSION;
     EEPROM.put(EEPROM_OFFSET_CONFIG_VERSION, version);
-    EEPROM.put(EEPROM_OFFSET_CONFIG_VERSION_LEGACY, version);
+    // Do not write to EEPROM_OFFSET_CONFIG_VERSION_LEGACY here because that
+    // address overlaps with the trigger delay matrix in the current layout.
+    // We only read from the legacy offset during migration to avoid
+    // corrupting saved delay values.
     EEPROM.commit();
 
     Serial.println(F("✅ Einstellungen erfolgreich gespeichert!"));
