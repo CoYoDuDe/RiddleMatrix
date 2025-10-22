@@ -2,6 +2,26 @@
 #include "rtc_manager.h"
 
 DisplayLetterError lastDisplayLetterError = DisplayLetterError::None;
+bool pendingTriggerActive = false;
+
+namespace {
+
+constexpr size_t MAX_PENDING_TRIGGERS = NUM_TRIGGERS * 3;
+
+PendingTrigger pendingQueue[MAX_PENDING_TRIGGERS];
+size_t pendingTriggerCount = 0;
+
+void shiftPendingQueue(size_t fromIndex) {
+    if (fromIndex >= pendingTriggerCount) {
+        return;
+    }
+
+    for (size_t i = fromIndex + 1; i < pendingTriggerCount; ++i) {
+        pendingQueue[i - 1] = pendingQueue[i];
+    }
+}
+
+} // namespace
 
 void clearDisplay() {
     if (alreadyCleared) {
@@ -16,6 +36,114 @@ void clearDisplay() {
 
     alreadyCleared = true;
     triggerActive = false;
+}
+
+bool isTriggerPending(uint8_t triggerIndex) {
+    if (triggerIndex >= NUM_TRIGGERS) {
+        return false;
+    }
+
+    for (size_t i = 0; i < pendingTriggerCount; ++i) {
+        if (pendingQueue[i].triggerIndex == triggerIndex) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool enqueuePendingTrigger(uint8_t triggerIndex, bool fromWeb) {
+    if (triggerIndex >= NUM_TRIGGERS) {
+        Serial.println(F("⚠️ Ungültiger Trigger-Index beim Planen – Vorgang abgebrochen."));
+        return false;
+    }
+
+    if (triggerActive) {
+        Serial.println(F("⚠️ Anzeige läuft noch – neuer Trigger wird verworfen."));
+        return false;
+    }
+
+    if (pendingTriggerCount >= MAX_PENDING_TRIGGERS) {
+        Serial.println(F("⚠️ Zu viele geplante Trigger – bitte warten, bis ein Trigger abgearbeitet wurde."));
+        return false;
+    }
+
+    if (isTriggerPending(triggerIndex)) {
+        Serial.println(F("⚠️ Trigger wurde bereits geplant – doppelter Eintrag wird ignoriert."));
+        return false;
+    }
+
+    int today = getRTCWeekday();
+    if (today < 0 || today >= static_cast<int>(NUM_DAYS)) {
+        Serial.println(F("⚠️ Ungültiger Wochentag – Trigger kann nicht geplant werden."));
+        return false;
+    }
+
+    unsigned long delaySeconds = letter_trigger_delays[triggerIndex][static_cast<size_t>(today)];
+    unsigned long executeAt = millis() + (delaySeconds * 1000UL);
+
+    pendingQueue[pendingTriggerCount++] = {triggerIndex, executeAt, fromWeb};
+    pendingTriggerActive = true;
+
+    Serial.print(F("📥 Geplanter Trigger "));
+    Serial.print(triggerIndex + 1);
+    Serial.print(F(" aus Quelle "));
+    Serial.println(fromWeb ? F("Web") : F("Seriell"));
+
+    if (delaySeconds == 0) {
+        Serial.println(F("⚡ Keine Verzögerung konfiguriert – Ausführung erfolgt beim nächsten Durchlauf."));
+    } else {
+        Serial.print(F("⏱️ Ausführung in "));
+        Serial.print(delaySeconds);
+        Serial.println(F(" Sekunden geplant."));
+    }
+
+    return true;
+}
+
+void processPendingTriggers() {
+    if (pendingTriggerCount == 0) {
+        pendingTriggerActive = false;
+        return;
+    }
+
+    if (triggerActive) {
+        return;
+    }
+
+    unsigned long now = millis();
+    size_t index = 0;
+
+    while (index < pendingTriggerCount) {
+        const PendingTrigger current = pendingQueue[index];
+
+        if (static_cast<long>(now - current.executeAt) >= 0) {
+            shiftPendingQueue(index);
+            --pendingTriggerCount;
+            pendingTriggerActive = pendingTriggerCount > 0;
+
+            Serial.print(F("🚀 Ausführung des geplanten Triggers "));
+            Serial.print(current.triggerIndex + 1);
+            Serial.print(F(" (Quelle: "));
+            Serial.print(current.fromWeb ? F("Web") : F("Seriell"));
+            Serial.println(F(")"));
+
+            handleTrigger(static_cast<char>('1' + current.triggerIndex), false);
+
+            if (triggerActive) {
+                break;
+            }
+
+            now = millis();
+            continue;
+        }
+
+        ++index;
+    }
+
+    if (pendingTriggerCount == 0) {
+        pendingTriggerActive = false;
+    }
 }
 
 bool displayLetter(uint8_t triggerIndex, char letter) {
@@ -153,13 +281,15 @@ void handleTrigger(char triggerType, bool isAutoMode) {
         Serial.print(F(" zeigt Buchstabe: "));
         Serial.println(letter);
 
-        unsigned long delayTime = 0;
+        unsigned long delayTime = letter_trigger_delays[triggerIndex][delayDayIndex];
         if (!isAutoMode) {
-            delayTime = letter_trigger_delays[triggerIndex][delayDayIndex];
-            Serial.print(F("⏳ Warte auf Trigger-Verzögerung: "));
-            Serial.print(delayTime);
-            Serial.println(F(" Sekunden..."));
-            delay(delayTime * 1000UL);
+            if (delayTime == 0) {
+                Serial.println(F("⚡ Keine Verzögerung für diesen Trigger hinterlegt."));
+            } else {
+                Serial.print(F("⏳ Konfigurierte Verzögerung: "));
+                Serial.print(delayTime);
+                Serial.println(F(" Sekunden (bereits eingehalten)."));
+            }
         }
 
         bool displayed = displayLetter(triggerIndex, letter);
@@ -194,8 +324,14 @@ void checkTrigger() {
     if (Serial.available() > 0) {
         char receivedChar = Serial.read();
         if (receivedChar == '1' || receivedChar == '2' || receivedChar == '3') {
-            Serial.println(F("🔔 Trigger erhalten: Zeige heutigen Buchstaben!"));
-            handleTrigger(receivedChar, false);
+            uint8_t triggerIndex = static_cast<uint8_t>(receivedChar - '1');
+
+            Serial.print(F("🔔 Serieller Trigger für Eingang "));
+            Serial.println(triggerIndex + 1);
+
+            if (enqueuePendingTrigger(triggerIndex, false)) {
+                Serial.println(F("🗓️ Trigger wurde zur Ausführung eingeplant."));
+            }
         } else {
             Serial.print(F("❌ Unbekannter Trigger: "));
             Serial.println(receivedChar);
