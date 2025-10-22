@@ -82,7 +82,7 @@ bool enqueuePendingTrigger(uint8_t triggerIndex, bool fromWeb) {
     unsigned long delaySeconds = letter_trigger_delays[triggerIndex][static_cast<size_t>(today)];
     unsigned long executeAt = millis() + (delaySeconds * 1000UL);
 
-    pendingQueue[pendingTriggerCount++] = {triggerIndex, executeAt, fromWeb};
+    pendingQueue[pendingTriggerCount++] = {triggerIndex, executeAt, fromWeb, static_cast<int8_t>(today)};
     pendingTriggerActive = true;
 
     Serial.print(F("📥 Geplanter Trigger "));
@@ -128,7 +128,7 @@ void processPendingTriggers() {
             Serial.print(current.fromWeb ? F("Web") : F("Seriell"));
             Serial.println(F(")"));
 
-            handleTrigger(static_cast<char>('1' + current.triggerIndex), false);
+            handleTrigger(static_cast<char>('1' + current.triggerIndex), false, static_cast<int>(current.scheduledWeekday));
 
             if (triggerActive) {
                 break;
@@ -146,7 +146,7 @@ void processPendingTriggers() {
     }
 }
 
-bool displayLetter(uint8_t triggerIndex, char letter) {
+bool displayLetter(uint8_t triggerIndex, char letter, int weekdayOverride) {
     lastDisplayLetterError = DisplayLetterError::None;
 
     if (triggerIndex >= NUM_TRIGGERS) {
@@ -175,18 +175,20 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         Serial.println(letter);
     }
 
-    int today = getRTCWeekday();
-    Serial.print(F("📅 Heutiger Wochentag: "));
-    Serial.println(today);
+    bool useOverride = weekdayOverride >= 0 && weekdayOverride < static_cast<int>(NUM_DAYS);
+    int effectiveDay = useOverride ? weekdayOverride : getRTCWeekday();
 
-    if (today < 0 || today >= static_cast<int>(NUM_DAYS)) {
+    Serial.print(useOverride ? F("📅 Verwende gespeicherten Wochentag: ") : F("📅 Heutiger Wochentag: "));
+    Serial.println(effectiveDay);
+
+    if (effectiveDay < 0 || effectiveDay >= static_cast<int>(NUM_DAYS)) {
         Serial.println(F("⚠️ Ungültiger Wochentag – breche Anzeige ab."));
         triggerActive = false;
         lastDisplayLetterError = DisplayLetterError::InvalidWeekday;
         return false;
     }
 
-    String selectedColor(dailyLetterColors[triggerIndex][today]);
+    String selectedColor(dailyLetterColors[triggerIndex][effectiveDay]);
 
     Serial.print(F("🎨 Geladene Farbe für heute: "));
     Serial.println(selectedColor);
@@ -246,7 +248,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
     return true;
 }
 
-void handleTrigger(char triggerType, bool isAutoMode) {
+void handleTrigger(char triggerType, bool isAutoMode, int weekdayOverride) {
     uint8_t triggerIndex = 0;
     if (triggerType >= '1' && triggerType <= ('0' + NUM_TRIGGERS)) {
         triggerIndex = static_cast<uint8_t>(triggerType - '1');
@@ -264,59 +266,58 @@ void handleTrigger(char triggerType, bool isAutoMode) {
         server.end();
     }
 
-    int today = getRTCWeekday();
-    bool validDay = today >= 0 && today < static_cast<int>(NUM_DAYS);
-    size_t delayDayIndex = validDay ? static_cast<size_t>(today) : 0;
+    bool overrideValid = weekdayOverride >= 0 && weekdayOverride < static_cast<int>(NUM_DAYS);
+    int effectiveDay = overrideValid ? weekdayOverride : getRTCWeekday();
+    bool validDay = effectiveDay >= 0 && effectiveDay < static_cast<int>(NUM_DAYS);
 
     if (!validDay) {
-        Serial.println(F("⚠️ Ungültiger Wochentag! Nutze Fallback-Index 0 für Verzögerungen."));
+        Serial.println(F("⚠️ Ungültiger Wochentag! Anzeige wird übersprungen."));
+        return;
     }
 
-    if (validDay) {
-        char letter = dailyLetters[triggerIndex][today];
-        Serial.print(F("📅 Heute ist "));
-        Serial.print(daysOfTheWeek[today]);
-        Serial.print(F(" → Trigger "));
-        Serial.print(triggerIndex + 1);
-        Serial.print(F(" zeigt Buchstabe: "));
-        Serial.println(letter);
+    size_t delayDayIndex = static_cast<size_t>(effectiveDay);
+    char letter = dailyLetters[triggerIndex][effectiveDay];
 
-        unsigned long delayTime = letter_trigger_delays[triggerIndex][delayDayIndex];
-        if (!isAutoMode) {
-            if (delayTime == 0) {
-                Serial.println(F("⚡ Keine Verzögerung für diesen Trigger hinterlegt."));
-            } else {
-                Serial.print(F("⏳ Konfigurierte Verzögerung: "));
-                Serial.print(delayTime);
-                Serial.println(F(" Sekunden (bereits eingehalten)."));
-            }
-        }
+    Serial.print(F("📅 "));
+    Serial.print(overrideValid ? F("Geplanter Tag ") : F("Heute ist "));
+    Serial.print(daysOfTheWeek[effectiveDay]);
+    Serial.print(F(" → Trigger "));
+    Serial.print(triggerIndex + 1);
+    Serial.print(F(" zeigt Buchstabe: "));
+    Serial.println(letter);
 
-        bool displayed = displayLetter(triggerIndex, letter);
-
-        if (displayed) {
-            alreadyCleared = false;
+    unsigned long delayTime = letter_trigger_delays[triggerIndex][delayDayIndex];
+    if (!isAutoMode) {
+        if (delayTime == 0) {
+            Serial.println(F("⚡ Keine Verzögerung für diesen Trigger hinterlegt."));
         } else {
-            Serial.print(F("❌ Anzeige fehlgeschlagen: "));
-            switch (lastDisplayLetterError) {
-                case DisplayLetterError::TriggerAlreadyActive:
-                    Serial.println(F("Ein anderer Buchstabe wird bereits angezeigt."));
-                    break;
-                case DisplayLetterError::InvalidWeekday:
-                    Serial.println(F("Ungültiger Wochentag vom RTC-Modul."));
-                    break;
-                case DisplayLetterError::LetterNotFound:
-                    Serial.println(F("Kein Muster für den angeforderten Buchstaben."));
-                    break;
-                case DisplayLetterError::None:
-                default:
-                    Serial.println(F("Unbekannter Fehler."));
-                    break;
-            }
+            Serial.print(F("⏳ Konfigurierte Verzögerung: "));
+            Serial.print(delayTime);
+            Serial.println(F(" Sekunden (bereits eingehalten)."));
         }
+    }
 
+    bool displayed = displayLetter(triggerIndex, letter, effectiveDay);
+
+    if (displayed) {
+        alreadyCleared = false;
     } else {
-        Serial.println(F("⚠️ Ungültiger Wochentag! Anzeige wird übersprungen."));
+        Serial.print(F("❌ Anzeige fehlgeschlagen: "));
+        switch (lastDisplayLetterError) {
+            case DisplayLetterError::TriggerAlreadyActive:
+                Serial.println(F("Ein anderer Buchstabe wird bereits angezeigt."));
+                break;
+            case DisplayLetterError::InvalidWeekday:
+                Serial.println(F("Ungültiger Wochentag vom RTC-Modul."));
+                break;
+            case DisplayLetterError::LetterNotFound:
+                Serial.println(F("Kein Muster für den angeforderten Buchstaben."));
+                break;
+            case DisplayLetterError::None:
+            default:
+                Serial.println(F("Unbekannter Fehler."));
+                break;
+        }
     }
 }
 

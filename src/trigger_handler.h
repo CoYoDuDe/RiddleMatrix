@@ -10,6 +10,7 @@ struct PendingTrigger {
     uint8_t triggerIndex;
     unsigned long executeAt;
     bool fromWeb;
+    int8_t scheduledWeekday;
 };
 
 extern bool pendingTriggerActive;
@@ -26,9 +27,9 @@ enum class DisplayLetterError : uint8_t {
 extern DisplayLetterError lastDisplayLetterError;
 
 // **Funktion: Buchstaben oder Sonderzeichen anzeigen**
-bool displayLetter(uint8_t triggerIndex, char letter);
+bool displayLetter(uint8_t triggerIndex, char letter, int weekdayOverride = -1);
 
-void handleTrigger(char triggerType, bool isAutoMode = false);
+void handleTrigger(char triggerType, bool isAutoMode = false, int weekdayOverride = -1);
 
 bool enqueuePendingTrigger(uint8_t triggerIndex, bool fromWeb);
 
