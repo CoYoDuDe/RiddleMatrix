@@ -8,8 +8,17 @@ extern bool alreadyCleared;
 
 void clearDisplay();
 
+enum class DisplayLetterError : uint8_t {
+    None = 0,
+    TriggerAlreadyActive,
+    InvalidWeekday,
+    LetterNotFound
+};
+
+extern DisplayLetterError lastDisplayLetterError;
+
 // **Funktion: Buchstaben oder Sonderzeichen anzeigen**
-void displayLetter(uint8_t triggerIndex, char letter);
+bool displayLetter(uint8_t triggerIndex, char letter);
 
 void handleTrigger(char triggerType, bool isAutoMode = false);
 
