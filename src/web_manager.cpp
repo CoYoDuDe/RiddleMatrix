@@ -7,6 +7,8 @@ namespace {
 
 constexpr size_t MAX_JSON_BODY_SIZE = 4096;
 constexpr size_t UPDATE_JSON_CAPACITY = 4096;
+constexpr size_t MIN_SSID_LENGTH = 2;
+constexpr size_t MIN_HOSTNAME_LENGTH = 2;
 
 struct UpdateAllLettersContext {
     String body;
@@ -450,6 +452,7 @@ void setupWebServer() {
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
         html += "<form id='wifiForm'>";
+        html += "<p>SSID und Hostname sind Pflichtfelder (mindestens 2 Zeichen), das Passwort ist optional.</p>";
         html += "SSID: <input type='text' name='ssid' value='" + escapeHtml(String(wifi_ssid)) + "'><br>";
         html += "Passwort: <input type='password' name='password'><br>";
         html += "Hostname: <input type='text' name='hostname' value='" + escapeHtml(String(hostname)) + "'><br>";
@@ -598,15 +601,22 @@ void setupWebServer() {
                 validationError += "Passwort enthält ungültige Zeichen. ";
             }
 
-            if (!validationError.isEmpty()) {
-                request->send(400, "text/plain", "❌ Fehler: " + validationError);
-                return;
-            }
-
             const String sanitizedSsid = normalizeInput(ssidParam);
             const String sanitizedHostname = normalizeInput(hostnameParam);
             const String sanitizedPassword = hasPasswordParam ? normalizeInput(passwordParam) : String();
             const bool applyPassword = hasPasswordParam && !sanitizedPassword.isEmpty();
+
+            if (sanitizedSsid.length() < MIN_SSID_LENGTH) {
+                validationError += "SSID muss mindestens " + String(MIN_SSID_LENGTH) + " Zeichen enthalten. ";
+            }
+            if (sanitizedHostname.length() < MIN_HOSTNAME_LENGTH) {
+                validationError += "Hostname muss mindestens " + String(MIN_HOSTNAME_LENGTH) + " Zeichen enthalten. ";
+            }
+
+            if (!validationError.isEmpty()) {
+                request->send(400, "text/plain", "❌ Fehler: " + validationError);
+                return;
+            }
 
             auto copyWithTermination = [](const String &input, char *destination, size_t destinationSize) {
                 strncpy(destination, input.c_str(), destinationSize);
