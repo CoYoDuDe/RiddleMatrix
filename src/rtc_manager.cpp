@@ -4,6 +4,28 @@
 
 #include <time.h>
 
+namespace {
+
+volatile int cachedWeekday = -1;
+volatile unsigned long cachedWeekdayTimestamp = 0;
+volatile bool cachedWeekdayValid = false;
+
+constexpr unsigned long WEEKDAY_CACHE_MAX_AGE_MS = 5000UL;
+constexpr unsigned long SERIAL_IDLE_CHECK_DELAY_MS = 2UL;
+constexpr unsigned long SERIAL_IDLE_MAX_WAIT_MS = 20UL;
+
+void storeWeekdayInCache(int weekday) {
+  if (weekday >= 0 && weekday < static_cast<int>(NUM_DAYS)) {
+    cachedWeekday = weekday;
+    cachedWeekdayTimestamp = millis();
+    cachedWeekdayValid = true;
+  } else {
+    cachedWeekdayValid = false;
+  }
+}
+
+} // namespace
+
 void enableRTC() {
   digitalWrite(GPIO_RS485_ENABLE, HIGH);
   Serial.flush();
@@ -19,10 +41,58 @@ void enableRS485() {
   digitalWrite(GPIO_RS485_ENABLE, LOW);
 }
 
+bool isWeekdayCacheValid() {
+  return cachedWeekdayValid;
+}
+
+int getCachedWeekday() {
+  return cachedWeekdayValid ? cachedWeekday : -1;
+}
+
+void invalidateWeekdayCache() {
+  cachedWeekdayValid = false;
+}
+
+bool updateCachedWeekday(bool waitForIdle) {
+  if (!rtc_ok) {
+    cachedWeekdayValid = false;
+    return false;
+  }
+
+  const unsigned long now = millis();
+  if (cachedWeekdayValid && (now - cachedWeekdayTimestamp) < WEEKDAY_CACHE_MAX_AGE_MS) {
+    return true;
+  }
+
+  if (Serial.available() > 0) {
+    delay(SERIAL_IDLE_CHECK_DELAY_MS);
+
+    if (waitForIdle) {
+      const unsigned long waitStart = millis();
+      while (Serial.available() > 0 && (millis() - waitStart) < SERIAL_IDLE_MAX_WAIT_MS) {
+        delay(SERIAL_IDLE_CHECK_DELAY_MS);
+      }
+    }
+
+    if (Serial.available() > 0) {
+      return cachedWeekdayValid;
+    }
+  }
+
+  enableRTC();
+  DateTime nowRtc = rtc.now();
+  enableRS485();
+
+  storeWeekdayInCache(nowRtc.dayOfTheWeek());
+  return cachedWeekdayValid;
+}
+
 String getRTCTime() {
     enableRTC();
     DateTime now = rtc.now();
     enableRS485();
+
+    storeWeekdayInCache(now.dayOfTheWeek());
 
     char buffer[40];
     snprintf(buffer, sizeof(buffer), "%s, %04d-%02d-%02d %02d:%02d:%02d",
@@ -32,10 +102,11 @@ String getRTCTime() {
 }
 
 int getRTCWeekday() {
-    enableRTC();
-    DateTime now = rtc.now();
-    enableRS485();
-    return now.dayOfTheWeek();
+    if (!updateCachedWeekday(true) && !isWeekdayCacheValid()) {
+        return -1;
+    }
+
+    return getCachedWeekday();
 }
 
 bool setRTCFromWeb(const String &date, const String &time) {
@@ -93,7 +164,9 @@ bool setRTCFromWeb(const String &date, const String &time) {
         return false;
     }
 
-    rtc.adjust(DateTime(year, month, day, hour, minute, second));
+    const DateTime newDateTime(year, month, day, hour, minute, second);
+    rtc.adjust(newDateTime);
+    storeWeekdayInCache(newDateTime.dayOfTheWeek());
     enableRS485();
     Serial.println(F("🕒 RTC wurde aktualisiert!"));
     return true;
@@ -110,9 +183,11 @@ bool syncTimeWithNTP() {
     }
 
     enableRTC();
-    rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
-                        timeinfo.tm_mday, timeinfo.tm_hour,
-                        timeinfo.tm_min, timeinfo.tm_sec));
+    const DateTime ntpDateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
+                               timeinfo.tm_mday, timeinfo.tm_hour,
+                               timeinfo.tm_min, timeinfo.tm_sec);
+    rtc.adjust(ntpDateTime);
+    storeWeekdayInCache(ntpDateTime.dayOfTheWeek());
     enableRS485();
     Serial.println(F("✅ NTP Synchronisierung erfolgreich!"));
     return true;

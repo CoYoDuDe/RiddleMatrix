@@ -8,6 +8,7 @@ bool pendingTriggerActive = false;
 namespace {
 
 constexpr size_t MAX_PENDING_TRIGGERS = NUM_TRIGGERS * 3;
+constexpr unsigned long WEEKDAY_CACHE_RETRY_DELAY_MS = 5UL;
 
 PendingTrigger pendingQueue[MAX_PENDING_TRIGGERS];
 size_t pendingTriggerCount = 0;
@@ -46,6 +47,35 @@ void ensureWiFiSymbolAfterError() {
     if (wifiConnected && !wifiDisabled) {
         drawWiFiSymbol();
     }
+}
+
+bool ensureWeekdayCacheForTriggers() {
+    if (isWeekdayCacheValid()) {
+        return true;
+    }
+
+    Serial.println(F("⌛ Warte auf gültigen Wochentag aus dem RTC-Cache..."));
+    updateCachedWeekday(true);
+
+    if (!isWeekdayCacheValid()) {
+        delay(WEEKDAY_CACHE_RETRY_DELAY_MS);
+        updateCachedWeekday(true);
+    }
+
+    if (!isWeekdayCacheValid()) {
+        Serial.println(F("⚠️ Wochentag-Cache konnte nicht aktualisiert werden."));
+        return false;
+    }
+
+    return true;
+}
+
+int resolveWeekdayForTriggerHandling() {
+    if (!ensureWeekdayCacheForTriggers()) {
+        return -1;
+    }
+
+    return getCachedWeekday();
 }
 
 } // namespace
@@ -100,9 +130,9 @@ bool enqueuePendingTrigger(uint8_t triggerIndex, bool fromWeb) {
         return false;
     }
 
-    int today = getRTCWeekday();
+    int today = resolveWeekdayForTriggerHandling();
     if (today < 0 || today >= static_cast<int>(NUM_DAYS)) {
-        Serial.println(F("⚠️ Ungültiger Wochentag – Trigger kann nicht geplant werden."));
+        Serial.println(F("⚠️ Ungültiger Wochentag aus Cache – Trigger kann nicht geplant werden."));
         return false;
     }
 
@@ -315,7 +345,7 @@ void handleTrigger(char triggerType, bool isAutoMode) {
         server.end();
     }
 
-    int today = getRTCWeekday();
+    int today = resolveWeekdayForTriggerHandling();
     bool validDay = today >= 0 && today < static_cast<int>(NUM_DAYS);
     size_t delayDayIndex = validDay ? static_cast<size_t>(today) : 0;
 
