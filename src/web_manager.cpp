@@ -613,7 +613,10 @@ void setupWebServer() {
             if (applyPassword) {
                 passwordTruncated = copyWithTermination(sanitizedPassword, wifi_password, sizeof(wifi_password));
             } else {
-                wifi_password[sizeof(wifi_password) - 1] = '\0';
+                for (size_t idx = 0; idx < sizeof(wifi_password); ++idx) {
+                    wifi_password[idx] = '\0';
+                }
+                Serial.println(F("[WebManager] WLAN-Passwort zurückgesetzt."));
             }
 
             saveConfig();
