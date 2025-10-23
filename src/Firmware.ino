@@ -52,8 +52,9 @@ void setup() {
 
 void loop() {
     static unsigned long lastDebugTime = 0;
+    static unsigned long lastWeekdayUpdate = 0;
 
-    if (triggerActive) {  
+    if (triggerActive) {
         unsigned long elapsedTime = millis() - letterStartTime;
 
         // **Nur alle 1000 ms (1 Sekunde) eine Debug-Ausgabe**
@@ -72,6 +73,12 @@ void loop() {
             }
             triggerActive = false;
         }
+    }
+
+    const unsigned long nowForWeekday = millis();
+    if ((nowForWeekday - lastWeekdayUpdate) >= 500UL) {
+        updateCachedWeekday();
+        lastWeekdayUpdate = nowForWeekday;
     }
 
     checkWiFi();
