@@ -599,6 +599,7 @@ void setupWebServer() {
             const String sanitizedHostname = normalizeInput(hostnameParam);
             const String sanitizedPassword = hasPasswordParam ? normalizeInput(passwordParam) : String();
             const bool applyPassword = hasPasswordParam && !sanitizedPassword.isEmpty();
+            const bool clearPassword = hasPasswordParam && sanitizedPassword.isEmpty();
 
             auto copyWithTermination = [](const String &input, char *destination, size_t destinationSize) {
                 strncpy(destination, input.c_str(), destinationSize);
@@ -612,7 +613,7 @@ void setupWebServer() {
 
             if (applyPassword) {
                 passwordTruncated = copyWithTermination(sanitizedPassword, wifi_password, sizeof(wifi_password));
-            } else {
+            } else if (clearPassword) {
                 for (size_t idx = 0; idx < sizeof(wifi_password); ++idx) {
                     wifi_password[idx] = '\0';
                 }
