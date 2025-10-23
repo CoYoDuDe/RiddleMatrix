@@ -5,6 +5,17 @@
 
 bool wifiSymbolVisible = false;
 
+void refreshWiFiIdleTimer(const __FlashStringHelper *reason) {
+    wifiStartTime = millis();
+
+    if (reason != nullptr) {
+        Serial.print(F("🔄 WiFi-Idle-Timer aktualisiert: "));
+        Serial.println(reason);
+    } else {
+        Serial.println(F("🔄 WiFi-Idle-Timer aktualisiert."));
+    }
+}
+
 void clearWiFiSymbol() {
     if (triggerActive) {
         Serial.println(F("⏳ WiFi-Symbol bleibt, weil ein Buchstabe aktiv ist."));
@@ -116,7 +127,7 @@ void connectWiFi() {
             Serial.println(F("⚠️ Hinweis: NTP Synchronisierung beim Verbindungsaufbau fehlgeschlagen."));
         }
         setupWebServer();
-        wifiStartTime = millis();
+        refreshWiFiIdleTimer(F("connectWiFi"));
     } else {
         Serial.println(F("\n⛔ WiFi Timeout! Verbindung fehlgeschlagen. WiFi bleibt aus."));
         wifiConnected = false;
@@ -140,7 +151,7 @@ void checkWiFi() {
 
             wifiConnected = true;
             wifiDisabled = false;
-            wifiStartTime = millis();
+            refreshWiFiIdleTimer(F("checkWiFi reconnect"));
 
             if (!triggerActive) {
                 drawWiFiSymbol();

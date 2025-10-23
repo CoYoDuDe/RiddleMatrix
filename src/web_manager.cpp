@@ -1,4 +1,5 @@
 #include "web_manager.h"
+#include "wifi_manager.h"
 #include <AsyncJson.h>
 #include <math.h>
 
@@ -438,7 +439,11 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 void setupWebServer() {
+    // ℹ️ Hinweis: Für jede neue Route mit Benutzerinteraktion unbedingt
+    //             refreshWiFiIdleTimer(...) aufrufen, damit der WLAN-Timeout
+    //             bei aktiver Nutzung zurückgesetzt wird (siehe wifi_manager.cpp).
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /"));
         String html = "<h1>Märchen Einstellungen</h1>";
 
         // **WiFi-Einstellungen**
@@ -550,10 +555,12 @@ void setupWebServer() {
     });
 
     server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /script.js"));
         request->send_P(200, "text/javascript", scriptJS);
     });
 
     server.on("/updateWiFi", HTTP_POST, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("POST /updateWiFi"));
         if (request->hasParam("ssid", true) && request->hasParam("hostname", true)) {
             const String ssidParam = request->getParam("ssid", true)->value();
             const String hostnameParam = request->getParam("hostname", true)->value();
@@ -639,6 +646,7 @@ void setupWebServer() {
     });
 
     server.on("/updateDisplaySettings", HTTP_POST, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("POST /updateDisplaySettings"));
         if (!(request->hasParam("brightness", true) &&
               request->hasParam("letter_time", true) &&
               request->hasParam("auto_interval", true))) {
@@ -694,6 +702,7 @@ void setupWebServer() {
     });
 
     server.on("/updateTriggerDelays", HTTP_POST, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("POST /updateTriggerDelays"));
         bool success = true;
 
         for (size_t trigger = 0; trigger < NUM_TRIGGERS && success; ++trigger) {
@@ -743,6 +752,7 @@ void setupWebServer() {
     });
 
     server.on("/api/trigger-delays", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /api/trigger-delays"));
         AsyncJsonResponse *response = new AsyncJsonResponse();
         JsonVariant root = response->getRoot();
         JsonObject delays = root.createNestedObject("delays");
@@ -763,6 +773,7 @@ void setupWebServer() {
         "/updateAllLetters",
         HTTP_POST,
         [](AsyncWebServerRequest *request) {
+            refreshWiFiIdleTimer(F("POST /updateAllLetters"));
             UpdateAllLettersContext *context = static_cast<UpdateAllLettersContext *>(request->_tempObject);
             auto cleanup = [&]() {
                 if (context != nullptr) {
@@ -969,7 +980,7 @@ void setupWebServer() {
                 }
 
                 saveConfig();
-                wifiStartTime = millis();
+                refreshWiFiIdleTimer(F("POST /updateAllLetters JSON"));
                 Serial.println(F("✅ JSON-Update: Buchstaben, Farben & Verzögerungen übernommen."));
                 cleanup();
                 sendJsonStatus(request, 200, "ok", F("Buchstaben, Farben & Verzögerungen gespeichert."));
@@ -1070,7 +1081,7 @@ void setupWebServer() {
             }
 
             saveConfig();
-            wifiStartTime = millis();
+            refreshWiFiIdleTimer(F("POST /updateAllLetters Formular"));
             if (expectDelays) {
                 Serial.println(F("✅ Formular-Update: Buchstaben, Farben & Verzögerungen gespeichert."));
             } else {
@@ -1114,6 +1125,7 @@ void setupWebServer() {
         });
 
     server.on("/displayLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /displayLetter"));
         if (!request->hasParam("char")) {
             request->send(400, "text/plain", "Fehlender Parameter!");
             return;
@@ -1139,7 +1151,7 @@ void setupWebServer() {
 
         if (displayed) {
             alreadyCleared = false;
-            wifiStartTime = millis();
+            refreshWiFiIdleTimer(F("GET /displayLetter success"));
             request->send(200, "text/plain", "✅ Buchstabe " + letter + " für Trigger " + String(triggerIndex + 1) + " angezeigt!");
             return;
         }
@@ -1171,6 +1183,7 @@ void setupWebServer() {
     });
 
     server.on("/triggerLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /triggerLetter"));
         if (triggerActive) {
             request->send(409, "text/plain", "❌ Fehler: Bereits aktiver Buchstabe verhindert neuen Trigger!");
             return;
@@ -1220,11 +1233,13 @@ void setupWebServer() {
     });
 
     server.on("/getTime", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /getTime"));
         String currentTime = getRTCTime();
         request->send(200, "text/plain", currentTime);
     });
 
     server.on("/setTime", HTTP_POST, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("POST /setTime"));
         if (request->hasParam("date", true) && request->hasParam("time", true)) {
             String date = request->getParam("date", true)->value();
             String time = request->getParam("time", true)->value();
@@ -1239,6 +1254,7 @@ void setupWebServer() {
     });
 
     server.on("/syncNTP", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /syncNTP"));
         if (syncTimeWithNTP()) {
             request->send(200, "text/plain", "✅ NTP Synchronisierung erfolgreich abgeschlossen!");
         } else {
@@ -1247,6 +1263,7 @@ void setupWebServer() {
     });
 
     server.on("/memory", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /memory"));
         request->send(200, "text/plain", String(ESP.getFreeHeap()));
     });
 

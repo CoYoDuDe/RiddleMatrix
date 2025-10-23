@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "web_manager.h"
+#include <Arduino.h>
 #include <ESP8266WiFi.h>
 
 extern bool wifiDisabled;
@@ -23,5 +24,8 @@ void disableWiFiAndServer();
 
 // **🔄 WiFi Reconnect**
 void checkWiFi();
+
+// **⏳ Idle-Timer für aktive Web-Nutzung zurücksetzen**
+void refreshWiFiIdleTimer(const __FlashStringHelper *reason = nullptr);
 
 #endif
