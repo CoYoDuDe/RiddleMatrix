@@ -17,6 +17,9 @@ void drawWiFiSymbol();
 // **🌐 WiFi verbinden**
 void connectWiFi();
 
+// **⏹️ WiFi & Webserver deaktivieren**
+void disableWiFiAndServer();
+
 // **🔄 WiFi Reconnect**
 void checkWiFi();
 
