@@ -322,7 +322,11 @@ void loadConfig() {
     if (restoredDefaultAutoInterval) {
         letter_auto_display_interval = 300UL;
     } else {
-        letter_auto_display_interval = std::min(std::max(letter_auto_display_interval, 30UL), 600UL);
+        if (letter_auto_display_interval < 30UL) {
+            letter_auto_display_interval = 30UL;
+        } else if (letter_auto_display_interval > 600UL) {
+            letter_auto_display_interval = 600UL;
+        }
     }
 
     if (originalAutoInterval != letter_auto_display_interval) {
