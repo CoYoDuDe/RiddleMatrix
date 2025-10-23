@@ -1279,4 +1279,6 @@ void setupWebServer() {
     });
 
     server.begin();
+    webServerRunning = true;
+    Serial.println(F("✅ Webserver gestartet und Listener aktiv."));
 }

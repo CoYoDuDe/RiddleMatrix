@@ -4,6 +4,7 @@
 // Funktionen aus wifi_manager.h implementiert
 
 bool wifiSymbolVisible = false;
+bool webServerRunning = false;
 
 void refreshWiFiIdleTimer(const __FlashStringHelper *reason) {
     wifiStartTime = millis();
@@ -90,7 +91,12 @@ void disableWiFiAndServer() {
         Serial.println(F("⏳ Aktive Anzeige – WiFi-Symbol bleibt vorerst bestehen."));
     }
 
-    server.end();
+    if (webServerRunning) {
+        server.end();
+        webServerRunning = false;
+    } else {
+        Serial.println(F("ℹ️ Webserver war bereits gestoppt."));
+    }
     WiFi.disconnect();
     WiFi.mode(WIFI_OFF);
     WiFi.softAPdisconnect(true);
@@ -156,6 +162,12 @@ void checkWiFi() {
             wifiConnected = true;
             wifiDisabled = false;
             refreshWiFiIdleTimer(F("checkWiFi reconnect"));
+
+            if (!webServerRunning) {
+                Serial.println(F("🌐 Webserver war gestoppt – starte Listener neu."));
+                server.begin();
+                webServerRunning = true;
+            }
 
             if (!triggerActive) {
                 drawWiFiSymbol();
