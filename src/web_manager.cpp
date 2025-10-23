@@ -1,4 +1,5 @@
 #include "web_manager.h"
+#include <AsyncJson.h>
 
 namespace {
 
@@ -49,6 +50,12 @@ String getLetterOptionLabel(char letter) {
             return String(letter);
     }
 }
+
+static_assert(NUM_DAYS == 7, "Erwartete sieben Wochentage für die JSON-Abbildung");
+
+constexpr const char *const DAY_KEYS[NUM_DAYS] = {
+    "so", "mo", "di", "mi", "do", "fr", "sa",
+};
 
 } // namespace
 
@@ -494,6 +501,23 @@ void setupWebServer() {
         } else {
             request->send(400, "text/plain", "❌ Fehler: Ungültige oder fehlende Verzögerungswerte!");
         }
+    });
+
+    server.on("/api/trigger-delays", HTTP_GET, [](AsyncWebServerRequest *request) {
+        AsyncJsonResponse *response = new AsyncJsonResponse();
+        JsonVariant root = response->getRoot();
+        JsonObject delays = root.createNestedObject("delays");
+
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            JsonArray dayArray = delays.createNestedArray(DAY_KEYS[day]);
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                dayArray.add(static_cast<unsigned long>(letter_trigger_delays[trigger][day]));
+            }
+        }
+
+        response->addHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        response->setLength();
+        request->send(response);
     });
 
     server.on("/updateAllLetters", HTTP_POST, [](AsyncWebServerRequest *request) {
