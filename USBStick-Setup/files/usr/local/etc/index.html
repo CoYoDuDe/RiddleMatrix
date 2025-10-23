@@ -163,11 +163,11 @@ function normalizeBox(box) {
     const delays = Array.isArray(box.delays[day]) ? box.delays[day].slice(0, triggersPerDay) : [];
     while (delays.length < triggersPerDay) delays.push(defaultDelay);
     box.delays[day] = delays.map(value => {
-      const numeric = typeof value === "number" ? value : parseFloat(value);
+      const numeric = typeof value === "number" ? value : parseFloat(String(value).replace(",", "."));
       if (!Number.isFinite(numeric) || numeric < 0) {
         return defaultDelay;
       }
-      return Math.round((numeric + Number.EPSILON) * 1000) / 1000;
+      return Math.round(numeric);
     });
   });
   return box;
@@ -275,8 +275,8 @@ function showSetup() {
         const letter = letters[trigger] || "";
         const color = colors[trigger] || defaultColor;
         const rawDelay = delays[trigger];
-        const parsedDelay = Number(rawDelay);
-        const delayValue = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : defaultDelay;
+        const parsedDelay = typeof rawDelay === "number" ? rawDelay : parseFloat(String(rawDelay).replace(",", "."));
+        const delayValue = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? Math.round(parsedDelay) : defaultDelay;
         const delayDisplay = delayValue.toString();
         const letterOptionsHtml = letterOptions.map(c =>
           `<option value="${c}" ${c === letter ? "selected" : ""}>${letterLabels[c] || c}</option>`).join("");
@@ -289,7 +289,7 @@ function showSetup() {
               <input type="color" value="${color}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'color')">
               <div class="delay-input-wrapper">
                 <span>Verzögerung (s)</span>
-                <input type="number" class="delay-input" min="0" step="0.1" value="${delayDisplay}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
+                <input type="number" class="delay-input" min="0" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
               </div>
             </div>`;
       }
@@ -347,13 +347,16 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
     knownBoxes[hostname].colors[day][slotIndex] = colorValue;
     value = colorValue;
   } else if (fieldType === 'delay') {
-    let numericValue = typeof value === 'number' ? value : parseFloat(value);
+    let numericValue = typeof value === 'number' ? value : parseFloat(String(value).replace(",", "."));
     if (!Number.isFinite(numericValue) || numericValue < 0) {
       numericValue = defaultDelay;
     }
-    numericValue = Math.round((numericValue + Number.EPSILON) * 1000) / 1000;
+    numericValue = Math.round(numericValue);
     knownBoxes[hostname].delays[day][slotIndex] = numericValue;
     value = numericValue;
+    if (inputElement) {
+      inputElement.value = numericValue.toString();
+    }
   }
 
   const payload = { hostname, day, triggerIndex: slotIndex };
