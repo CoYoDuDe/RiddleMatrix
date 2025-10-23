@@ -64,6 +64,10 @@ void loop() {
         if (elapsedTime >= ((unsigned long)letter_display_time * 1000UL)) {
             Serial.println(F("🧹 Anzeigezeit abgelaufen, Buchstabe wird gelöscht!"));
             clearDisplay();
+            if (!triggerActive && wifiConnected && !wifiDisabled) {
+                Serial.println(F("🔁 Sicherheits-Check: WiFi-Symbol nach dem Löschen erneut anzeigen."));
+                drawWiFiSymbol();
+            }
             triggerActive = false;
         }
     }
