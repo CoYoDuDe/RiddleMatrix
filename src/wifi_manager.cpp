@@ -103,8 +103,8 @@ void disableWiFiAndServer() {
 void connectWiFi() {
     Serial.println(F("🌐 Verbinde mit WiFi..."));
     WiFi.persistent(false);
+    WiFi.softAPdisconnect();
     WiFi.mode(WIFI_STA);
-    WiFi.softAPdisconnect(true);
     Serial.println(F("ℹ️ STA-Modus aktiviert, SoftAP getrennt."));
     WiFi.hostname(hostname);
     WiFi.begin(wifi_ssid, wifi_password);
