@@ -2,6 +2,37 @@
 
 namespace {
 
+String escapeHtml(const String &input) {
+    String escaped;
+    escaped.reserve(input.length());
+
+    for (size_t idx = 0; idx < input.length(); ++idx) {
+        const char character = input.charAt(idx);
+        switch (character) {
+            case '&':
+                escaped += F("&amp;");
+                break;
+            case '<':
+                escaped += F("&lt;");
+                break;
+            case '>':
+                escaped += F("&gt;");
+                break;
+            case '"':
+                escaped += F("&quot;");
+                break;
+            case '\'':
+                escaped += F("&#39;");
+                break;
+            default:
+                escaped += character;
+                break;
+        }
+    }
+
+    return escaped;
+}
+
 String getLetterOptionLabel(char letter) {
     switch (letter) {
         case '*':
@@ -207,18 +238,18 @@ void setupWebServer() {
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
         html += "<form id='wifiForm'>";
-        html += "SSID: <input type='text' name='ssid' value='" + String(wifi_ssid) + "'><br>";
+        html += "SSID: <input type='text' name='ssid' value='" + escapeHtml(String(wifi_ssid)) + "'><br>";
         html += "Passwort: <input type='password' name='password'><br>";
-        html += "Hostname: <input type='text' name='hostname' value='" + String(hostname) + "'><br>";
+        html += "Hostname: <input type='text' name='hostname' value='" + escapeHtml(String(hostname)) + "'><br>";
         html += "<button type='button' onclick='saveWiFi()'>Speichern</button>";
         html += "</form>";
 
         // **Anzeige-Einstellungen**
         html += "<h2>Anzeige-Einstellungen</h2>";
         html += "<form id='displayForm'>";
-        html += "Helligkeit: <input type='number' name='brightness' min='1' max='255' value='" + String(display_brightness) + "'><br>";
-        html += "Buchstaben-Anzeigezeit (Sekunden): <input type='number' name='letter_time' min='1' max='60' value='" + String(letter_display_time) + "'><br>";
-        html += "Automodus Intervall (Sekunden): <input type='number' name='auto_interval' min='30' max='600' value='" + String(letter_auto_display_interval) + "'><br>";
+        html += "Helligkeit: <input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'><br>";
+        html += "Buchstaben-Anzeigezeit (Sekunden): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
+        html += "Automodus Intervall (Sekunden): <input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'><br>";
         html += "<label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> Automodus aktivieren</label>";
         html += "<br><button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
         html += "</form>";
@@ -234,11 +265,11 @@ void setupWebServer() {
 
         for (size_t day = 0; day < NUM_DAYS; ++day) {
             html += "<tr>";
-            html += "<td>" + String(daysOfTheWeek[day]) + "</td>";
+            html += "<td>" + escapeHtml(String(daysOfTheWeek[day])) + "</td>";
 
             for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
                 String fieldName = "delay_" + String(trigger) + "_" + String(day);
-                html += "<td><input type='number' min='0' max='999' step='1' name='" + fieldName + "' value='" + String(letter_trigger_delays[trigger][day]) + "'></td>";
+                html += "<td><input type='number' min='0' max='999' step='1' name='" + fieldName + "' value='" + escapeHtml(String(letter_trigger_delays[trigger][day])) + "'></td>";
             }
 
             html += "</tr>";
@@ -271,7 +302,7 @@ void setupWebServer() {
 
         for (size_t day = 0; day < NUM_DAYS; ++day) {
             html += "<tr>";
-            html += "<td>" + String(daysOfTheWeek[day]) + "</td>";
+            html += "<td>" + escapeHtml(String(daysOfTheWeek[day])) + "</td>";
 
             for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
                 String selectId = "letter_" + String(trigger) + "_" + String(day);
@@ -280,13 +311,14 @@ void setupWebServer() {
                 html += "<select id='" + selectId + "' name='" + selectId + "'>";
                 for (size_t idx = 0; idx < sizeof(availableLetters); ++idx) {
                     char optionChar = availableLetters[idx];
-                    String optionLabel = getLetterOptionLabel(optionChar);
-                    html += "<option value='" + String(optionChar) + "' ";
+                    const String optionValue = escapeHtml(String(optionChar));
+                    const String optionLabel = escapeHtml(getLetterOptionLabel(optionChar));
+                    html += "<option value='" + optionValue + "' ";
                     html += (dailyLetters[trigger][day] == optionChar) ? "selected" : "";
                     html += ">" + optionLabel + "</option>";
                 }
                 html += "</select>";
-                html += "<br><input type='color' id='" + colorId + "' name='" + colorId + "' value='" + String(dailyLetterColors[trigger][day]) + "'>";
+                html += "<br><input type='color' id='" + colorId + "' name='" + colorId + "' value='" + escapeHtml(String(dailyLetterColors[trigger][day])) + "'>";
                 html += "<br><button type='button' onclick='displayLetter(" + String(trigger) + ", document.getElementById(\"" + selectId + "\").value)'>Anzeigen</button>";
                 html += "<br><button type='button' onclick='triggerLetter(" + String(trigger) + ")'>Triggern</button>";
                 html += "</td>";
@@ -332,6 +364,14 @@ void setupWebServer() {
                 return false;
             };
 
+            auto normalizeInput = [](String value) {
+                value.replace('\r', ' ');
+                value.replace('\n', ' ');
+                value.replace('\t', ' ');
+                value.trim();
+                return value;
+            };
+
             String validationError;
             if (containsForbiddenChars(ssidParam)) {
                 validationError += "SSID enthält ungültige Zeichen. ";
@@ -348,18 +388,23 @@ void setupWebServer() {
                 return;
             }
 
+            const String sanitizedSsid = normalizeInput(ssidParam);
+            const String sanitizedHostname = normalizeInput(hostnameParam);
+            const String sanitizedPassword = hasPasswordParam ? normalizeInput(passwordParam) : String();
+            const bool applyPassword = hasPasswordParam && !sanitizedPassword.isEmpty();
+
             auto copyWithTermination = [](const String &input, char *destination, size_t destinationSize) {
                 strncpy(destination, input.c_str(), destinationSize);
                 destination[destinationSize - 1] = '\0';
                 return input.length() >= destinationSize;
             };
 
-            const bool ssidTruncated = copyWithTermination(ssidParam, wifi_ssid, sizeof(wifi_ssid));
-            const bool hostnameTruncated = copyWithTermination(hostnameParam, hostname, sizeof(hostname));
+            const bool ssidTruncated = copyWithTermination(sanitizedSsid, wifi_ssid, sizeof(wifi_ssid));
+            const bool hostnameTruncated = copyWithTermination(sanitizedHostname, hostname, sizeof(hostname));
             bool passwordTruncated = false;
 
-            if (hasPasswordParam) {
-                passwordTruncated = copyWithTermination(passwordParam, wifi_password, sizeof(wifi_password));
+            if (applyPassword) {
+                passwordTruncated = copyWithTermination(sanitizedPassword, wifi_password, sizeof(wifi_password));
             } else {
                 wifi_password[sizeof(wifi_password) - 1] = '\0';
             }
@@ -373,7 +418,7 @@ void setupWebServer() {
             if (hostnameTruncated) {
                 response += " Hinweis: Hostname wurde auf " + String(sizeof(hostname) - 1) + " Zeichen gekürzt.";
             }
-            if (hasPasswordParam && passwordTruncated) {
+            if (applyPassword && passwordTruncated) {
                 response += " Hinweis: Passwort wurde auf " + String(sizeof(wifi_password) - 1) + " Zeichen gekürzt.";
             }
 
