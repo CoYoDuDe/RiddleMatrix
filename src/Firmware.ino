@@ -24,6 +24,8 @@ void setup() {
   Serial.println(F("🚀 Systemstart..."));
   // clearDisplay();
 
+  webServerRunning = false;
+
   pinMode(GPIO_RS485_ENABLE, OUTPUT);
   digitalWrite(GPIO_RS485_ENABLE, LOW);
 
