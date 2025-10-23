@@ -439,9 +439,10 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 void setupWebServer() {
-    // ℹ️ Hinweis: Für jede neue Route mit Benutzerinteraktion unbedingt
-    //             refreshWiFiIdleTimer(...) aufrufen, damit der WLAN-Timeout
-    //             bei aktiver Nutzung zurückgesetzt wird (siehe wifi_manager.cpp).
+    // ℹ️ Hinweis: Der Helper refreshWiFiIdleTimer(...) aus wifi_manager.cpp muss
+    //             zu Beginn jeder neuen Route mit echter Nutzerinteraktion
+    //             aufgerufen werden, damit der WLAN-Timeout zuverlässig
+    //             zurückgesetzt wird.
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /"));
         String html = "<h1>Märchen Einstellungen</h1>";

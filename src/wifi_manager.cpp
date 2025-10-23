@@ -11,8 +11,6 @@ void refreshWiFiIdleTimer(const __FlashStringHelper *reason) {
     if (reason != nullptr) {
         Serial.print(F("🔄 WiFi-Idle-Timer aktualisiert: "));
         Serial.println(reason);
-    } else {
-        Serial.println(F("🔄 WiFi-Idle-Timer aktualisiert."));
     }
 }
 
