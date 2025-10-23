@@ -70,6 +70,7 @@ extern int wifi_connect_timeout; // Timeout für die WLAN-Verbindung in Sekunden
 extern Ticker display_ticker;
 extern bool triggerActive;
 extern unsigned long letterStartTime;
+extern unsigned long wifiStartTime;
 
 // **Buchstaben für Wochentage (Standardwerte)**
 extern char dailyLetters[NUM_TRIGGERS][NUM_DAYS];
