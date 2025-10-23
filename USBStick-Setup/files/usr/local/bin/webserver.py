@@ -203,6 +203,7 @@ def extract_box_state_from_soup(soup):
                     f"{base_name}_{day_index}_{slot}",
                     f"{base_name}{day_index}_{slot}",
                     f"{base_name}_{slot}_{day_index}",
+                    f"{base_name}{slot}_{day_index}",
                     f"{base_name}_{slot}{day_index}",
                     f"{base_name}{slot}{day_index}",
                 ]
