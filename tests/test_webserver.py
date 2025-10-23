@@ -136,20 +136,18 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     html_parts = ["<html><body>"]
     for index, day in enumerate(module.DAYS):
         for slot in range(module.TRIGGER_SLOTS):
-            if slot == 0:
-                if index % 2 == 0:
-                    select_name = f"letter_{index}"
-                    color_name = f"color_{index}"
-                else:
-                    select_name = f"letter{index}"
-                    color_name = f"color{index}"
+            if index % 2 == 0:
+                select_name = f"letter_{slot}_{index}"
+                color_name = f"color_{slot}_{index}"
+            elif slot == 0:
+                select_name = f"letter{index}"
+                color_name = f"color{index}"
+            elif slot % 2 == 0:
+                select_name = f"letter_{index}_{slot}"
+                color_name = f"color_{index}_{slot}"
             else:
-                if slot % 2 == 0:
-                    select_name = f"letter_{index}_{slot}"
-                    color_name = f"color_{index}_{slot}"
-                else:
-                    select_name = f"letter{index}_{slot}"
-                    color_name = f"color{index}_{slot}"
+                select_name = f"letter{index}_{slot}"
+                color_name = f"color{index}_{slot}"
 
             html_parts.append(
                 f"<select name='{select_name}'><option value='x' selected>x</option></select>"
@@ -196,6 +194,50 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     assert response.get_json() == {"status": "✅ Übertragen"}
     assert captured["url"].endswith("/updateAllLetters")
     assert captured["json"] == {"letters": letters, "colors": colors, "delays": delays}
+
+
+def test_extract_box_state_supports_trigger_first_schema(webserver_app):
+    module, _client = webserver_app
+
+    expected_letters = {day: ["" for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+    expected_colors = {
+        day: [module.DEFAULT_COLOR for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS
+    }
+
+    html_parts = ["<html><body>"]
+    for day_index, day in enumerate(module.DAYS):
+        for slot in range(module.TRIGGER_SLOTS):
+            letter_value = f"L{day_index}{slot}"
+            color_value = f"#{slot}{day_index}{slot}{day_index}{slot}{day_index}"
+            expected_letters[day][slot] = letter_value
+            expected_colors[day][slot] = color_value
+
+            if (day_index + slot) % 2 == 0:
+                select_name = f"letter_{slot}_{day_index}"
+                color_name = f"color_{slot}_{day_index}"
+            else:
+                select_name = f"letter{slot}{day_index}"
+                color_name = f"color{slot}{day_index}"
+
+            html_parts.append(
+                "<select name='"
+                + select_name
+                + "'><option value='"
+                + letter_value
+                + "' selected>"
+                + letter_value
+                + "</option></select>"
+            )
+            html_parts.append(
+                f"<input name='{color_name}' value='{color_value}'>"
+            )
+    html_parts.append("</body></html>")
+
+    soup = module.BeautifulSoup("".join(html_parts), "html.parser")
+    letters, colors = module.extract_box_state_from_soup(soup)
+
+    assert letters == expected_letters
+    assert colors == expected_colors
 
 
 def test_fetch_trigger_delays_returns_numeric_matrix(webserver_app, monkeypatch):
