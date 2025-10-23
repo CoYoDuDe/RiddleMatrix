@@ -1,5 +1,6 @@
 #include "config.h"
 
+#include <algorithm>
 #include <cctype>
 
 // Definitionen globaler Variablen
@@ -316,9 +317,22 @@ void loadConfig() {
         }
     }
 
-    if (letter_auto_display_interval < 1 || letter_auto_display_interval > 999) {
-        Serial.println("🛑 Ungültiges Automodus-Intervall! Setze Standardwert...");
-        letter_auto_display_interval = 300;
+    unsigned long originalAutoInterval = letter_auto_display_interval;
+    bool restoredDefaultAutoInterval = (originalAutoInterval == 0UL || originalAutoInterval == 0xFFFFFFFFUL);
+    if (restoredDefaultAutoInterval) {
+        letter_auto_display_interval = 300UL;
+    } else {
+        letter_auto_display_interval = std::min(std::max(letter_auto_display_interval, 30UL), 600UL);
+    }
+
+    if (originalAutoInterval != letter_auto_display_interval) {
+        Serial.print(F("⚠️ Automodus-Intervall außerhalb zulässigen Bereichs ("));
+        Serial.print(originalAutoInterval);
+        if (restoredDefaultAutoInterval) {
+            Serial.println(F(" s) – setze auf Standardwert 300 s."));
+        } else {
+            Serial.println(F(" s) – passe auf 30–600 s an."));
+        }
         eepromUpdated = true;
     }
 
