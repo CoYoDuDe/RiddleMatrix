@@ -28,7 +28,7 @@ extern DisplayLetterError lastDisplayLetterError;
 // **Funktion: Buchstaben oder Sonderzeichen anzeigen**
 bool displayLetter(uint8_t triggerIndex, char letter);
 
-void handleTrigger(char triggerType, bool isAutoMode = false);
+void handleTrigger(char triggerType, bool isAutoMode = false, bool fromWeb = false);
 
 bool enqueuePendingTrigger(uint8_t triggerIndex, bool fromWeb);
 
