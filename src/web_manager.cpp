@@ -1195,11 +1195,6 @@ void setupWebServer() {
 
     server.on("/triggerLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /triggerLetter"));
-        if (triggerActive) {
-            request->send(409, "text/plain", "❌ Fehler: Bereits aktiver Buchstabe verhindert neuen Trigger!");
-            return;
-        }
-
         uint8_t triggerIndex = 0;
         if (request->hasParam("trigger")) {
             int triggerValue = request->getParam("trigger")->value().toInt();
@@ -1208,11 +1203,6 @@ void setupWebServer() {
                 return;
             }
             triggerIndex = static_cast<uint8_t>(triggerValue - 1);
-        }
-
-        if (isTriggerPending(triggerIndex)) {
-            request->send(409, "text/plain", "❌ Fehler: Für diesen Trigger ist bereits eine Ausführung geplant!");
-            return;
         }
 
         int today = getRTCWeekday();
@@ -1228,8 +1218,14 @@ void setupWebServer() {
         }
 
         unsigned long delaySeconds = letter_trigger_delays[triggerIndex][static_cast<size_t>(today)];
+        const bool displayWasActive = triggerActive;
+        const bool alreadyPendingBeforeEnqueue = isTriggerPending(triggerIndex);
         if (!enqueuePendingTrigger(triggerIndex, true)) {
-            request->send(503, "text/plain", "❌ Fehler: Trigger konnte nicht eingeplant werden!");
+            if (alreadyPendingBeforeEnqueue || isTriggerPending(triggerIndex)) {
+                request->send(409, "text/plain", "❌ Fehler: Für diesen Trigger ist bereits eine Ausführung geplant!");
+            } else {
+                request->send(503, "text/plain", "❌ Fehler: Trigger konnte nicht eingeplant werden!");
+            }
             return;
         }
 
@@ -1238,6 +1234,10 @@ void setupWebServer() {
             response += " Start erfolgt sofort.";
         } else {
             response += " Start in " + String(delaySeconds) + " Sekunden.";
+        }
+
+        if (displayWasActive) {
+            response += " Hinweis: Aktuelle Anzeige läuft noch; Ausführung erfolgt anschließend.";
         }
 
         request->send(200, "text/plain", response);
