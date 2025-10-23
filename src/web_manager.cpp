@@ -1,7 +1,158 @@
 #include "web_manager.h"
 #include <AsyncJson.h>
+#include <math.h>
 
 namespace {
+
+constexpr size_t MAX_JSON_BODY_SIZE = 4096;
+constexpr size_t UPDATE_JSON_CAPACITY = 4096;
+
+struct UpdateAllLettersContext {
+    String body;
+    bool overflow;
+
+    UpdateAllLettersContext() : body(), overflow(false) {}
+};
+
+bool looksLikeJsonContentType(String contentType) {
+    contentType.trim();
+    contentType.toLowerCase();
+    return contentType.startsWith(F("application/json"));
+}
+
+String extractContentType(AsyncWebServerRequest *request) {
+    if (request == nullptr) {
+        return String();
+    }
+
+    if (request->hasHeader(F("Content-Type"))) {
+        return request->header(F("Content-Type"));
+    }
+    if (request->hasHeader(F("content-type"))) {
+        return request->header(F("content-type"));
+    }
+    return String();
+}
+
+bool isJsonRequest(AsyncWebServerRequest *request) {
+    if (request == nullptr) {
+        return false;
+    }
+
+    const String directContentType = extractContentType(request);
+    if (!directContentType.isEmpty() && looksLikeJsonContentType(directContentType)) {
+        return true;
+    }
+
+#if defined(ESP8266) || defined(ESP32)
+    const String derivedContentType = request->contentType();
+    if (!derivedContentType.isEmpty() && looksLikeJsonContentType(derivedContentType)) {
+        return true;
+    }
+#endif
+    return false;
+}
+
+bool isSupportedLetter(char letter) {
+    const size_t optionCount = sizeof(availableLetters) / sizeof(availableLetters[0]);
+    for (size_t idx = 0; idx < optionCount; ++idx) {
+        if (availableLetters[idx] == letter) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool isValidHexColorString(const String &value) {
+    if (value.length() != 7 || value.charAt(0) != '#') {
+        return false;
+    }
+
+    for (size_t idx = 1; idx < value.length(); ++idx) {
+        const char c = value.charAt(idx);
+        const bool isDigit = (c >= '0' && c <= '9');
+        const bool isUpper = (c >= 'A' && c <= 'F');
+        const bool isLower = (c >= 'a' && c <= 'f');
+        if (!(isDigit || isUpper || isLower)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool parseDelayStringValue(String value, unsigned long &parsed) {
+    value.trim();
+    if (value.isEmpty()) {
+        return false;
+    }
+
+    for (size_t idx = 0; idx < value.length(); ++idx) {
+        const char character = value.charAt(idx);
+        if (character < '0' || character > '9') {
+            return false;
+        }
+    }
+
+    parsed = static_cast<unsigned long>(value.toInt());
+    return parsed <= 999UL;
+}
+
+bool parseNumericDelay(double numeric, unsigned long &parsed) {
+    if (isnan(numeric) || isinf(numeric)) {
+        return false;
+    }
+    if (numeric < 0.0 || numeric > 999.0) {
+        return false;
+    }
+
+    const double rounded = floor(numeric + 0.5);
+    if (fabs(numeric - rounded) > 0.0001) {
+        return false;
+    }
+
+    parsed = static_cast<unsigned long>(rounded);
+    return parsed <= 999UL;
+}
+
+bool parseDelayJsonVariant(const JsonVariantConst &variant, unsigned long &parsed) {
+    if (variant.isNull()) {
+        return false;
+    }
+
+    if (variant.is<unsigned long>() || variant.is<unsigned int>() || variant.is<int>() || variant.is<long>()) {
+        const long candidate = variant.as<long>();
+        if (candidate < 0 || candidate > 999) {
+            return false;
+        }
+        parsed = static_cast<unsigned long>(candidate);
+        return true;
+    }
+
+    if (variant.is<double>() || variant.is<float>()) {
+        const double numeric = variant.as<double>();
+        return parseNumericDelay(numeric, parsed);
+    }
+
+    if (variant.is<const char *>()) {
+        String value = variant.as<const char *>();
+        return parseDelayStringValue(value, parsed);
+    }
+
+    return false;
+}
+
+void sendJsonStatus(AsyncWebServerRequest *request, uint16_t statusCode, const char *status, const String &message) {
+    StaticJsonDocument<256> responseDoc;
+    responseDoc["status"] = status;
+    if (!message.isEmpty()) {
+        responseDoc["message"] = message;
+    }
+
+    String responseBody;
+    serializeJson(responseDoc, responseBody);
+    request->send(statusCode, F("application/json"), responseBody);
+}
 
 String escapeHtml(const String &input) {
     String escaped;
@@ -520,36 +671,359 @@ void setupWebServer() {
         request->send(response);
     });
 
-    server.on("/updateAllLetters", HTTP_POST, [](AsyncWebServerRequest *request) {
-        bool success = true;
+    server.on(
+        "/updateAllLetters",
+        HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            UpdateAllLettersContext *context = static_cast<UpdateAllLettersContext *>(request->_tempObject);
+            auto cleanup = [&]() {
+                if (context != nullptr) {
+                    delete context;
+                    request->_tempObject = nullptr;
+                    context = nullptr;
+                }
+            };
 
-        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-            for (size_t day = 0; day < NUM_DAYS; ++day) {
-                String letterParam = "letter_" + String(trigger) + "_" + String(day);
-                String colorParam = "color_" + String(trigger) + "_" + String(day);
+            if (isJsonRequest(request)) {
+                if (context == nullptr) {
+                    Serial.println(F("❌ JSON-Update fehlgeschlagen: Keine Nutzlast empfangen."));
+                    sendJsonStatus(request, 400, "error", F("JSON-Nutzlast fehlt oder konnte nicht gelesen werden."));
+                    cleanup();
+                    return;
+                }
 
-                if (request->hasParam(letterParam, true) && request->hasParam(colorParam, true)) {
-                    String letterValue = request->getParam(letterParam, true)->value();
-                    if (!letterValue.isEmpty()) {
-                        dailyLetters[trigger][day] = letterValue[0];
+                if (context->overflow) {
+                    Serial.println(F("❌ JSON-Update fehlgeschlagen: Nutzlast überschreitet Limit."));
+                    sendJsonStatus(request, 400, "error", F("JSON-Nutzlast überschreitet die zulässige Größe."));
+                    cleanup();
+                    return;
+                }
+
+                if (context->body.isEmpty()) {
+                    Serial.println(F("❌ JSON-Update fehlgeschlagen: Leerer Request-Body."));
+                    sendJsonStatus(request, 400, "error", F("JSON-Nutzlast fehlt oder ist leer."));
+                    cleanup();
+                    return;
+                }
+
+                DynamicJsonDocument doc(UPDATE_JSON_CAPACITY);
+                DeserializationError jsonError = deserializeJson(doc, context->body);
+                if (jsonError) {
+                    String errorMessage = F("JSON konnte nicht gelesen werden: ");
+                    errorMessage += jsonError.c_str();
+                    Serial.println(String(F("❌ JSON-Parsing fehlgeschlagen: ")) + jsonError.c_str());
+                    sendJsonStatus(request, 400, "error", errorMessage);
+                    cleanup();
+                    return;
+                }
+
+                JsonObjectConst payload = doc.as<JsonObjectConst>();
+                if (payload.isNull()) {
+                    Serial.println(F("❌ JSON-Update fehlgeschlagen: Payload fehlt."));
+                    sendJsonStatus(request, 400, "error", F("JSON-Payload fehlt."));
+                    cleanup();
+                    return;
+                }
+
+                char parsedLetters[NUM_TRIGGERS][NUM_DAYS];
+                char parsedColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH];
+                unsigned long parsedDelays[NUM_TRIGGERS][NUM_DAYS];
+
+                bool validationFailed = false;
+                String validationMessage;
+
+                JsonObjectConst lettersObject = payload["letters"].as<JsonObjectConst>();
+                if (lettersObject.isNull()) {
+                    validationFailed = true;
+                    validationMessage = F("JSON-Feld \"letters\" fehlt oder ist ungültig.");
+                } else {
+                    for (size_t day = 0; day < NUM_DAYS && !validationFailed; ++day) {
+                        JsonArrayConst dayLetters = lettersObject[DAY_KEYS[day]].as<JsonArrayConst>();
+                        if (dayLetters.isNull() || dayLetters.size() != NUM_TRIGGERS) {
+                            validationFailed = true;
+                            validationMessage = F("Ungültige Buchstabenliste für Tag ");
+                            validationMessage += DAY_KEYS[day];
+                            break;
+                        }
+
+                        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                            JsonVariantConst letterVariant = dayLetters[trigger];
+                            const char *letterRaw = letterVariant.as<const char *>();
+                            if (letterRaw == nullptr) {
+                                validationFailed = true;
+                                validationMessage = F("Buchstabe fehlt für Trigger ");
+                                validationMessage += String(trigger + 1);
+                                validationMessage += F(" am Tag ");
+                                validationMessage += DAY_KEYS[day];
+                                break;
+                            }
+
+                            String letterValue = letterRaw;
+                            letterValue.trim();
+                            if (letterValue.length() != 1) {
+                                validationFailed = true;
+                                validationMessage = F("Buchstabe muss genau ein Zeichen besitzen (Tag ");
+                                validationMessage += DAY_KEYS[day];
+                                validationMessage += F(", Trigger ");
+                                validationMessage += String(trigger + 1);
+                                validationMessage += F(").");
+                                break;
+                            }
+
+                            const char letterChar = letterValue.charAt(0);
+                            if (!isSupportedLetter(letterChar)) {
+                                validationFailed = true;
+                                validationMessage = F("Ungültiger Buchstabe für Trigger ");
+                                validationMessage += String(trigger + 1);
+                                validationMessage += F(" am Tag ");
+                                validationMessage += DAY_KEYS[day];
+                                break;
+                            }
+
+                            parsedLetters[trigger][day] = letterChar;
+                        }
+                    }
+                }
+
+                JsonObjectConst colorsObject = payload["colors"].as<JsonObjectConst>();
+                if (!validationFailed) {
+                    if (colorsObject.isNull()) {
+                        validationFailed = true;
+                        validationMessage = F("JSON-Feld \"colors\" fehlt oder ist ungültig.");
+                    } else {
+                        for (size_t day = 0; day < NUM_DAYS && !validationFailed; ++day) {
+                            JsonArrayConst dayColors = colorsObject[DAY_KEYS[day]].as<JsonArrayConst>();
+                            if (dayColors.isNull() || dayColors.size() != NUM_TRIGGERS) {
+                                validationFailed = true;
+                                validationMessage = F("Ungültige Farbliste für Tag ");
+                                validationMessage += DAY_KEYS[day];
+                                break;
+                            }
+
+                            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                                JsonVariantConst colorVariant = dayColors[trigger];
+                                const char *colorRaw = colorVariant.as<const char *>();
+                                if (colorRaw == nullptr) {
+                                    validationFailed = true;
+                                    validationMessage = F("Farbe fehlt für Trigger ");
+                                    validationMessage += String(trigger + 1);
+                                    validationMessage += F(" am Tag ");
+                                    validationMessage += DAY_KEYS[day];
+                                    break;
+                                }
+
+                                String colorValue = colorRaw;
+                                colorValue.trim();
+                                if (!isValidHexColorString(colorValue)) {
+                                    validationFailed = true;
+                                    validationMessage = F("Ungültiger Farbwert für Trigger ");
+                                    validationMessage += String(trigger + 1);
+                                    validationMessage += F(" am Tag ");
+                                    validationMessage += DAY_KEYS[day];
+                                    break;
+                                }
+
+                                colorValue.toUpperCase();
+                                strncpy(parsedColors[trigger][day], colorValue.c_str(), COLOR_STRING_LENGTH);
+                                parsedColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+                            }
+                        }
+                    }
+                }
+
+                JsonObjectConst delaysObject = payload["delays"].as<JsonObjectConst>();
+                if (!validationFailed) {
+                    if (delaysObject.isNull()) {
+                        validationFailed = true;
+                        validationMessage = F("JSON-Feld \"delays\" fehlt oder ist ungültig.");
+                    } else {
+                        for (size_t day = 0; day < NUM_DAYS && !validationFailed; ++day) {
+                            JsonArrayConst dayDelays = delaysObject[DAY_KEYS[day]].as<JsonArrayConst>();
+                            if (dayDelays.isNull() || dayDelays.size() != NUM_TRIGGERS) {
+                                validationFailed = true;
+                                validationMessage = F("Ungültige Verzögerungsliste für Tag ");
+                                validationMessage += DAY_KEYS[day];
+                                break;
+                            }
+
+                            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                                unsigned long parsedDelay = 0;
+                                if (!parseDelayJsonVariant(dayDelays[trigger], parsedDelay)) {
+                                    validationFailed = true;
+                                    validationMessage = F("Ungültige Verzögerung für Trigger ");
+                                    validationMessage += String(trigger + 1);
+                                    validationMessage += F(" am Tag ");
+                                    validationMessage += DAY_KEYS[day];
+                                    validationMessage += F(" (erlaubt: 0-999 Sekunden).");
+                                    break;
+                                }
+                                parsedDelays[trigger][day] = parsedDelay;
+                            }
+                        }
+                    }
+                }
+
+                if (validationFailed) {
+                    Serial.print(F("❌ JSON-Validierung fehlgeschlagen: "));
+                    Serial.println(validationMessage);
+                    sendJsonStatus(request, 400, "error", validationMessage);
+                    cleanup();
+                    return;
+                }
+
+                for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                    for (size_t day = 0; day < NUM_DAYS; ++day) {
+                        dailyLetters[trigger][day] = parsedLetters[trigger][day];
+                        strncpy(dailyLetterColors[trigger][day], parsedColors[trigger][day], COLOR_STRING_LENGTH);
+                        dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+                        letter_trigger_delays[trigger][day] = parsedDelays[trigger][day];
+                    }
+                }
+
+                saveConfig();
+                wifiStartTime = millis();
+                Serial.println(F("✅ JSON-Update: Buchstaben, Farben & Verzögerungen übernommen."));
+                cleanup();
+                sendJsonStatus(request, 200, "ok", F("Buchstaben, Farben & Verzögerungen gespeichert."));
+                return;
+            }
+
+            char parsedLetters[NUM_TRIGGERS][NUM_DAYS];
+            char parsedColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH];
+            unsigned long parsedDelays[NUM_TRIGGERS][NUM_DAYS];
+            memcpy(parsedDelays, letter_trigger_delays, sizeof(parsedDelays));
+
+            bool success = true;
+            String errorMessage;
+
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS && success; ++trigger) {
+                for (size_t day = 0; day < NUM_DAYS; ++day) {
+                    String letterParam = "letter_" + String(trigger) + "_" + String(day);
+                    String colorParam = "color_" + String(trigger) + "_" + String(day);
+
+                    if (!request->hasParam(letterParam, true) || !request->hasParam(colorParam, true)) {
+                        success = false;
+                        errorMessage = F("Nicht alle Buchstaben- oder Farbfelder wurden übermittelt.");
+                        break;
                     }
 
+                    String letterValue = request->getParam(letterParam, true)->value();
+                    letterValue.trim();
+                    if (letterValue.length() != 1) {
+                        success = false;
+                        errorMessage = F("Buchstabe muss genau ein Zeichen besitzen.");
+                        break;
+                    }
+
+                    const char letterChar = letterValue.charAt(0);
+                    if (!isSupportedLetter(letterChar)) {
+                        success = false;
+                        errorMessage = F("Ungültiger Buchstabe im Formular.");
+                        break;
+                    }
+
+                    parsedLetters[trigger][day] = letterChar;
+
                     String colorValue = request->getParam(colorParam, true)->value();
-                    strncpy(dailyLetterColors[trigger][day], colorValue.c_str(), COLOR_STRING_LENGTH);
-                    dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
-                } else {
-                    success = false;
+                    colorValue.trim();
+                    if (!isValidHexColorString(colorValue)) {
+                        success = false;
+                        errorMessage = F("Ungültiger Farbwert im Formular.");
+                        break;
+                    }
+
+                    colorValue.toUpperCase();
+                    strncpy(parsedColors[trigger][day], colorValue.c_str(), COLOR_STRING_LENGTH);
+                    parsedColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
                 }
             }
-        }
 
-        if (success) {
+            bool expectDelays = false;
+            if (success) {
+                expectDelays = request->hasParam(F("delay_0_0"), true);
+                if (expectDelays) {
+                    for (size_t trigger = 0; trigger < NUM_TRIGGERS && success; ++trigger) {
+                        for (size_t day = 0; day < NUM_DAYS; ++day) {
+                            String delayParam = "delay_" + String(trigger) + "_" + String(day);
+                            if (!request->hasParam(delayParam, true)) {
+                                success = false;
+                                errorMessage = F("Verzögerungswerte unvollständig übermittelt.");
+                                break;
+                            }
+
+                            unsigned long parsedDelay = 0;
+                            if (!parseDelayStringValue(request->getParam(delayParam, true)->value(), parsedDelay)) {
+                                success = false;
+                                errorMessage = F("Ungültiger Verzögerungswert im Formular (erlaubt 0-999).");
+                                break;
+                            }
+
+                            parsedDelays[trigger][day] = parsedDelay;
+                        }
+                    }
+                }
+            }
+
+            if (!success) {
+                Serial.print(F("❌ Formular-Update fehlgeschlagen: "));
+                Serial.println(errorMessage);
+                cleanup();
+                request->send(400, "text/plain", "❌ Fehler: " + errorMessage);
+                return;
+            }
+
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                for (size_t day = 0; day < NUM_DAYS; ++day) {
+                    dailyLetters[trigger][day] = parsedLetters[trigger][day];
+                    strncpy(dailyLetterColors[trigger][day], parsedColors[trigger][day], COLOR_STRING_LENGTH);
+                    dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+                    letter_trigger_delays[trigger][day] = parsedDelays[trigger][day];
+                }
+            }
+
             saveConfig();
-            request->send(200, "text/plain", "✅ Buchstaben & Farben gespeichert!");
-        } else {
-            request->send(400, "text/plain", "❌ Fehler: Nicht alle Werte empfangen!");
-        }
-    });
+            wifiStartTime = millis();
+            if (expectDelays) {
+                Serial.println(F("✅ Formular-Update: Buchstaben, Farben & Verzögerungen gespeichert."));
+            } else {
+                Serial.println(F("✅ Formular-Update: Buchstaben & Farben gespeichert."));
+            }
+            cleanup();
+
+            String confirmation = expectDelays ? String(F("✅ Buchstaben, Farben & Verzögerungen gespeichert!"))
+                                               : String(F("✅ Buchstaben & Farben gespeichert!"));
+            request->send(200, "text/plain", confirmation);
+        },
+        nullptr,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            if (!isJsonRequest(request)) {
+                return;
+            }
+
+            UpdateAllLettersContext *context = static_cast<UpdateAllLettersContext *>(request->_tempObject);
+            if (context == nullptr) {
+                context = new UpdateAllLettersContext();
+                request->_tempObject = context;
+            }
+
+            if (context->overflow) {
+                return;
+            }
+
+            if (total > MAX_JSON_BODY_SIZE) {
+                context->overflow = true;
+                return;
+            }
+
+            if (index == 0) {
+                context->body = String();
+                context->body.reserve(total + 1);
+            }
+
+            for (size_t idx = 0; idx < len; ++idx) {
+                context->body += static_cast<char>(data[idx]);
+            }
+        });
 
     server.on("/displayLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (!request->hasParam("char")) {
