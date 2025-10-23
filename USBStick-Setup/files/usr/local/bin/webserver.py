@@ -202,6 +202,9 @@ def extract_box_state_from_soup(soup):
                 [
                     f"{base_name}_{day_index}_{slot}",
                     f"{base_name}{day_index}_{slot}",
+                    f"{base_name}_{slot}_{day_index}",
+                    f"{base_name}_{slot}{day_index}",
+                    f"{base_name}{slot}{day_index}",
                 ]
             )
         if slot == 0:
@@ -212,7 +215,7 @@ def extract_box_state_from_soup(soup):
                 ]
             )
 
-        for candidate in name_candidates:
+        for candidate in dict.fromkeys(name_candidates):
             field = soup.find(tag, {"name": candidate})
             if field is not None:
                 return field
