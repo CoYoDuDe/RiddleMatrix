@@ -107,6 +107,15 @@ Die HTTP-Endpunkte `/displayLetter` und `/triggerLetter` akzeptieren optional de
 
   SetupHelper nutzt diesen Endpunkt, um `_normalize_delay_list()` unverändert auf rohe Zahlenwerte anzuwenden.
 
+### Anzeigeeinstellungen & REST-API `/updateDisplaySettings`
+
+- **`brightness`** (`1`–`255`): Helligkeit der Matrix. Werte außerhalb führen zu HTTP 400.
+- **`letter_time`** (`1`–`60` Sekunden): Dauer pro Buchstabe. Nur ganzzahlige Sekunden werden akzeptiert.
+- **`auto_interval`** (`30`–`600` Sekunden): Intervall für den Automodus.
+- **`auto_mode`** (optional): `on`, `off`, `true`, `false`, `1` oder `0`. Nicht angegebene Felder deaktivieren den Automodus.
+
+Die Weboberfläche weist auf diese Grenzen hin. Der Handler prüft jede Eingabe strikt (Parsing als `long`/`unsigned long`) und beantwortet Verstöße mit HTTP 400 inklusive deutscher Fehlermeldung.
+
 ## USB-Stick-Setup für das Boxen-Ökosystem
 
 Im Verzeichnis [`USBStick-Setup/`](USBStick-Setup) befindet sich ein portabler Installer, mit dem vorbereitete Dateien auf ein Venus-OS- oder Debian-Zielsystem kopiert werden. Der neue Einstiegspunkt [`USBStick-Setup/setup.sh`](USBStick-Setup/setup.sh) übernimmt sämtliche Kopier- und Nacharbeiten, setzt korrekte Dateirechte und aktiviert die benötigten Systemd-Units.
