@@ -5,6 +5,15 @@ import math
 import os, json, subprocess, requests
 
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
+DAY_TO_FIRMWARE_INDEX = {
+    "so": 0,
+    "mo": 1,
+    "di": 2,
+    "mi": 3,
+    "do": 4,
+    "fr": 5,
+    "sa": 6,
+}
 TRIGGER_SLOTS = 3
 DEFAULT_COLOR = "#ffffff"
 DEFAULT_DELAY = 0
@@ -197,25 +206,31 @@ def extract_box_state_from_soup(soup):
     letters = {day: ["" for _ in range(TRIGGER_SLOTS)] for day in DAYS}
     colors = {day: [DEFAULT_COLOR for _ in range(TRIGGER_SLOTS)] for day in DAYS}
 
-    def _find_field(tag, base_name, day_index, slot):
+    def _find_field(tag, base_name, firmware_day_index, slot, fallback_day_index=None):
         name_candidates = []
-        if slot is not None:
-            name_candidates.extend(
-                [
-                    f"{base_name}_{day_index}_{slot}",
-                    f"{base_name}{day_index}_{slot}",
-                    f"{base_name}_{slot}_{day_index}",
-                    f"{base_name}_{slot}{day_index}",
-                    f"{base_name}{slot}{day_index}",
-                ]
-            )
-        if slot == 0:
-            name_candidates.extend(
-                [
-                    f"{base_name}_{day_index}",
-                    f"{base_name}{day_index}",
-                ]
-            )
+
+        def extend_candidates(index_value):
+            if slot is not None:
+                name_candidates.extend(
+                    [
+                        f"{base_name}_{index_value}_{slot}",
+                        f"{base_name}{index_value}_{slot}",
+                        f"{base_name}_{slot}_{index_value}",
+                        f"{base_name}_{slot}{index_value}",
+                        f"{base_name}{slot}{index_value}",
+                    ]
+                )
+            if slot == 0:
+                name_candidates.extend(
+                    [
+                        f"{base_name}_{index_value}",
+                        f"{base_name}{index_value}",
+                    ]
+                )
+
+        extend_candidates(firmware_day_index)
+        if fallback_day_index is not None and fallback_day_index != firmware_day_index:
+            extend_candidates(fallback_day_index)
 
         for candidate in dict.fromkeys(name_candidates):
             field = soup.find(tag, {"name": candidate})
@@ -224,8 +239,9 @@ def extract_box_state_from_soup(soup):
         return None
 
     for day_index, day in enumerate(DAYS):
+        firmware_day_index = DAY_TO_FIRMWARE_INDEX.get(day, day_index)
         for slot in range(TRIGGER_SLOTS):
-            select = _find_field("select", "letter", day_index, slot)
+            select = _find_field("select", "letter", firmware_day_index, slot, fallback_day_index=day_index)
 
             value = ""
             if select:
@@ -238,7 +254,7 @@ def extract_box_state_from_soup(soup):
                         value = first_option.get("value", "")
             letters[day][slot] = value or ""
 
-            color_input = _find_field("input", "color", day_index, slot)
+            color_input = _find_field("input", "color", firmware_day_index, slot, fallback_day_index=day_index)
 
             color_value = DEFAULT_COLOR
             if color_input and color_input.has_attr("value") and color_input["value"]:
@@ -267,7 +283,14 @@ def fetch_trigger_delays(ip):
 
     normalized = {}
     for day in DAYS:
-        normalized[day] = _normalize_delay_list(delays_payload.get(day))
+        day_payload = None
+        if isinstance(delays_payload, dict):
+            day_payload = delays_payload.get(day)
+            if day_payload is None:
+                firmware_index = DAY_TO_FIRMWARE_INDEX.get(day)
+                if firmware_index is not None:
+                    day_payload = delays_payload.get(str(firmware_index))
+        normalized[day] = _normalize_delay_list(day_payload)
     return normalized
 
 

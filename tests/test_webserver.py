@@ -281,6 +281,94 @@ def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypa
         assert all(isinstance(value, int) for value in captured["json"]["delays"][day])
 
 
+def test_transfer_box_matches_firmware_day_index_mapping(webserver_app, monkeypatch):
+    module, client = webserver_app
+
+    letters = {day: ["" for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+    colors = {day: [module.DEFAULT_COLOR for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+    delays = {day: [module.DEFAULT_DELAY for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+
+    firmware_order = sorted(module.DAY_TO_FIRMWARE_INDEX.items(), key=lambda item: item[1])
+    html_parts = ["<html><body>"]
+    for day_name, firmware_index in firmware_order:
+        for slot in range(module.TRIGGER_SLOTS):
+            letter_value = f"L{day_name.upper()}{slot}"
+            color_value = f"#{firmware_index}{slot}{firmware_index}{slot}{firmware_index}{slot}"
+            delay_value = firmware_index * 10 + slot
+
+            letters[day_name][slot] = letter_value
+            colors[day_name][slot] = color_value
+            delays[day_name][slot] = delay_value
+
+            html_parts.append(
+                "<select name='"
+                + f"letter_{slot}_{firmware_index}"
+                + "'><option value='"
+                + letter_value
+                + "' selected>"
+                + letter_value
+                + "</option></select>"
+            )
+            html_parts.append(
+                "<input type='color' name='"
+                + f"color_{slot}_{firmware_index}"
+                + "' value='"
+                + color_value
+                + "'>"
+            )
+            html_parts.append(
+                "<input type='number' name='"
+                + f"delay_{slot}_{firmware_index}"
+                + "' value='"
+                + str(delay_value)
+                + "'>"
+            )
+
+    html_parts.append("</body></html>")
+    fake_html = "".join(html_parts)
+
+    module.save_config(
+        {"boxen": {"TestBox": {"ip": "1.2.3.4", "letters": letters, "colors": colors, "delays": delays}}, "boxOrder": []}
+    )
+
+    fake_delays_payload = {"delays": {day: list(delays[day]) for day, _ in firmware_order}}
+
+    class FakeResponse:
+        def __init__(self, text: str = "", ok: bool = True, json_data=None) -> None:
+            self.text = text
+            self.ok = ok
+            self._json = json_data
+
+        def json(self):
+            if self._json is None:
+                raise ValueError("No JSON data")
+            return self._json
+
+    def fake_get(url, *args, **kwargs):
+        if url.endswith("/api/trigger-delays"):
+            return FakeResponse(ok=True, json_data=fake_delays_payload)
+        return FakeResponse(fake_html, True)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    post_calls = []
+
+    def fake_post(*args, **kwargs):
+        post_calls.append((args, kwargs))
+
+        class PostResponse:
+            ok = True
+
+        return PostResponse()
+
+    monkeypatch.setattr(module.requests, "post", fake_post)
+
+    response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "⏭️ Bereits aktuell"}
+    assert post_calls == []
+
+
 def test_extract_box_state_supports_trigger_first_schema(webserver_app):
     module, _client = webserver_app
 
