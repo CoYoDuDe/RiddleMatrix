@@ -228,9 +228,13 @@ def extract_box_state_from_soup(soup):
                     ]
                 )
 
-        extend_candidates(firmware_day_index)
-        if fallback_day_index is not None and fallback_day_index != firmware_day_index:
+        if fallback_day_index is not None:
             extend_candidates(fallback_day_index)
+        if (
+            firmware_day_index is not None
+            and firmware_day_index != fallback_day_index
+        ):
+            extend_candidates(firmware_day_index)
 
         for candidate in dict.fromkeys(name_candidates):
             field = soup.find(tag, {"name": candidate})
