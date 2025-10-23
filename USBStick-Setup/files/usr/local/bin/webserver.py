@@ -320,11 +320,13 @@ def get_connected_devices():
 def get_hostname_from_web(ip):
     try:
         r = requests.get(f"http://{ip}", timeout=3)
-        if r.ok and "name='hostname'" in r.text:
-            start = r.text.find("name='hostname'")
-            val_start = r.text.find("value='", start) + 7
-            val_end = r.text.find("'", val_start)
-            return r.text[val_start:val_end]
+        if r.ok:
+            soup = BeautifulSoup(r.text, "html.parser")
+            hostname_field = soup.find("input", {"name": "hostname"})
+            if hostname_field is not None:
+                value = hostname_field.get("value")
+                if value is not None:
+                    return value
     except:
         pass
     return "Unbekannt"

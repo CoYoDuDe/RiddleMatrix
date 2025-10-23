@@ -43,6 +43,36 @@ def webserver_app(tmp_path):
         yield module, client
 
 
+def test_get_hostname_from_web_supports_attribute_variants(webserver_app, monkeypatch):
+    module, _client = webserver_app
+
+    class FakeResponse:
+        def __init__(self, text: str, ok: bool = True) -> None:
+            self.text = text
+            self.ok = ok
+
+    html_variants = [
+        "<html><body><input type=\"text\" name=\"hostname\" value=\"BoxAlpha\"></body></html>",
+        "<html><body><form><input value=' BoxBeta ' data-extra=\"1\" name='hostname' type='text'></form></body></html>",
+        "<html><body><input type='text' name='hostname'></body></html>",
+    ]
+
+    call_state = {"index": 0}
+
+    def fake_get(url, *args, **kwargs):
+        index = call_state["index"]
+        if index >= len(html_variants):
+            pytest.fail("Unerwarteter zusätzlicher Aufruf von requests.get")
+        call_state["index"] += 1
+        return FakeResponse(html_variants[index])
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    assert module.get_hostname_from_web("1.2.3.4") == "BoxAlpha"
+    assert module.get_hostname_from_web("5.6.7.8") == " BoxBeta "
+    assert module.get_hostname_from_web("9.8.7.6") == "Unbekannt"
+
+
 def test_transfer_box_returns_json_on_get_error(webserver_app, monkeypatch):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})
