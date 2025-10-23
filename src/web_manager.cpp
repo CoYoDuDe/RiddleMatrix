@@ -557,9 +557,9 @@ void setupWebServer() {
         if (request->hasParam("ssid", true) && request->hasParam("hostname", true)) {
             const String ssidParam = request->getParam("ssid", true)->value();
             const String hostnameParam = request->getParam("hostname", true)->value();
-            const bool hasPasswordParam = request->hasParam("password", true) &&
-                                          request->getParam("password", true)->value() != "";
-            const String passwordParam = hasPasswordParam ? request->getParam("password", true)->value() : String();
+            const bool passwordParamProvided = request->hasParam("password", true);
+            const String passwordParam =
+                passwordParamProvided ? request->getParam("password", true)->value() : String();
 
             auto containsForbiddenChars = [](const String &value) {
                 for (size_t idx = 0; idx < value.length(); ++idx) {
@@ -586,7 +586,7 @@ void setupWebServer() {
             if (containsForbiddenChars(hostnameParam)) {
                 validationError += "Hostname enthält ungültige Zeichen. ";
             }
-            if (hasPasswordParam && containsForbiddenChars(passwordParam)) {
+            if (passwordParamProvided && containsForbiddenChars(passwordParam)) {
                 validationError += "Passwort enthält ungültige Zeichen. ";
             }
 
@@ -597,9 +597,10 @@ void setupWebServer() {
 
             const String sanitizedSsid = normalizeInput(ssidParam);
             const String sanitizedHostname = normalizeInput(hostnameParam);
-            const String sanitizedPassword = hasPasswordParam ? normalizeInput(passwordParam) : String();
-            const bool applyPassword = hasPasswordParam && !sanitizedPassword.isEmpty();
-            const bool clearPassword = hasPasswordParam && sanitizedPassword.isEmpty();
+            const String sanitizedPassword =
+                passwordParamProvided ? normalizeInput(passwordParam) : String();
+            const bool applyPassword = passwordParamProvided && !sanitizedPassword.isEmpty();
+            const bool clearPassword = passwordParamProvided && sanitizedPassword.isEmpty();
 
             auto copyWithTermination = [](const String &input, char *destination, size_t destinationSize) {
                 strncpy(destination, input.c_str(), destinationSize);
