@@ -1,5 +1,6 @@
 #include "trigger_handler.h"
 #include "rtc_manager.h"
+#include "wifi_manager.h"
 
 DisplayLetterError lastDisplayLetterError = DisplayLetterError::None;
 bool pendingTriggerActive = false;
@@ -36,6 +37,10 @@ void clearDisplay() {
 
     alreadyCleared = true;
     triggerActive = false;
+
+    if (wifiConnected && !wifiDisabled) {
+        drawWiFiSymbol();
+    }
 }
 
 bool isTriggerPending(uint8_t triggerIndex) {
