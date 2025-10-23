@@ -198,6 +198,38 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     assert captured["json"] == {"letters": letters, "colors": colors, "delays": delays}
 
 
+def test_fetch_trigger_delays_returns_numeric_matrix(webserver_app, monkeypatch):
+    module, _ = webserver_app
+
+    payload = {
+        "delays": {
+            "mo": [0, 1, 2.5],
+            "di": {"0": "3", "1": 4.75, "2": 6},
+            "so": [7, 8, 9],
+        }
+    }
+
+    class FakeResponse:
+        ok = True
+
+        @staticmethod
+        def json():
+            return payload
+
+    def fake_get(url, *args, **kwargs):
+        assert url == "http://1.2.3.4/api/trigger-delays"
+        return FakeResponse()
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    delays = module.fetch_trigger_delays("1.2.3.4")
+    assert delays is not None
+
+    assert delays["mo"] == pytest.approx([0.0, 1.0, 2.5])
+    assert delays["di"] == pytest.approx([3.0, 4.75, 6.0])
+    assert delays["mi"] == pytest.approx([0.0, 0.0, 0.0])
+    assert delays["so"] == pytest.approx([7.0, 8.0, 9.0])
+
 def test_migrate_config_adds_delay_matrix(webserver_app):
     module, _ = webserver_app
     letters = {day: ["" for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
