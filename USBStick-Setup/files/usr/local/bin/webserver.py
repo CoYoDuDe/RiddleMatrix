@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 from flask import Flask, jsonify, request
 from bs4 import BeautifulSoup
+import math
 import os, json, subprocess, requests
 
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
 TRIGGER_SLOTS = 3
 DEFAULT_COLOR = "#ffffff"
-DEFAULT_DELAY = 0.0
+DEFAULT_DELAY = 0
 
 app = Flask(__name__)
 LEASE_FILE = "/var/lib/misc/dnsmasq.leases"
@@ -85,17 +86,18 @@ def _coerce_delay_value(value):
         try:
             numeric = float(value.strip())
         except (ValueError, AttributeError):
-            return float(DEFAULT_DELAY)
+            return DEFAULT_DELAY
     else:
-        return float(DEFAULT_DELAY)
+        return DEFAULT_DELAY
 
     if numeric < 0:
-        return float(DEFAULT_DELAY)
-    return round(numeric, 3)
+        return DEFAULT_DELAY
+
+    return int(math.floor(numeric + 0.5))
 
 
 def _normalize_delay_list(values, legacy_value=None):
-    normalized = [float(DEFAULT_DELAY) for _ in range(TRIGGER_SLOTS)]
+    normalized = [DEFAULT_DELAY for _ in range(TRIGGER_SLOTS)]
     if isinstance(values, list):
         for idx in range(min(TRIGGER_SLOTS, len(values))):
             normalized[idx] = _coerce_delay_value(values[idx])
@@ -110,13 +112,13 @@ def _normalize_delay_list(values, legacy_value=None):
     elif values is not None:
         normalized[0] = _coerce_delay_value(values)
 
-    if legacy_value is not None and normalized[0] == float(DEFAULT_DELAY):
+    if legacy_value is not None and normalized[0] == DEFAULT_DELAY:
         normalized[0] = _coerce_delay_value(legacy_value)
     return normalized
 
 
 def _default_delay_matrix():
-    return {day: [float(DEFAULT_DELAY) for _ in range(TRIGGER_SLOTS)] for day in DAYS}
+    return {day: [DEFAULT_DELAY for _ in range(TRIGGER_SLOTS)] for day in DAYS}
 
 
 def ensure_box_structure(box, remove_legacy=False):
