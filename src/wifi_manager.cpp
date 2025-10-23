@@ -40,6 +40,28 @@ void drawWiFiSymbol() {
     }
 }
 
+void disableWiFiAndServer() {
+    if (wifiDisabled) {
+        Serial.println(F("ℹ️ WiFi & Webserver sind bereits deaktiviert."));
+        return;
+    }
+
+    Serial.println(F("⏹️ Deaktiviere WiFi & Webserver."));
+
+    if (!triggerActive) {
+        clearWiFiSymbol();
+    } else {
+        Serial.println(F("⏳ Aktive Anzeige – WiFi-Symbol bleibt vorerst bestehen."));
+    }
+
+    server.end();
+    WiFi.disconnect();
+    WiFi.mode(WIFI_OFF);
+
+    wifiConnected = false;
+    wifiDisabled = true;
+}
+
 void connectWiFi() {
     Serial.println(F("🌐 Verbinde mit WiFi..."));
     WiFi.hostname(hostname);
@@ -61,11 +83,13 @@ void connectWiFi() {
         Serial.print(F("IP-Adresse: "));
         Serial.println(WiFi.localIP());
         wifiConnected = true;
+        wifiDisabled = false;
         drawWiFiSymbol();
         if (!syncTimeWithNTP()) {
             Serial.println(F("⚠️ Hinweis: NTP Synchronisierung beim Verbindungsaufbau fehlgeschlagen."));
         }
         setupWebServer();
+        wifiStartTime = millis();
     } else {
         Serial.println(F("\n⛔ WiFi Timeout! Verbindung fehlgeschlagen. WiFi bleibt aus."));
         wifiConnected = false;
@@ -78,19 +102,8 @@ void checkWiFi() {
     if (WiFi.status() != WL_CONNECTED) {
         if (!wifiDisabled) {
             Serial.println(F("⚠️ WLAN-Verbindung verloren. Schalte WiFi & Webserver aus..."));
-            wifiConnected = false;
-
-            if (!triggerActive) {
-                clearWiFiSymbol();
-            }
-
-            WiFi.disconnect();
-            WiFi.mode(WIFI_OFF);
-
-            server.end();
+            disableWiFiAndServer();
             Serial.println(F("🌐 Webserver gestoppt. Neustart erforderlich für neue Verbindung."));
-
-            wifiDisabled = true;
         }
     } else {
         if (!wifiConnected) {
@@ -100,6 +113,7 @@ void checkWiFi() {
 
             wifiConnected = true;
             wifiDisabled = false;
+            wifiStartTime = millis();
 
             if (!triggerActive) {
                 drawWiFiSymbol();
