@@ -189,7 +189,7 @@ void processPendingTriggers() {
             Serial.print(current.fromWeb ? F("Web") : F("Seriell"));
             Serial.println(F(")"));
 
-            handleTrigger(static_cast<char>('1' + current.triggerIndex), false);
+            handleTrigger(static_cast<char>('1' + current.triggerIndex), false, current.fromWeb);
 
             unsigned long afterExecution = millis();
 
@@ -327,7 +327,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
     return true;
 }
 
-void handleTrigger(char triggerType, bool isAutoMode) {
+void handleTrigger(char triggerType, bool isAutoMode, bool fromWeb) {
     uint8_t triggerIndex = 0;
     if (triggerType >= '1' && triggerType <= ('0' + NUM_TRIGGERS)) {
         triggerIndex = static_cast<uint8_t>(triggerType - '1');
@@ -338,11 +338,20 @@ void handleTrigger(char triggerType, bool isAutoMode) {
         triggerIndex = 0;
     }
 
-    if (wifiConnected && !isAutoMode) {
-        Serial.println(F("⛔ WiFi wird abgeschaltet wegen Trigger!"));
-        WiFi.disconnect();
-        wifiConnected = false;
-        server.end();
+    if (wifiConnected) {
+        if (!isAutoMode && !fromWeb) {
+            Serial.println(F("⛔ WiFi wird abgeschaltet wegen Trigger (Quelle: Seriell)!"));
+            WiFi.disconnect();
+            wifiConnected = false;
+            server.end();
+        } else {
+            Serial.print(F("ℹ️ WiFi bleibt aktiv (Quelle: "));
+            if (isAutoMode) {
+                Serial.println(F("Automodus)."));
+            } else {
+                Serial.println(F("Web)."));
+            }
+        }
     }
 
     int today = resolveWeekdayForTriggerHandling();
@@ -363,7 +372,7 @@ void handleTrigger(char triggerType, bool isAutoMode) {
         Serial.println(letter);
 
         unsigned long delayTime = letter_trigger_delays[triggerIndex][delayDayIndex];
-        if (!isAutoMode) {
+        if (!isAutoMode && !fromWeb) {
             if (delayTime == 0) {
                 Serial.println(F("⚡ Keine Verzögerung für diesen Trigger hinterlegt."));
             } else {
@@ -427,7 +436,7 @@ void checkAutoDisplay() {
         lastDisplayTime = millis();
         Serial.println(F("🕒 Automodus aktiv: Zeige heutigen Buchstaben automatisch!"));
 
-        handleTrigger('1', true);
+        handleTrigger('1', true, false);
     }
 }
 
