@@ -12,6 +12,26 @@ constexpr size_t MAX_PENDING_TRIGGERS = NUM_TRIGGERS * 3;
 PendingTrigger pendingQueue[MAX_PENDING_TRIGGERS];
 size_t pendingTriggerCount = 0;
 
+void prioritizePendingTriggersWithExecuteAt(unsigned long executeAt) {
+    if (pendingTriggerCount < 2) {
+        return;
+    }
+
+    size_t insertPosition = 0;
+    for (size_t i = 0; i < pendingTriggerCount; ++i) {
+        if (pendingQueue[i].executeAt == executeAt) {
+            PendingTrigger matching = pendingQueue[i];
+
+            for (size_t j = i; j > insertPosition; --j) {
+                pendingQueue[j] = pendingQueue[j - 1];
+            }
+
+            pendingQueue[insertPosition] = matching;
+            ++insertPosition;
+        }
+    }
+}
+
 void shiftPendingQueue(size_t fromIndex) {
     if (fromIndex >= pendingTriggerCount) {
         return;
@@ -70,11 +90,6 @@ bool enqueuePendingTrigger(uint8_t triggerIndex, bool fromWeb) {
         return false;
     }
 
-    if (triggerActive) {
-        Serial.println(F("⚠️ Anzeige läuft noch – neuer Trigger wird verworfen."));
-        return false;
-    }
-
     if (pendingTriggerCount >= MAX_PENDING_TRIGGERS) {
         Serial.println(F("⚠️ Zu viele geplante Trigger – bitte warten, bis ein Trigger abgearbeitet wurde."));
         return false;
@@ -96,6 +111,10 @@ bool enqueuePendingTrigger(uint8_t triggerIndex, bool fromWeb) {
 
     pendingQueue[pendingTriggerCount++] = {triggerIndex, executeAt, fromWeb};
     pendingTriggerActive = true;
+
+    if (triggerActive) {
+        Serial.println(F("ℹ️ Anzeige läuft noch – Trigger wurde zur späteren Ausführung eingeplant."));
+    }
 
     Serial.print(F("📥 Geplanter Trigger "));
     Serial.print(triggerIndex + 1);
@@ -142,11 +161,28 @@ void processPendingTriggers() {
 
             handleTrigger(static_cast<char>('1' + current.triggerIndex), false);
 
+            unsigned long afterExecution = millis();
+
+            bool hasSameExecuteAtPending = false;
+            for (size_t i = 0; i < pendingTriggerCount; ++i) {
+                const PendingTrigger& candidate = pendingQueue[i];
+                if (candidate.executeAt == current.executeAt &&
+                    static_cast<long>(afterExecution - candidate.executeAt) >= 0) {
+                    hasSameExecuteAtPending = true;
+                    break;
+                }
+            }
+
+            if (hasSameExecuteAtPending) {
+                Serial.println(F("🔁 Weitere Trigger mit identischem Ausführungszeitpunkt warten auf Abarbeitung."));
+                prioritizePendingTriggersWithExecuteAt(current.executeAt);
+            }
+
             if (triggerActive) {
                 break;
             }
 
-            now = millis();
+            now = afterExecution;
             continue;
         }
 
