@@ -10,6 +10,10 @@ extern bool wifiDisabled;
 extern bool triggerActive;
 extern bool wifiSymbolVisible;
 
+// **📊 Laufzeitstatus des AsyncWebServer**
+// Hilft dabei, den Listener bei WLAN-Reconnects gezielt neu zu starten.
+extern bool webServerRunning;
+
 // **❌ WiFi-Symbol entfernen, wenn die Verbindung abbricht**
 void clearWiFiSymbol();
 
