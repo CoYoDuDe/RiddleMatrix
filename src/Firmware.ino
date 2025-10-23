@@ -45,7 +45,7 @@ void setup() {
   checkMemoryUsage();
 
   connectWiFi();
-  wifiStartTime = millis();
+  refreshWiFiIdleTimer(F("setup"));
 }
 
 void loop() {
