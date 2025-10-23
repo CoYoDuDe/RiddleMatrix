@@ -136,11 +136,26 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     html_parts = ["<html><body>"]
     for index, day in enumerate(module.DAYS):
         for slot in range(module.TRIGGER_SLOTS):
+            if slot == 0:
+                if index % 2 == 0:
+                    select_name = f"letter_{index}"
+                    color_name = f"color_{index}"
+                else:
+                    select_name = f"letter{index}"
+                    color_name = f"color{index}"
+            else:
+                if slot % 2 == 0:
+                    select_name = f"letter_{index}_{slot}"
+                    color_name = f"color_{index}_{slot}"
+                else:
+                    select_name = f"letter{index}_{slot}"
+                    color_name = f"color{index}_{slot}"
+
             html_parts.append(
-                f"<select name='letter{index}_{slot}'><option value='x' selected>x</option></select>"
+                f"<select name='{select_name}'><option value='x' selected>x</option></select>"
             )
             html_parts.append(
-                f"<input name='color{index}_{slot}' value='{module.DEFAULT_COLOR}'>"
+                f"<input name='{color_name}' value='{module.DEFAULT_COLOR}'>"
             )
     html_parts.append("</body></html>")
     fake_html = "".join(html_parts)
