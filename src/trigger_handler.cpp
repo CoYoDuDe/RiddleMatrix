@@ -37,6 +37,7 @@ void clearDisplay() {
 
     alreadyCleared = true;
     triggerActive = false;
+    wifiSymbolVisible = false;
 
     if (wifiConnected && !wifiDisabled) {
         drawWiFiSymbol();
@@ -215,6 +216,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
     Serial.print(F(", B="));
     Serial.println(b);
 
+    wifiSymbolVisible = false;
     display.fillScreen(display.color565(0, 0, 0));
     display.display();
     delay(10);
