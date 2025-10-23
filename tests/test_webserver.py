@@ -123,14 +123,14 @@ def test_update_box_updates_specific_trigger(webserver_app):
 
     assert response.status_code == 200
     config = module.load_config()
-    assert config["boxen"]["TestBox"]["delays"]["mo"][0] == pytest.approx(1.25)
+    assert config["boxen"]["TestBox"]["delays"]["mo"][0] == module._coerce_delay_value(1.25)
 
 
 def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     module, client = webserver_app
     letters = {day: [f"{day}{idx}" for idx in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
     colors = {day: [f"#0{idx}{idx}{idx}{idx}{idx}"[:7] for idx in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
-    delays = {day: [float(idx) + 0.5 for idx in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+    delays = {day: [idx for idx in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
     module.save_config({"boxen": {"TestBox": {"ip": "1.2.3.4", "letters": letters, "colors": colors, "delays": delays}}, "boxOrder": []})
 
     html_parts = ["<html><body>"]
@@ -194,6 +194,61 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     assert response.get_json() == {"status": "✅ Übertragen"}
     assert captured["url"].endswith("/updateAllLetters")
     assert captured["json"] == {"letters": letters, "colors": colors, "delays": delays}
+
+
+def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypatch):
+    module, client = webserver_app
+    letters = {day: ["" for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+    colors = {day: [module.DEFAULT_COLOR for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+    decimal_template = [0.4, 1.6, 2.5]
+    delays = {day: list(decimal_template) for day in module.DAYS}
+    module.save_config(
+        {"boxen": {"TestBox": {"ip": "1.2.3.4", "letters": letters, "colors": colors, "delays": delays}}, "boxOrder": []}
+    )
+
+    class FakeResponse:
+        def __init__(self, text: str = "", ok: bool = True, json_data=None) -> None:
+            self.text = text
+            self.ok = ok
+            self._json = json_data
+
+        def json(self):
+            if self._json is None:
+                raise ValueError("No JSON data")
+            return self._json
+
+    def fake_get(url, *args, **kwargs):
+        if url.endswith("/api/trigger-delays"):
+            return FakeResponse(ok=True, json_data={"delays": {day: [0 for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}})
+        return FakeResponse("<html></html>", True)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    captured = {}
+
+    def fake_post(url, json=None, timeout=3):
+        captured["url"] = url
+        captured["json"] = json
+
+        class PostResponse:
+            ok = True
+
+        return PostResponse()
+
+    monkeypatch.setattr(module.requests, "post", fake_post)
+
+    response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "✅ Übertragen"}
+    assert "json" in captured
+
+    expected_delays = {
+        day: [module._coerce_delay_value(value) for value in decimal_template] for day in module.DAYS
+    }
+
+    assert captured["json"]["delays"] == expected_delays
+    for day in module.DAYS:
+        assert all(isinstance(value, int) for value in captured["json"]["delays"][day])
 
 
 def test_extract_box_state_supports_trigger_first_schema(webserver_app):
@@ -267,10 +322,10 @@ def test_fetch_trigger_delays_returns_numeric_matrix(webserver_app, monkeypatch)
     delays = module.fetch_trigger_delays("1.2.3.4")
     assert delays is not None
 
-    assert delays["mo"] == pytest.approx([0.0, 1.0, 2.5])
-    assert delays["di"] == pytest.approx([3.0, 4.75, 6.0])
-    assert delays["mi"] == pytest.approx([0.0, 0.0, 0.0])
-    assert delays["so"] == pytest.approx([7.0, 8.0, 9.0])
+    assert delays["mo"] == [module._coerce_delay_value(value) for value in payload["delays"]["mo"]]
+    assert delays["di"] == [module._coerce_delay_value(payload["delays"]["di"].get(str(idx))) for idx in range(module.TRIGGER_SLOTS)]
+    assert delays["mi"] == [module.DEFAULT_DELAY for _ in range(module.TRIGGER_SLOTS)]
+    assert delays["so"] == [module._coerce_delay_value(value) for value in payload["delays"]["so"]]
 
 def test_migrate_config_adds_delay_matrix(webserver_app):
     module, _ = webserver_app
