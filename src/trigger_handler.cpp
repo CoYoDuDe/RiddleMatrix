@@ -22,6 +22,12 @@ void shiftPendingQueue(size_t fromIndex) {
     }
 }
 
+void ensureWiFiSymbolAfterError() {
+    if (wifiConnected && !wifiDisabled) {
+        drawWiFiSymbol();
+    }
+}
+
 } // namespace
 
 void clearDisplay() {
@@ -189,6 +195,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         Serial.println(F("⚠️ Ungültiger Wochentag – breche Anzeige ab."));
         triggerActive = false;
         lastDisplayLetterError = DisplayLetterError::InvalidWeekday;
+        ensureWiFiSymbolAfterError();
         return false;
     }
 
@@ -216,19 +223,20 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
     Serial.print(F(", B="));
     Serial.println(b);
 
-    wifiSymbolVisible = false;
-    display.fillScreen(display.color565(0, 0, 0));
-    display.display();
-    delay(10);
-
     if (letterData.find(letter) == letterData.end()) {
         Serial.println(F("⚠️ Fehler: Buchstabe nicht gefunden!"));
         triggerActive = false;
         lastDisplayLetterError = DisplayLetterError::LetterNotFound;
+        ensureWiFiSymbolAfterError();
         return false;
     }
 
     const uint8_t* bitmap = letterData[letter];
+
+    wifiSymbolVisible = false;
+    display.fillScreen(display.color565(0, 0, 0));
+    display.display();
+    delay(10);
 
     Serial.println(F("🖊️ Beginne Zeichnung..."));
     for (int y = 0; y < 32; y++) {
