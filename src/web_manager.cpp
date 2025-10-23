@@ -553,6 +553,7 @@ void setupWebServer() {
 
         if (displayed) {
             alreadyCleared = false;
+            wifiStartTime = millis();
             request->send(200, "text/plain", "✅ Buchstabe " + letter + " für Trigger " + String(triggerIndex + 1) + " angezeigt!");
             return;
         }

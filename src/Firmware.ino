@@ -6,12 +6,17 @@
 
 bool triggerActive = false;
 unsigned long letterStartTime = 0;
+unsigned long wifiStartTime = 0;
 Ticker display_ticker;
 
 AsyncWebServer server(80);
 
 bool wifiDisabled = false;
 bool alreadyCleared = false;
+
+namespace {
+constexpr unsigned long WIFI_IDLE_TIMEOUT_MS = 300UL * 1000UL;
+}
 
 void setup() {
   Serial.begin(19200);
@@ -40,6 +45,7 @@ void setup() {
   checkMemoryUsage();
 
   connectWiFi();
+  wifiStartTime = millis();
 }
 
 void loop() {
@@ -66,5 +72,13 @@ void loop() {
     checkTrigger();
     checkAutoDisplay();
     processPendingTriggers();
+
+    if (!triggerActive && wifiConnected && !wifiDisabled && wifiStartTime != 0) {
+        unsigned long now = millis();
+        if (now - wifiStartTime >= WIFI_IDLE_TIMEOUT_MS) {
+            Serial.println(F("⏱️ Keine Anzeigeaktivität – deaktiviere WiFi & Webserver."));
+            disableWiFiAndServer();
+        }
+    }
 
 }
