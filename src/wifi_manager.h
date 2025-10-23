@@ -7,6 +7,7 @@
 
 extern bool wifiDisabled;
 extern bool triggerActive;
+extern bool wifiSymbolVisible;
 
 // **❌ WiFi-Symbol entfernen, wenn die Verbindung abbricht**
 void clearWiFiSymbol();
