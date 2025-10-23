@@ -281,13 +281,6 @@ def get_connected_devices():
                 if len(parts) >= 3:
                     ip = parts[2]
                     if subprocess.call(["ping", "-c", "1", "-W", "1", ip], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
-                        try:
-                            r = requests.get(f"http://{ip}/", timeout=3)
-                            if not r.ok or "name='hostname'" not in r.text:
-                                continue
-                        except:
-                            continue
-
                         hostname = get_hostname_from_web(ip)
                         if hostname == "Unbekannt":
                             continue
