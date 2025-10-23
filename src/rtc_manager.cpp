@@ -60,7 +60,9 @@ bool updateCachedWeekday(bool waitForIdle) {
   }
 
   const unsigned long now = millis();
-  if (cachedWeekdayValid && (now - cachedWeekdayTimestamp) < WEEKDAY_CACHE_MAX_AGE_MS) {
+  const bool cacheFresh =
+      cachedWeekdayValid && (now - cachedWeekdayTimestamp) < WEEKDAY_CACHE_MAX_AGE_MS;
+  if (cacheFresh) {
     return true;
   }
 
@@ -75,6 +77,9 @@ bool updateCachedWeekday(bool waitForIdle) {
     }
 
     if (Serial.available() > 0) {
+      if (!cacheFresh) {
+        cachedWeekdayValid = false;
+      }
       return cachedWeekdayValid;
     }
   }
