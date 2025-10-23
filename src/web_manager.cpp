@@ -142,6 +142,54 @@ bool parseDelayJsonVariant(const JsonVariantConst &variant, unsigned long &parse
     return false;
 }
 
+bool parseSignedLongInRange(const String &value, long minValue, long maxValue, long &parsed) {
+    String sanitized = value;
+    sanitized.trim();
+
+    if (sanitized.isEmpty()) {
+        return false;
+    }
+
+    char *endPtr = nullptr;
+    const char *raw = sanitized.c_str();
+    long candidate = strtol(raw, &endPtr, 10);
+
+    if (endPtr == raw || (endPtr != nullptr && *endPtr != '\0')) {
+        return false;
+    }
+
+    if (candidate < minValue || candidate > maxValue) {
+        return false;
+    }
+
+    parsed = candidate;
+    return true;
+}
+
+bool parseUnsignedLongInRange(const String &value, unsigned long minValue, unsigned long maxValue, unsigned long &parsed) {
+    String sanitized = value;
+    sanitized.trim();
+
+    if (sanitized.isEmpty()) {
+        return false;
+    }
+
+    char *endPtr = nullptr;
+    const char *raw = sanitized.c_str();
+    unsigned long candidate = strtoul(raw, &endPtr, 10);
+
+    if (endPtr == raw || (endPtr != nullptr && *endPtr != '\0')) {
+        return false;
+    }
+
+    if (candidate < minValue || candidate > maxValue) {
+        return false;
+    }
+
+    parsed = candidate;
+    return true;
+}
+
 void sendJsonStatus(AsyncWebServerRequest *request, uint16_t statusCode, const char *status, const String &message) {
     StaticJsonDocument<256> responseDoc;
     responseDoc["status"] = status;
@@ -405,10 +453,11 @@ void setupWebServer() {
         // **Anzeige-Einstellungen**
         html += "<h2>Anzeige-Einstellungen</h2>";
         html += "<form id='displayForm'>";
-        html += "Helligkeit: <input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'><br>";
-        html += "Buchstaben-Anzeigezeit (Sekunden): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
-        html += "Automodus Intervall (Sekunden): <input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'><br>";
+        html += "Helligkeit (1–255): <input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'><br>";
+        html += "Buchstaben-Anzeigezeit (Sekunden, 1–60): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
+        html += "Automodus-Intervall (Sekunden, 30–600): <input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'><br>";
         html += "<label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> Automodus aktivieren</label>";
+        html += "<p style='margin-top:4px;'>Zulässige Werte: Helligkeit 1–255, Anzeigezeit 1–60&nbsp;s, Automodus-Intervall 30–600&nbsp;s.</p>";
         html += "<br><button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
         html += "</form>";
 
@@ -587,22 +636,58 @@ void setupWebServer() {
     });
 
     server.on("/updateDisplaySettings", HTTP_POST, [](AsyncWebServerRequest *request) {
-        if (request->hasParam("brightness", true) &&
-            request->hasParam("letter_time", true) &&
-            request->hasParam("auto_interval", true)) {
-
-            display_brightness = request->getParam("brightness", true)->value().toInt();
-            letter_display_time = strtoul(request->getParam("letter_time", true)->value().c_str(), nullptr, 10);
-            letter_auto_display_interval = strtoul(request->getParam("auto_interval", true)->value().c_str(), nullptr, 10);
-
-            String autoModeValue = request->hasParam("auto_mode", true) ? request->getParam("auto_mode", true)->value() : "off";
-            autoDisplayMode = (autoModeValue == "on");
-
-            saveConfig();
-            request->send(200, "text/plain", "Anzeigeeinstellungen gespeichert!");
-        } else {
-            request->send(400, "text/plain", "Fehlende Parameter!");
+        if (!(request->hasParam("brightness", true) &&
+              request->hasParam("letter_time", true) &&
+              request->hasParam("auto_interval", true))) {
+            request->send(400, "text/plain", "❌ Fehler: Alle Parameter (brightness, letter_time, auto_interval) sind erforderlich.");
+            return;
         }
+
+        AsyncWebParameter *brightnessParam = request->getParam("brightness", true);
+        AsyncWebParameter *letterTimeParam = request->getParam("letter_time", true);
+        AsyncWebParameter *autoIntervalParam = request->getParam("auto_interval", true);
+
+        long brightnessCandidate = 0;
+        if (!parseSignedLongInRange(brightnessParam->value(), 1L, 255L, brightnessCandidate)) {
+            request->send(400, "text/plain", "❌ Fehler: Helligkeit muss eine Ganzzahl zwischen 1 und 255 sein.");
+            return;
+        }
+
+        unsigned long letterTimeCandidate = 0;
+        if (!parseUnsignedLongInRange(letterTimeParam->value(), 1UL, 60UL, letterTimeCandidate)) {
+            request->send(400, "text/plain", "❌ Fehler: Die Anzeigezeit muss eine Ganzzahl zwischen 1 und 60 Sekunden sein.");
+            return;
+        }
+
+        unsigned long autoIntervalCandidate = 0;
+        if (!parseUnsignedLongInRange(autoIntervalParam->value(), 30UL, 600UL, autoIntervalCandidate)) {
+            request->send(400, "text/plain", "❌ Fehler: Das Automodus-Intervall muss zwischen 30 und 600 Sekunden liegen.");
+            return;
+        }
+
+        bool autoModeCandidate = false;
+        if (request->hasParam("auto_mode", true)) {
+            String autoModeValue = request->getParam("auto_mode", true)->value();
+            autoModeValue.trim();
+            autoModeValue.toLowerCase();
+
+            if (autoModeValue == "on" || autoModeValue == "1" || autoModeValue == "true") {
+                autoModeCandidate = true;
+            } else if (autoModeValue.isEmpty() || autoModeValue == "off" || autoModeValue == "0" || autoModeValue == "false") {
+                autoModeCandidate = false;
+            } else {
+                request->send(400, "text/plain", "❌ Fehler: auto_mode akzeptiert nur on/off, true/false oder 1/0.");
+                return;
+            }
+        }
+
+        display_brightness = static_cast<int>(brightnessCandidate);
+        letter_display_time = letterTimeCandidate;
+        letter_auto_display_interval = autoIntervalCandidate;
+        autoDisplayMode = autoModeCandidate;
+
+        saveConfig();
+        request->send(200, "text/plain", "✅ Anzeigeeinstellungen gespeichert!");
     });
 
     server.on("/updateTriggerDelays", HTTP_POST, [](AsyncWebServerRequest *request) {
