@@ -195,11 +195,32 @@ def extract_box_state_from_soup(soup):
     letters = {day: ["" for _ in range(TRIGGER_SLOTS)] for day in DAYS}
     colors = {day: [DEFAULT_COLOR for _ in range(TRIGGER_SLOTS)] for day in DAYS}
 
+    def _find_field(tag, base_name, day_index, slot):
+        name_candidates = []
+        if slot is not None:
+            name_candidates.extend(
+                [
+                    f"{base_name}_{day_index}_{slot}",
+                    f"{base_name}{day_index}_{slot}",
+                ]
+            )
+        if slot == 0:
+            name_candidates.extend(
+                [
+                    f"{base_name}_{day_index}",
+                    f"{base_name}{day_index}",
+                ]
+            )
+
+        for candidate in name_candidates:
+            field = soup.find(tag, {"name": candidate})
+            if field is not None:
+                return field
+        return None
+
     for day_index, day in enumerate(DAYS):
         for slot in range(TRIGGER_SLOTS):
-            select = soup.find("select", {"name": f"letter{day_index}_{slot}"})
-            if select is None and slot == 0:
-                select = soup.find("select", {"name": f"letter{day_index}"})
+            select = _find_field("select", "letter", day_index, slot)
 
             value = ""
             if select:
@@ -212,9 +233,7 @@ def extract_box_state_from_soup(soup):
                         value = first_option.get("value", "")
             letters[day][slot] = value or ""
 
-            color_input = soup.find("input", {"name": f"color{day_index}_{slot}"})
-            if color_input is None and slot == 0:
-                color_input = soup.find("input", {"name": f"color{day_index}"})
+            color_input = _find_field("input", "color", day_index, slot)
 
             color_value = DEFAULT_COLOR
             if color_input and color_input.has_attr("value") and color_input["value"]:
