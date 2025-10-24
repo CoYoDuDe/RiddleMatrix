@@ -1,6 +1,7 @@
 #include "web_manager.h"
 #include "wifi_manager.h"
 #include <AsyncJson.h>
+#include <algorithm>
 #include <math.h>
 
 namespace {
@@ -818,7 +819,10 @@ void setupWebServer() {
 
                 if (context->overflow) {
                     Serial.println(F("❌ JSON-Update fehlgeschlagen: Nutzlast überschreitet Limit."));
-                    sendJsonStatus(request, 400, "error", F("JSON-Nutzlast überschreitet die zulässige Größe."));
+                    String overflowMessage = F("JSON-Nutzlast überschreitet die zulässige Größe von ");
+                    overflowMessage += static_cast<unsigned long>(MAX_JSON_BODY_SIZE);
+                    overflowMessage += F(" Bytes.");
+                    sendJsonStatus(request, 413, "error", overflowMessage);
                     cleanup();
                     return;
                 }
@@ -1141,7 +1145,12 @@ void setupWebServer() {
 
             if (index == 0) {
                 context->body = String();
-                context->body.reserve(total + 1);
+                context->body.reserve(std::min(MAX_JSON_BODY_SIZE, total) + 1);
+            }
+
+            if (context->body.length() + len > MAX_JSON_BODY_SIZE) {
+                context->overflow = true;
+                return;
             }
 
             for (size_t idx = 0; idx < len; ++idx) {
