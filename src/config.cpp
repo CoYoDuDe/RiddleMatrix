@@ -207,8 +207,11 @@ void loadConfig() {
 
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.get(EEPROM_OFFSET_WIFI_SSID, wifi_ssid);
+    wifi_ssid[sizeof(wifi_ssid) - 1] = '\0';
     EEPROM.get(EEPROM_OFFSET_WIFI_PASSWORD, wifi_password);
+    wifi_password[sizeof(wifi_password) - 1] = '\0';
     EEPROM.get(EEPROM_OFFSET_HOSTNAME, hostname);
+    hostname[sizeof(hostname) - 1] = '\0';
 
     bool migratedLegacyLayout = false;
     uint16_t versionOffset = EEPROM_OFFSET_CONFIG_VERSION;
@@ -255,7 +258,14 @@ void loadConfig() {
 
     bool eepromUpdated = migratedLegacyLayout;
 
-    if (strlen(wifi_ssid) == 0 || wifi_ssid[0] == '\xFF') {
+    bool wifiErased = (wifi_ssid[0] == '\xFF');
+    bool wifiEmpty = (wifi_ssid[0] == '\0');
+    bool wifiLengthZero = false;
+    if (!wifiErased && !wifiEmpty) {
+        wifiLengthZero = (strlen(wifi_ssid) == 0);
+    }
+
+    if (wifiErased || wifiEmpty || wifiLengthZero) {
         Serial.println(F("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte..."));
         strncpy(wifi_ssid, "YOUR_WIFI_SSID", sizeof(wifi_ssid));
         strncpy(wifi_password, "YOUR_WIFI_PASSWORD", sizeof(wifi_password));
