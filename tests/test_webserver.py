@@ -337,6 +337,48 @@ def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypa
         assert all(isinstance(value, int) for value in captured["json"]["delays"][day])
 
 
+def test_reload_all_blocks_unauthenticated_remote_client(webserver_app, monkeypatch):
+    module, client = webserver_app
+    module.PUBLIC_AP_ENV_FILE = None
+    monkeypatch.delenv(module.SHUTDOWN_TOKEN_ENV, raising=False)
+    module.reload_shutdown_token_cache()
+
+    response = client.post("/reload_all", environ_base={"REMOTE_ADDR": "203.0.113.5"})
+
+    assert response.status_code == 403
+
+
+def test_reload_all_accepts_token_authenticated_client(webserver_app, monkeypatch):
+    module, client = webserver_app
+    module.PUBLIC_AP_ENV_FILE = None
+    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "topsecret")
+    module.reload_shutdown_token_cache()
+
+    module.save_config({"boxen": {"AltBox": {"ip": "1.2.3.4"}}, "boxOrder": ["AltBox"]})
+
+    called = {"count": 0}
+
+    def fake_get_connected_devices():
+        called["count"] += 1
+        return []
+
+    monkeypatch.setattr(module, "get_connected_devices", fake_get_connected_devices)
+
+    response = client.post(
+        "/reload_all",
+        environ_base={"REMOTE_ADDR": "198.51.100.10"},
+        headers={"X-Api-Key": "topsecret"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "reloaded"}
+    assert called["count"] == 1
+
+    config = module.load_config()
+    assert config["boxen"] == {}
+    assert config["boxOrder"] == []
+
+
 def test_transfer_box_matches_firmware_day_index_mapping(webserver_app, monkeypatch):
     module, client = webserver_app
 
