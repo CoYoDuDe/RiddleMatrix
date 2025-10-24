@@ -550,9 +550,14 @@ def reload_all():
     get_connected_devices()
     return jsonify({"status": "reloaded"})
 
-@app.route("/transfer_box")
+@app.route("/transfer_box", methods=["POST"])
 def transfer_box():
-    hostname = request.args.get("hostname")
+    _authorize_sensitive_action("Transfer-Box")
+
+    payload = request.get_json(silent=True) or {}
+    hostname = payload.get("hostname") or request.args.get("hostname")
+    if not hostname:
+        return jsonify({"status": "❌ Hostname fehlt"}), 400
     config = load_config()
     box = config["boxen"].get(hostname)
     if not box:
