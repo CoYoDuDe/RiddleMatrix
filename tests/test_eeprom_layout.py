@@ -58,4 +58,4 @@ def test_eeprom_usage_fits_into_memory() -> None:
     assert version_end <= eeprom_size
     assert constants["EEPROM_OFFSET_CONFIG_VERSION"] >= wifi_connect_end
     assert constants["EEPROM_OFFSET_CONFIG_VERSION"] >= matrix_end
-    assert constants["EEPROM_CONFIG_VERSION"] >= 3
+    assert constants["EEPROM_CONFIG_VERSION"] >= 4

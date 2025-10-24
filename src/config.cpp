@@ -49,6 +49,17 @@ namespace {
 constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION_LEGACY = 400;
 constexpr uint16_t EEPROM_VERSION_INVALID = 0xFFFF;
 
+constexpr uint16_t EEPROM_OFFSET_DAILY_LETTER_COLORS_V3 = 200;
+constexpr uint16_t EEPROM_OFFSET_DISPLAY_BRIGHTNESS_V3 =
+    EEPROM_OFFSET_DAILY_LETTER_COLORS_V3 + (NUM_TRIGGERS * NUM_DAYS * COLOR_STRING_LENGTH);
+constexpr uint16_t EEPROM_OFFSET_LETTER_DISPLAY_TIME_V3 = EEPROM_OFFSET_DISPLAY_BRIGHTNESS_V3 + sizeof(int);
+constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_MATRIX_V3 =
+    EEPROM_OFFSET_LETTER_DISPLAY_TIME_V3 + EEPROM_SIZEOF_UNSIGNED_LONG;
+constexpr uint16_t EEPROM_OFFSET_AUTO_INTERVAL_V3 =
+    EEPROM_OFFSET_TRIGGER_DELAY_MATRIX_V3 + EEPROM_TRIGGER_DELAY_MATRIX_SIZE;
+constexpr uint16_t EEPROM_OFFSET_AUTO_MODE_V3 = EEPROM_OFFSET_AUTO_INTERVAL_V3 + EEPROM_SIZEOF_UNSIGNED_LONG;
+constexpr uint16_t EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT_V3 = EEPROM_OFFSET_AUTO_MODE_V3 + sizeof(uint8_t);
+
 bool isValidHexColor(const char *value) {
     if (value == nullptr) {
         return false;
@@ -214,6 +225,26 @@ void migrateLegacyLayout(uint16_t storedVersion, bool &migratedLegacyLayout) {
     migratedLegacyLayout = true;
 }
 
+void migrateVersion3Layout(bool &migratedLegacyLayout, uint8_t &autoModeByte) {
+    Serial.println(F("ℹ️ Konfigurationslayout Version 3 erkannt – verschiebe Farbdaten auf neue Offsets."));
+
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS_V3, dailyLetterColors);
+    sanitizeColorMatrix(dailyLetterColors);
+
+    EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS_V3, display_brightness);
+    EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME_V3, letter_display_time);
+    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX_V3, letter_trigger_delays);
+    EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL_V3, letter_auto_display_interval);
+
+    EEPROM.get(EEPROM_OFFSET_AUTO_MODE_V3, autoModeByte);
+    autoDisplayMode = (autoModeByte == 1);
+
+    EEPROM.get(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT_V3, wifi_connect_timeout);
+
+    migratedLegacyLayout = true;
+}
+
 } // namespace
 
 void saveConfig() {
@@ -258,6 +289,9 @@ void loadConfig() {
     uint16_t versionOffset = EEPROM_OFFSET_CONFIG_VERSION;
     uint16_t storedVersion = readStoredConfigVersion(versionOffset);
     bool usingCurrentLayout = (storedVersion == EEPROM_CONFIG_VERSION);
+    bool usingVersion3Layout = (!usingCurrentLayout && storedVersion == 3);
+    uint8_t autoModeByte = 0;
+    bool autoModeByteLoaded = false;
 
     if (storedVersion == EEPROM_VERSION_INVALID) {
         Serial.println(F("ℹ️ Keine gültige Konfigurationsversion gefunden – gehe von Legacy-Layout aus."));
@@ -269,6 +303,9 @@ void loadConfig() {
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
         sanitizeColorMatrix(dailyLetterColors);
+    } else if (usingVersion3Layout) {
+        migrateVersion3Layout(migratedLegacyLayout, autoModeByte);
+        autoModeByteLoaded = true;
     } else {
         migrateLegacyLayout(storedVersion, migratedLegacyLayout);
     }
@@ -287,16 +324,20 @@ void loadConfig() {
         }
     }
 
-    EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
-    EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
+    if (!usingVersion3Layout) {
+        EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
+        EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
+    }
     if (usingCurrentLayout) {
         EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, letter_trigger_delays);
     }
-    EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
-    uint8_t autoModeByte = 0;
-    EEPROM.get(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
-    EEPROM.get(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
-    autoDisplayMode = (autoModeByte == 1);
+    if (!usingVersion3Layout) {
+        EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
+        EEPROM.get(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
+        EEPROM.get(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
+        autoDisplayMode = (autoModeByte == 1);
+        autoModeByteLoaded = true;
+    }
 
     Serial.println(F("✅ EEPROM-Daten geladen!"));
 
@@ -396,7 +437,7 @@ void loadConfig() {
         eepromUpdated = true;
     }
 
-    if (autoModeByte > 1) {
+    if (autoModeByteLoaded && autoModeByte > 1) {
         Serial.println(F("⚠️ Ungültiger Wert für autoDisplayMode! Setze Standard auf false."));
         autoDisplayMode = false;
         eepromUpdated = true;
