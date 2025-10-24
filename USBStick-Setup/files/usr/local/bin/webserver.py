@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import math
 import os, json, subprocess, requests
 import secrets
+import re
 from typing import Optional, Tuple
 from functools import lru_cache
 
@@ -20,6 +21,8 @@ DAY_TO_FIRMWARE_INDEX = {
 TRIGGER_SLOTS = 3
 DEFAULT_COLOR = "#ffffff"
 DEFAULT_DELAY = 0
+
+_ALLOWED_HOSTNAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 app = Flask(__name__)
 LEASE_FILE = "/var/lib/misc/dnsmasq.leases"
@@ -43,6 +46,30 @@ def load_config():
 def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=4)
+
+
+def sanitize_hostname(hostname: Optional[str], *, fallback_prefix: str = "box") -> str:
+    if isinstance(hostname, bytes):
+        try:
+            hostname = hostname.decode("utf-8", "ignore")
+        except Exception:
+            hostname = hostname.decode("latin-1", "ignore")
+    if hostname is None:
+        value = ""
+    elif isinstance(hostname, str):
+        value = hostname
+    else:
+        value = str(hostname)
+
+    value = _ALLOWED_HOSTNAME_PATTERN.sub("-", value)
+    value = re.sub(r"-{2,}", "-", value)
+    value = re.sub(r"\.{2,}", ".", value)
+    value = value.strip("-_.")
+
+    if not value:
+        value = f"{fallback_prefix}-{secrets.token_hex(4)}"
+
+    return value[:64]
 
 
 def _normalize_letter_list(values, legacy_value=None):
@@ -204,8 +231,38 @@ def migrate_config(data):
         data["boxOrder"] = []
         changed = True
 
-    for box in data["boxen"].values():
+    sanitized_boxen = {}
+    rename_map = {}
+    for original_hostname, box in list(data["boxen"].items()):
+        target = sanitize_hostname(original_hostname)
+        suffix = 1
+        candidate = target
+        while candidate in sanitized_boxen and sanitized_boxen[candidate] is not box:
+            suffix += 1
+            candidate = sanitize_hostname(f"{target}-{suffix}")
+        rename_map[original_hostname] = candidate
+        sanitized_boxen[candidate] = box
+        if candidate != original_hostname:
+            changed = True
         if ensure_box_structure(box, remove_legacy=True):
+            changed = True
+
+    if sanitized_boxen and sanitized_boxen is not data["boxen"]:
+        data["boxen"] = sanitized_boxen
+        changed = True
+
+    if data["boxOrder"]:
+        new_order = []
+        seen = set()
+        for entry in data["boxOrder"]:
+            mapped = rename_map.get(entry)
+            if mapped is None:
+                mapped = sanitize_hostname(entry)
+            if mapped in sanitized_boxen and mapped not in seen:
+                new_order.append(mapped)
+                seen.add(mapped)
+        if new_order != data["boxOrder"]:
+            data["boxOrder"] = new_order
             changed = True
 
     return changed
@@ -374,6 +431,8 @@ def get_connected_devices():
                         if hostname == "Unbekannt":
                             continue
 
+                        hostname = sanitize_hostname(hostname)
+
                         hostname_exists = False
                         for existing_identifier, box in list(config["boxen"].items()):
                             if existing_identifier == hostname:
@@ -414,6 +473,7 @@ def get_hostname_from_web(ip):
     return "Unbekannt"
 
 def learn_box(ip, identifier):
+    identifier = sanitize_hostname(identifier)
     config = load_config()
     if identifier in config["boxen"]:
         box = config["boxen"][identifier]
@@ -466,13 +526,20 @@ def update_box():
     _authorize_sensitive_action("Update-Box")
 
     data = request.json or {}
-    hostname = data.get("hostname")
-    if not hostname:
+    raw_hostname = data.get("hostname")
+    if not raw_hostname:
         return jsonify({"status": "error"}), 400
 
+    hostname = sanitize_hostname(raw_hostname)
     config = load_config()
+    renamed_existing = False
+    if hostname != raw_hostname and raw_hostname in config["boxen"]:
+        config["boxen"][hostname] = config["boxen"].pop(raw_hostname)
+        config["boxOrder"] = [hostname if h == raw_hostname else h for h in config["boxOrder"]]
+        renamed_existing = True
+
     box = config["boxen"].setdefault(hostname, {"ip": "0.0.0.0"})
-    changed = ensure_box_structure(box, remove_legacy=True)
+    changed = ensure_box_structure(box, remove_legacy=True) or renamed_existing
 
     updated = False
 
@@ -564,11 +631,19 @@ def remove_box():
     _authorize_sensitive_action("Remove-Box")
 
     data = request.get_json(silent=True) or {}
-    hostname = data.get("hostname")
+    raw_hostname = data.get("hostname")
+    if not raw_hostname:
+        return jsonify({"status": "removed"})
+
+    hostname = sanitize_hostname(raw_hostname)
     config = load_config()
-    if hostname in config["boxen"]:
-        del config["boxen"][hostname]
-        config["boxOrder"] = [h for h in config["boxOrder"] if h != hostname]
+    removed = False
+    for candidate in {hostname, raw_hostname}:
+        if candidate in config["boxen"]:
+            del config["boxen"][candidate]
+            removed = True
+    if removed:
+        config["boxOrder"] = [h for h in config["boxOrder"] if h not in {hostname, raw_hostname}]
         save_config(config)
     return jsonify({"status": "removed"})
 
@@ -580,7 +655,19 @@ def update_box_order():
     boxOrder = data.get("boxOrder")
     if boxOrder and isinstance(boxOrder, list):
         config = load_config()
-        config["boxOrder"] = boxOrder
+        sanitized_order = []
+        seen = set()
+        for entry in boxOrder:
+            sanitized = sanitize_hostname(entry)
+            candidate = None
+            if sanitized in config["boxen"]:
+                candidate = sanitized
+            elif entry in config["boxen"]:
+                candidate = entry
+            if candidate and candidate not in seen:
+                sanitized_order.append(candidate)
+                seen.add(candidate)
+        config["boxOrder"] = sanitized_order
         save_config(config)
         return jsonify({"status": "success"})
     return jsonify({"status": "error"}), 400
@@ -601,16 +688,23 @@ def transfer_box():
     _authorize_sensitive_action("Transfer-Box")
 
     payload = request.get_json(silent=True) or {}
-    hostname = payload.get("hostname") or request.args.get("hostname")
-    if not hostname:
+    raw_hostname = payload.get("hostname") or request.args.get("hostname")
+    if not raw_hostname:
         return jsonify({"status": "❌ Hostname fehlt"}), 400
+    hostname = sanitize_hostname(raw_hostname)
     config = load_config()
     box = config["boxen"].get(hostname)
+    renamed_existing = False
+    if box is None and raw_hostname != hostname and raw_hostname in config["boxen"]:
+        box = config["boxen"].pop(raw_hostname)
+        config["boxen"][hostname] = box
+        config["boxOrder"] = [hostname if h == raw_hostname else h for h in config["boxOrder"]]
+        renamed_existing = True
     if not box:
         return jsonify({"status": "❌ Box unbekannt"})
 
     changed = ensure_box_structure(box, remove_legacy=True)
-    if changed:
+    if changed or renamed_existing:
         save_config(config)
 
     ip = box.get("ip")
