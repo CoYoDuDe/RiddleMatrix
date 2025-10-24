@@ -12,3 +12,6 @@
 - `setup.sh` setzt die Lease-Datei `var/lib/misc/dnsmasq.leases` nun mit Eigentümer `root:dnsmasq` auf `0640`, legt sie bei
   Bedarf idempotent an und dokumentiert die Abhängigkeit vom Dienstkonto, damit `dnsmasq` trotz restriktiver Rechte weiterhin
   startet.
+- `bootlocal.sh` und `install_public_ap.sh` verwenden dieselben restriktiven Rechte für `dnsmasq.leases`, prüfen auf das
+  Vorhandensein der `dnsmasq`-Gruppe und fallen bei Bedarf auf `root:root` zurück; Testlauf beider Skripte bestätigt via
+  `ls -l /var/lib/misc/dnsmasq.leases` die erwarteten Besitzer/Rechte.
