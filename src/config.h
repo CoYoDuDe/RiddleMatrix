@@ -120,6 +120,15 @@ extern bool wifiConnected;
 extern const char* daysOfTheWeek[7];
 
 
+// **Attribut für Interrupt-Routinen im IRAM sicherstellen**
+#if !defined(IRAM_ATTR)
+#  if defined(ICACHE_RAM_ATTR)
+#    define IRAM_ATTR ICACHE_RAM_ATTR
+#  else
+#    define IRAM_ATTR
+#  endif
+#endif
+
 // **💾 Einstellungen speichern in EEPROM**
 void saveConfig();
 
@@ -127,7 +136,7 @@ void saveConfig();
 void loadConfig();
 
 
-void display_updater();
+void IRAM_ATTR display_updater();
 
 // **LED-Matrix Setup-Funktion**
 void setupMatrix();
