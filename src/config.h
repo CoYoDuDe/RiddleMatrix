@@ -39,6 +39,12 @@ static constexpr size_t NUM_TRIGGERS = 3;
 static constexpr size_t NUM_DAYS = 7;
 static constexpr size_t COLOR_STRING_LENGTH = 8; // "#RRGGBB" + Terminator
 
+#if defined(RIDDLEMATRIX_HOST_TEST)
+static constexpr size_t EEPROM_SIZEOF_UNSIGNED_LONG = 4;
+#else
+static constexpr size_t EEPROM_SIZEOF_UNSIGNED_LONG = sizeof(unsigned long);
+#endif
+
 static constexpr uint16_t EEPROM_OFFSET_WIFI_SSID = 0;
 static constexpr uint16_t EEPROM_OFFSET_WIFI_PASSWORD = EEPROM_OFFSET_WIFI_SSID + 50;
 static constexpr uint16_t EEPROM_OFFSET_HOSTNAME = EEPROM_OFFSET_WIFI_PASSWORD + 50;
@@ -46,10 +52,10 @@ static constexpr uint16_t EEPROM_OFFSET_DAILY_LETTERS = EEPROM_OFFSET_HOSTNAME +
 static constexpr uint16_t EEPROM_OFFSET_DAILY_LETTER_COLORS = 200; // Historischer Versatz für Rückwärtskompatibilität
 static constexpr uint16_t EEPROM_OFFSET_DISPLAY_BRIGHTNESS = EEPROM_OFFSET_DAILY_LETTER_COLORS + (NUM_TRIGGERS * NUM_DAYS * COLOR_STRING_LENGTH);
 static constexpr uint16_t EEPROM_OFFSET_LETTER_DISPLAY_TIME = EEPROM_OFFSET_DISPLAY_BRIGHTNESS + sizeof(int);
-static constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_MATRIX = EEPROM_OFFSET_LETTER_DISPLAY_TIME + sizeof(unsigned long);
-static constexpr size_t EEPROM_TRIGGER_DELAY_MATRIX_SIZE = NUM_TRIGGERS * NUM_DAYS * sizeof(unsigned long);
+static constexpr uint16_t EEPROM_OFFSET_TRIGGER_DELAY_MATRIX = EEPROM_OFFSET_LETTER_DISPLAY_TIME + EEPROM_SIZEOF_UNSIGNED_LONG;
+static constexpr size_t EEPROM_TRIGGER_DELAY_MATRIX_SIZE = NUM_TRIGGERS * NUM_DAYS * EEPROM_SIZEOF_UNSIGNED_LONG;
 static constexpr uint16_t EEPROM_OFFSET_AUTO_INTERVAL = EEPROM_OFFSET_TRIGGER_DELAY_MATRIX + EEPROM_TRIGGER_DELAY_MATRIX_SIZE;
-static constexpr uint16_t EEPROM_OFFSET_AUTO_MODE = EEPROM_OFFSET_AUTO_INTERVAL + sizeof(unsigned long);
+static constexpr uint16_t EEPROM_OFFSET_AUTO_MODE = EEPROM_OFFSET_AUTO_INTERVAL + EEPROM_SIZEOF_UNSIGNED_LONG;
 static constexpr uint16_t EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT = EEPROM_OFFSET_AUTO_MODE + sizeof(uint8_t);
 static constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION = EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT + sizeof(int);
 static constexpr uint16_t EEPROM_CONFIG_VERSION = 3;
