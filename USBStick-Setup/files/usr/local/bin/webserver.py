@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-from flask import Flask, jsonify, request
+from flask import Flask, abort, jsonify, request
 from bs4 import BeautifulSoup
 import math
 import os, json, subprocess, requests
+import secrets
+from typing import Optional, Tuple
+from functools import lru_cache
 
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
 DAY_TO_FIRMWARE_INDEX = {
@@ -21,6 +24,9 @@ DEFAULT_DELAY = 0
 app = Flask(__name__)
 LEASE_FILE = "/var/lib/misc/dnsmasq.leases"
 CONFIG_FILE = "/mnt/persist/boxen_config/boxen_config.json"
+PUBLIC_AP_ENV_FILE = os.environ.get("PUBLIC_AP_ENV_FILE", "/etc/usbstick/public_ap.env")
+SHUTDOWN_TOKEN_ENV = "SHUTDOWN_TOKEN"
+ALLOWED_SHUTDOWN_ADDRESSES = {"127.0.0.1", "::1"}
 
 if not os.path.exists(CONFIG_FILE):
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
@@ -597,8 +603,70 @@ def transfer_box():
 
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
+    remote_addr = request.remote_addr or "<unbekannt>"
+    token = request.headers.get("X-Api-Key", "")
+
+    authorized, reason = _is_shutdown_authorized(remote_addr, token)
+    if not authorized:
+        app.logger.warning("Shutdown-Anfrage verweigert (%s): %s", reason, remote_addr)
+        abort(403)
+
+    app.logger.info("Shutdown-Anfrage akzeptiert (%s): %s", reason, remote_addr)
     os.system("poweroff")
-    return "OK", 200
+    return jsonify({"status": "OK"}), 200
+
+
+def _is_shutdown_authorized(remote_addr: str, provided_token: str) -> Tuple[bool, str]:
+    if remote_addr in ALLOWED_SHUTDOWN_ADDRESSES:
+        return True, "Loopback"
+
+    expected_token = _load_shutdown_token()
+    if not expected_token:
+        return False, "kein Token konfiguriert"
+
+    if not provided_token:
+        return False, "kein Token übermittelt"
+
+    try:
+        if secrets.compare_digest(expected_token, provided_token):
+            return True, "Token akzeptiert"
+    except Exception:
+        return False, "Token-Vergleich fehlgeschlagen"
+
+    return False, "Token ungültig"
+
+
+@lru_cache(maxsize=1)
+def _load_shutdown_token() -> Optional[str]:
+    token = os.environ.get(SHUTDOWN_TOKEN_ENV, "").strip()
+    if token:
+        return token
+
+    if not PUBLIC_AP_ENV_FILE:
+        return None
+
+    try:
+        with open(PUBLIC_AP_ENV_FILE, "r") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if "=" not in stripped:
+                    continue
+                key, value = stripped.split("=", 1)
+                if key.strip() == SHUTDOWN_TOKEN_ENV:
+                    cleaned = value.strip().strip('"').strip("'")
+                    return cleaned or None
+    except OSError:
+        pass
+
+    return None
+
+
+def reload_shutdown_token_cache():
+    """Hilfsfunktion für Tests, um den Token neu einzulesen."""
+
+    _load_shutdown_token.cache_clear()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

@@ -132,3 +132,18 @@ sudo ./setup.sh
 Der Installer kopiert standardmäßig den Inhalt von `USBStick-Setup/files/` auf das laufende System (`/`). Mit `--target` kann ein anderes Root-Verzeichnis (z. B. ein gemountetes Venus-OS-Image) angegeben werden, `--dry-run` zeigt geplante Schritte ohne Änderungen an und `--skip-systemd`/`--skip-hooks` deaktivieren optionale Aktionen. Weitere Details finden sich in der README im Unterordner [`USBStick-Setup`](USBStick-Setup).
 
 Legacy-Skripte wurden in [`USBStick-Setup/archive/legacy-root-scripts/`](USBStick-Setup/archive/legacy-root-scripts) abgelegt und stehen weiterhin als Referenz zur Verfügung.
+
+### Geschützter Shutdown-Endpunkt
+
+Die Weboberfläche des USB-Stick-Setups löst das Herunterfahren des Geräts über den Endpunkt `/shutdown` aus.
+Damit nur berechtigte Clients diesen Vorgang starten können, gelten seitdem folgende Regeln:
+
+- Lokale Zugriffe vom Gerät selbst (`127.0.0.1` oder `::1`) bleiben ohne weitere Maßnahmen möglich.
+- Für Zugriffe aus anderen Netzen muss ein Token `SHUTDOWN_TOKEN` hinterlegt werden – idealerweise in
+  `/etc/usbstick/public_ap.env` oder als Environment-Variable. Die Weboberfläche fragt das Token beim ersten Klick
+  auf „Herunterfahren“ ab, speichert es im Browser und übermittelt es anschließend per HTTP-Header `X-Api-Key`.
+- Ungültige oder fehlende Tokens führen zu HTTP 403. Der Browser blendet in diesem Fall einen Hinweis ein und verlangt
+  bei Bedarf die erneute Eingabe.
+
+Vor jedem Abschalten erscheint zusätzlich ein Bestätigungsdialog, damit unbeabsichtigte Klicks keine sofortige
+Abschaltung mehr auslösen. Das Frontend informiert außerdem darüber, dass der Shutdown einige Minuten dauern kann.
