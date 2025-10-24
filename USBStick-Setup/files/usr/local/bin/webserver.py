@@ -604,14 +604,28 @@ def transfer_box():
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
     remote_addr = request.remote_addr or "<unbekannt>"
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    client_addr = _resolve_client_address(remote_addr, forwarded_for)
     token = request.headers.get("X-Api-Key", "")
 
-    authorized, reason = _is_shutdown_authorized(remote_addr, token)
+    authorized, reason = _is_shutdown_authorized(client_addr, token)
     if not authorized:
-        app.logger.warning("Shutdown-Anfrage verweigert (%s): %s", reason, remote_addr)
+        app.logger.warning(
+            "Shutdown-Anfrage verweigert (%s): client=%s, remote_addr=%s, xff=%s",
+            reason,
+            client_addr,
+            remote_addr,
+            forwarded_for or "-",
+        )
         abort(403)
 
-    app.logger.info("Shutdown-Anfrage akzeptiert (%s): %s", reason, remote_addr)
+    app.logger.info(
+        "Shutdown-Anfrage akzeptiert (%s): client=%s, remote_addr=%s, xff=%s",
+        reason,
+        client_addr,
+        remote_addr,
+        forwarded_for or "-",
+    )
     os.system("poweroff")
     return jsonify({"status": "OK"}), 200
 
@@ -634,6 +648,14 @@ def _is_shutdown_authorized(remote_addr: str, provided_token: str) -> Tuple[bool
         return False, "Token-Vergleich fehlgeschlagen"
 
     return False, "Token ungültig"
+
+
+def _resolve_client_address(remote_addr: str, forwarded_for_header: str) -> str:
+    if remote_addr in ALLOWED_SHUTDOWN_ADDRESSES and forwarded_for_header:
+        client_addr = forwarded_for_header.split(",")[0].strip()
+        if client_addr:
+            return client_addr
+    return remote_addr
 
 
 @lru_cache(maxsize=1)
