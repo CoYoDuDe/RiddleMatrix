@@ -4,6 +4,7 @@ import importlib.util
 import sys
 from pathlib import Path
 import copy
+import json
 
 import pytest
 
@@ -42,6 +43,17 @@ def webserver_app(tmp_path):
     module = _load_webserver(tmp_path)
     with module.app.test_client() as client:
         yield module, client
+
+
+def test_load_config_recovers_from_corrupted_file(tmp_path):
+    module = _load_webserver(tmp_path)
+    config_path = Path(module.CONFIG_FILE)
+    config_path.write_text("{", encoding="utf-8")
+
+    data = module.load_config()
+
+    assert data == module._default_config()
+    assert json.loads(config_path.read_text(encoding="utf-8")) == module._default_config()
 
 
 def test_get_hostname_from_web_supports_attribute_variants(webserver_app, monkeypatch):
