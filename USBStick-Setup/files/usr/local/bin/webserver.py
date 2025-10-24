@@ -463,6 +463,8 @@ def devices():
 
 @app.route("/update_box", methods=["POST"])
 def update_box():
+    _authorize_sensitive_action("Update-Box")
+
     data = request.json or {}
     hostname = data.get("hostname")
     if not hostname:
@@ -572,6 +574,8 @@ def remove_box():
 
 @app.route("/update_box_order", methods=["POST"])
 def update_box_order():
+    _authorize_sensitive_action("Update-Box-Order")
+
     data = request.json
     boxOrder = data.get("boxOrder")
     if boxOrder and isinstance(boxOrder, list):

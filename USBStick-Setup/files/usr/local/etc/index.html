@@ -113,6 +113,23 @@
     .box-order {
       font-weight: bold; margin-right: 10px;
     }
+    .auth-notice {
+      margin: 10px 0;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    .auth-notice.unauthorized {
+      background: #fff4d6;
+      color: #8a5200;
+    }
+    .auth-notice.authorized {
+      background: #e6ffed;
+      color: #0b6b3a;
+    }
+    .auth-disabled {
+      opacity: 0.5;
+    }
   </style>
 </head>
 <body onload="init()">
@@ -143,6 +160,7 @@ let currentWordTrigger = 0;
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 const adminTokenStorageKey = "shutdownToken";
 const sensitiveHeaderName = "X-Api-Key";
+const AUTH_REQUIRED_MESSAGE = "🔒 Administrations-Token erforderlich – Änderungen sind gesperrt.";
 
 function requiresAdminToken() {
   return !loopbackHosts.has(window.location.hostname);
@@ -178,6 +196,17 @@ function clearAdminToken() {
   updateReloadButtonState();
 }
 
+function notifyAuthRequired(showAlert = false) {
+  if (statusArea) {
+    statusArea.innerHTML = `<div class="statusEntry status">${AUTH_REQUIRED_MESSAGE}</div>`;
+    statusArea.dataset.authState = "unauthorized";
+  }
+  if (showAlert) {
+    alert(AUTH_REQUIRED_MESSAGE);
+  }
+  updateReloadButtonState();
+}
+
 function isSessionAuthorized() {
   if (!requiresAdminToken()) {
     return true;
@@ -186,13 +215,41 @@ function isSessionAuthorized() {
 }
 
 function updateReloadButtonState() {
-  const reloadButton = document.getElementById("reloadBtn");
-  if (!reloadButton) {
-    return;
-  }
   const authorized = isSessionAuthorized();
-  reloadButton.disabled = !authorized;
-  reloadButton.title = authorized ? "" : "Authentifizierung erforderlich – Token hinterlegen";
+  const reloadButton = document.getElementById("reloadBtn");
+  if (reloadButton) {
+    reloadButton.disabled = !authorized;
+    reloadButton.title = authorized ? "" : "Authentifizierung erforderlich – Token hinterlegen";
+  }
+
+  const authNotice = document.getElementById("authNotice");
+  if (authNotice) {
+    authNotice.textContent = authorized
+      ? "🔓 Administrationsfunktionen freigeschaltet."
+      : AUTH_REQUIRED_MESSAGE;
+    authNotice.classList.toggle("authorized", authorized);
+    authNotice.classList.toggle("unauthorized", !authorized);
+  }
+
+  const requiresAuthElements = document.querySelectorAll("[data-requires-auth]");
+  requiresAuthElements.forEach(element => {
+    if ("disabled" in element) {
+      element.disabled = !authorized;
+    }
+    element.classList.toggle("auth-disabled", !authorized);
+  });
+
+  if (statusArea) {
+    if (!authorized) {
+      if (statusArea.dataset.authState !== "unauthorized") {
+        statusArea.innerHTML = `<div class="statusEntry status">${AUTH_REQUIRED_MESSAGE}</div>`;
+        statusArea.dataset.authState = "unauthorized";
+      }
+    } else if (statusArea.dataset.authState === "unauthorized") {
+      statusArea.innerHTML = "";
+      delete statusArea.dataset.authState;
+    }
+  }
 }
 
 function configureAdminToken() {
@@ -360,11 +417,15 @@ async function shutdown() {
 function showSetup() {
   let html = '<h2>Boxen verwalten</h2>';
   const maxLength = boxOrder.length;
+  const authorized = isSessionAuthorized();
+  const authMessage = authorized ? "🔓 Administrationsfunktionen freigeschaltet." : AUTH_REQUIRED_MESSAGE;
+
+  html += `<div id="authNotice" class="auth-notice ${authorized ? "authorized" : "unauthorized"}">${authMessage}</div>`;
 
   html += '<div class="box-card"><h3>Wörter für Wochentage</h3>';
   html += '<div class="word-trigger-selector">';
   html += '<label for="wordTriggerSelect">Trigger-Spalte:</label>';
-  html += '<select id="wordTriggerSelect" onchange="changeWordTrigger(parseInt(this.value, 10))">';
+  html += '<select id="wordTriggerSelect" onchange="changeWordTrigger(parseInt(this.value, 10))" data-requires-auth="true">';
   for (let trigger = 0; trigger < triggersPerDay; trigger++) {
     const selected = trigger === currentWordTrigger ? "selected" : "";
     html += `<option value="${trigger}" ${selected}>Trigger ${trigger + 1}</option>`;
@@ -382,6 +443,7 @@ function showSetup() {
         <label>${dayNames[i]}</label>
         <input type="text" class="word-input" placeholder="Wort eingeben (max ${maxLength} Zeichen)"
           value="${currentWord}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this)"
+          data-requires-auth="true"
           onkeydown="handleKeydown(event, '${days[i]}', this.value, ${maxLength}, this)">
       </div>`;
   }
@@ -412,13 +474,13 @@ function showSetup() {
         html += `
             <div class="trigger-entry">
               <span>Trigger ${trigger + 1}</span>
-              <select onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
+              <select onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();" data-requires-auth="true">
                 ${letterOptionsHtml}
               </select>
-              <input type="color" value="${color}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'color')">
+              <input type="color" value="${color}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'color')" data-requires-auth="true">
               <div class="delay-input-wrapper">
                 <span>Verzögerung (s)</span>
-                <input type="number" class="delay-input" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
+                <input type="number" class="delay-input" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'delay', true, this)" data-requires-auth="true">
               </div>
             </div>`;
       }
@@ -428,16 +490,16 @@ function showSetup() {
     }
     html += `</div>
       <div class="order-buttons">
-        <button onclick="moveBoxUp('${hostname}')">↑</button>
-        <button onclick="moveBoxDown('${hostname}')">↓</button>
-        <button onclick="removeBox('${hostname}')">❌ Entfernen</button>
+        <button onclick="moveBoxUp('${hostname}')" data-requires-auth="true">↑</button>
+        <button onclick="moveBoxDown('${hostname}')" data-requires-auth="true">↓</button>
+        <button onclick="removeBox('${hostname}')" data-requires-auth="true">❌ Entfernen</button>
       </div></div>`;
   });
 
   html += `
   <div class="action-buttons">
-    <button onclick="transferAll()" id="transferBtn">✅ Übertragen</button>
-    <button onclick="reloadAll()" id="reloadBtn">🔄 Boxen neu lernen</button>
+    <button onclick="transferAll()" id="transferBtn" data-requires-auth="true">✅ Übertragen</button>
+    <button onclick="reloadAll()" id="reloadBtn" data-requires-auth="true">🔄 Boxen neu lernen</button>
     <button onclick="configureAdminToken()" id="authBtn">🔐 Zugang hinterlegen</button>
   </div>
   <div id="statusArea"></div>
@@ -455,22 +517,51 @@ function handleKeydown(event, day, word, maxLength, inputElement) {
 }
 
 function updateWord(day, word, maxLength, inputElement) {
-  inputElement.classList.add("pending");
-  word = word.toUpperCase().replace(/[^A-Z*#~&?]/g, '').slice(0, maxLength);
+  if (inputElement) {
+    inputElement.classList.add("pending");
+  }
+  const sanitizedWord = (word || "").toUpperCase().replace(/[^A-Z*#~&?]/g, '').slice(0, maxLength);
+  const headers = buildSensitiveHeaders({ prompt: true });
+  if (headers === null) {
+    if (inputElement) {
+      inputElement.classList.remove("pending");
+    }
+    notifyAuthRequired();
+    showSetup();
+    return;
+  }
+  word = sanitizedWord;
+  if (inputElement) {
+    inputElement.value = sanitizedWord;
+  }
   for (let i = 0; i < boxOrder.length; i++) {
     const letter = i < word.length ? word[i] : "*";
     knownBoxes[boxOrder[i]] = knownBoxes[boxOrder[i]] || {};
-    saveField(boxOrder[i], day, currentWordTrigger, letter, 'letter', false, inputElement);
+    saveField(boxOrder[i], day, currentWordTrigger, letter, 'letter', false, inputElement, headers);
   }
   showSetup();
 }
 
-function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', updateUI = true, inputElement = null) {
-  knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
-  const slotIndex = Number(triggerIndex);
+function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', updateUI = true, inputElement = null, headersOverride) {
   if (inputElement) {
     inputElement.classList.add('pending');
   }
+
+  let headers = headersOverride;
+  if (headers === undefined) {
+    headers = buildSensitiveHeaders({ prompt: true });
+  }
+  if (headers === null) {
+    if (inputElement) {
+      inputElement.classList.remove('pending');
+    }
+    notifyAuthRequired();
+    showSetup();
+    return;
+  }
+
+  knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
+  const slotIndex = Number(triggerIndex);
   if (fieldType === 'letter') {
     knownBoxes[hostname].letters[day][slotIndex] = value;
   } else if (fieldType === 'color') {
@@ -499,13 +590,18 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
     payload.delay = value;
   }
 
+  const requestHeaders = { ...headers, "Content-Type": "application/json" };
+
   fetch("/update_box", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: requestHeaders,
     body: JSON.stringify(payload)
   }).then(response => {
     if (!response.ok) {
       statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichen.</div>';
+      if (statusArea) {
+        delete statusArea.dataset.authState;
+      }
       if (inputElement) inputElement.classList.remove("pending");
     } else {
       if (inputElement) {
@@ -514,11 +610,17 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
         setTimeout(() => inputElement.classList.remove("saved"), 1000);
         statusArea.innerHTML = '<div class="statusEntry status">✅ Änderung gespeichert.</div>';
       }
+      if (statusArea) {
+        delete statusArea.dataset.authState;
+      }
       if (updateUI) showSetup();
     }
   }).catch(e => {
     console.error("Fehler beim Speichern:", e);
     statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern.</div>';
+    if (statusArea) {
+      delete statusArea.dataset.authState;
+    }
     if (inputElement) inputElement.classList.remove("pending");
   });
 }
@@ -551,9 +653,17 @@ function moveBoxDown(hostname) {
 }
 
 function saveBoxOrder() {
+  const headers = buildSensitiveHeaders({ prompt: true });
+  if (headers === null) {
+    notifyAuthRequired();
+    fetchDevices();
+    return;
+  }
+  const requestHeaders = { ...headers, "Content-Type": "application/json" };
+
   fetch("/update_box_order", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: requestHeaders,
     body: JSON.stringify({ boxOrder })
   }).then(response => {
     if (!response.ok) {
