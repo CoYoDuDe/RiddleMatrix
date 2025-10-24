@@ -199,16 +199,23 @@ void migrateLegacyLayout(uint16_t storedVersion, bool &migratedLegacyLayout) {
         }
     }
 
-    unsigned long recoveredMatrix[NUM_TRIGGERS][NUM_DAYS] = {};
-    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, recoveredMatrix);
+    // Frühere Firmware-Versionen speicherten nur drei Verzögerungswerte. Sobald eine
+    // Konfiguration mit Version >= EEPROM_CONFIG_VERSION erkannt wird, stammt sie
+    // bereits aus dem aktuellen Layout und darf hier eine vollständige Matrix laden.
+    if (storedVersion != EEPROM_VERSION_INVALID && storedVersion >= EEPROM_CONFIG_VERSION) {
+        unsigned long recoveredMatrix[NUM_TRIGGERS][NUM_DAYS] = {};
+        EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, recoveredMatrix);
 
-    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-        for (size_t day = 0; day < NUM_DAYS; ++day) {
-            unsigned long recoveredValue = recoveredMatrix[trigger][day];
-            if (isValidDelayValue(recoveredValue)) {
-                letter_trigger_delays[trigger][day] = recoveredValue;
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            for (size_t day = 0; day < NUM_DAYS; ++day) {
+                unsigned long recoveredValue = recoveredMatrix[trigger][day];
+                if (isValidDelayValue(recoveredValue)) {
+                    letter_trigger_delays[trigger][day] = recoveredValue;
+                }
             }
         }
+    } else {
+        Serial.println(F("✅ Legacy-Verzögerungen repliziert – keine zusätzlichen Matrixdaten übernommen."));
     }
 
     migratedLegacyLayout = true;
