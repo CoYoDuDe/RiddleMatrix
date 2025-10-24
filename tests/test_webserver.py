@@ -307,7 +307,7 @@ def test_delay_inputs_are_clamped_to_upper_bound(webserver_app, monkeypatch):
 
     monkeypatch.setattr(module.requests, "post", fake_post)
 
-    transfer_response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    transfer_response = client.post("/transfer_box", json={"hostname": "TestBox"})
     assert transfer_response.status_code == 200
     assert transfer_response.get_json() == {"status": "✅ Übertragen"}
     assert "json" in captured
@@ -376,7 +376,7 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
 
     monkeypatch.setattr(module.requests, "post", fake_post)
 
-    response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    response = client.post("/transfer_box", json={"hostname": "TestBox"})
     assert response.status_code == 200
     assert response.get_json() == {"status": "✅ Übertragen"}
     assert captured["url"].endswith("/updateAllLetters")
@@ -424,7 +424,7 @@ def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypa
 
     monkeypatch.setattr(module.requests, "post", fake_post)
 
-    response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    response = client.post("/transfer_box", json={"hostname": "TestBox"})
     assert response.status_code == 200
     assert response.get_json() == {"status": "✅ Übertragen"}
     assert "json" in captured
@@ -562,7 +562,7 @@ def test_transfer_box_matches_firmware_day_index_mapping(webserver_app, monkeypa
 
     monkeypatch.setattr(module.requests, "post", fake_post)
 
-    response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    response = client.post("/transfer_box", json={"hostname": "TestBox"})
     assert response.status_code == 200
     assert response.get_json() == {"status": "⏭️ Bereits aktuell"}
     assert post_calls == []
