@@ -412,7 +412,6 @@ def fetch_trigger_delays(ip):
 
 def get_connected_devices():
     devices = []
-    config = load_config()
     if os.path.exists(LEASE_FILE):
         with open(LEASE_FILE, "r") as f:
             for line in f:
@@ -432,30 +431,8 @@ def get_connected_devices():
                             continue
 
                         hostname = sanitize_hostname(hostname)
-
-                        hostname_exists = False
-                        for existing_identifier, box in list(config["boxen"].items()):
-                            if existing_identifier == hostname:
-                                hostname_exists = True
-
-                                if box["ip"] != ip:
-                                    config["boxen"][hostname]["ip"] = ip
-                                    save_config(config)
-                                break
-
-                        ip_exists = False
-                        for existing_identifier, box in list(config["boxen"].items()):
-                            if box["ip"] == ip and existing_identifier != hostname:
-                                ip_exists = True
-
-                                config["boxen"][existing_identifier]["ip"] = "0.0.0.0"
-                                save_config(config)
-                                break
-
-                        devices.append({"ip": ip, "hostname": hostname})
-
-                        if not hostname_exists:
-                            learn_box(ip, hostname)
+                        identifier = learn_box(ip, hostname)
+                        devices.append({"ip": ip, "hostname": identifier})
     return devices
 
 def get_hostname_from_web(ip):
@@ -472,25 +449,63 @@ def get_hostname_from_web(ip):
         pass
     return "Unbekannt"
 
+def _ensure_unique_identifier(identifier: str, boxen: dict, *, ip: Optional[str] = None) -> str:
+    if ip is not None:
+        existing = boxen.get(identifier)
+        if existing is not None and existing.get("ip") == ip:
+            return identifier
+
+    base_identifier = identifier
+    candidate = identifier
+    suffix = 1
+    while candidate in boxen:
+        if ip is not None:
+            existing = boxen[candidate]
+            if existing.get("ip") == ip:
+                return candidate
+
+        suffix += 1
+        candidate = sanitize_hostname(f"{base_identifier}-{suffix}")
+        if candidate == base_identifier:
+            candidate = sanitize_hostname(f"{base_identifier}-{suffix}-{secrets.token_hex(2)}")
+
+    return candidate
+
+
+def _release_ip_from_other_boxes(boxen: dict, identifier: str, ip: str) -> bool:
+    changed = False
+    for existing_identifier, existing_box in boxen.items():
+        if existing_identifier == identifier:
+            continue
+        if existing_box.get("ip") == ip and existing_box.get("ip") != "0.0.0.0":
+            existing_box["ip"] = "0.0.0.0"
+            changed = True
+    return changed
+
+
 def learn_box(ip, identifier):
     identifier = sanitize_hostname(identifier)
     config = load_config()
-    if identifier in config["boxen"]:
-        box = config["boxen"][identifier]
+    boxen = config.get("boxen", {})
+    identifier = _ensure_unique_identifier(identifier, boxen, ip=ip)
+    if identifier in boxen:
+        box = boxen[identifier]
         changed = False
         if box.get("ip") != ip:
             box["ip"] = ip
             changed = True
         if ensure_box_structure(box, remove_legacy=True):
             changed = True
+        if _release_ip_from_other_boxes(boxen, identifier, ip):
+            changed = True
         if changed:
             save_config(config)
-        return
+        return identifier
 
     try:
         r = requests.get(f"http://{ip}/", timeout=3)
         if not r.ok:
-            return
+            return identifier
         soup = BeautifulSoup(r.text, "html.parser")
         letters, colors, html_delays = extract_box_state_from_soup(soup)
         delays = fetch_trigger_delays(ip)
@@ -503,12 +518,18 @@ def learn_box(ip, identifier):
             "delays": delays if delays is not None else _default_delay_matrix(),
         }
         ensure_box_structure(box, remove_legacy=True)
-        config["boxen"][identifier] = box
+        boxen[identifier] = box
+        changed = True
+        if _release_ip_from_other_boxes(boxen, identifier, ip):
+            changed = True
         if identifier not in config["boxOrder"]:
             config["boxOrder"].append(identifier)
-        save_config(config)
+            changed = True
+        if changed:
+            save_config(config)
     except Exception:
         pass
+    return identifier
 
 @app.route("/")
 def index():
