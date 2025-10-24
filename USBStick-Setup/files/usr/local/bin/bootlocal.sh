@@ -43,8 +43,19 @@ public_ap_write_dnsmasq_config "$WIFI_IFACE"
 public_ap_render_hostapd_config "$WIFI_IFACE"
 
 mkdir -p /var/lib/misc
-touch /var/lib/misc/dnsmasq.leases
-chmod 777 /var/lib/misc/dnsmasq.leases
+LEASES_FILE="/var/lib/misc/dnsmasq.leases"
+LEASES_USER="root"
+LEASES_GROUP="dnsmasq"
+if ! getent group "$LEASES_GROUP" >/dev/null 2>&1; then
+    echo "⚠️ Gruppe $LEASES_GROUP nicht vorhanden; verwende root:root für $LEASES_FILE" >&2
+    LEASES_GROUP="$LEASES_USER"
+fi
+if [[ -e "$LEASES_FILE" ]]; then
+    chmod 0640 "$LEASES_FILE"
+else
+    install -o "$LEASES_USER" -g "$LEASES_GROUP" -m 0640 /dev/null "$LEASES_FILE"
+fi
+chown "$LEASES_USER:$LEASES_GROUP" "$LEASES_FILE"
 
 systemctl restart hostapd
 systemctl restart dnsmasq
