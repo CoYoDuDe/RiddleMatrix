@@ -128,6 +128,55 @@ def test_learn_box_sanitizes_hostnames_and_devices_output(webserver_app, monkeyp
     assert malicious_hostname not in str(payload)
 
 
+def test_learn_box_adds_suffix_for_sanitized_collisions(webserver_app, monkeypatch):
+    module, _client = webserver_app
+
+    existing_box = _empty_box(module, ip="192.0.2.10")
+    module.save_config({"boxen": {"Box": copy.deepcopy(existing_box)}, "boxOrder": ["Box"]})
+
+    template_box = _empty_box(module, ip="192.0.2.11")
+
+    class FakeResponse:
+        def __init__(self, text: str = "", ok: bool = True, json_data=None) -> None:
+            self.text = text
+            self.ok = ok
+            self._json = json_data
+
+        def json(self):
+            if self._json is None:
+                raise ValueError("No JSON data")
+            return self._json
+
+    def fake_get(url, *args, **kwargs):
+        if url.endswith("/api/trigger-delays"):
+            return FakeResponse(ok=True, json_data={"delays": copy.deepcopy(template_box["delays"])})
+        return FakeResponse("<html></html>", True)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+    monkeypatch.setattr(
+        module,
+        "extract_box_state_from_soup",
+        lambda soup: (
+            copy.deepcopy(template_box["letters"]),
+            copy.deepcopy(template_box["colors"]),
+            copy.deepcopy(template_box["delays"]),
+        ),
+    )
+    monkeypatch.setattr(module, "fetch_trigger_delays", lambda ip: copy.deepcopy(template_box["delays"]))
+
+    learned_identifier = module.learn_box(template_box["ip"], "Box ö")
+
+    assert learned_identifier != "Box"
+
+    config = module.load_config()
+    assert "Box" in config["boxen"]
+    assert learned_identifier in config["boxen"]
+    assert config["boxen"]["Box"]["ip"] == existing_box["ip"]
+    assert config["boxen"][learned_identifier]["ip"] == template_box["ip"]
+    assert "Box" in config["boxOrder"]
+    assert learned_identifier in config["boxOrder"]
+
+
 def test_transfer_box_returns_json_on_get_error(webserver_app, monkeypatch):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})
