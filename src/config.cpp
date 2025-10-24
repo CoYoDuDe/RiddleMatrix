@@ -47,6 +47,7 @@ const char* daysOfTheWeek[7] = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Do
 namespace {
 
 constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION_LEGACY = 400;
+constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION_V3 = 469; // 0x1D5
 constexpr uint16_t EEPROM_VERSION_INVALID = 0xFFFF;
 
 constexpr uint16_t EEPROM_OFFSET_DAILY_LETTER_COLORS_V3 = 200;
@@ -139,6 +140,13 @@ uint16_t readStoredConfigVersion(uint16_t &versionOffset) {
 
     if (isLikelyValidVersion(storedVersion)) {
         return storedVersion;
+    }
+
+    uint16_t version3Value = EEPROM_VERSION_INVALID;
+    EEPROM.get(EEPROM_OFFSET_CONFIG_VERSION_V3, version3Value);
+    if (isLikelyValidVersion(version3Value)) {
+        versionOffset = EEPROM_OFFSET_CONFIG_VERSION_V3;
+        return version3Value;
     }
 
     uint16_t legacyVersion = EEPROM_VERSION_INVALID;
