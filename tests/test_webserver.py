@@ -649,3 +649,33 @@ def test_shutdown_checks_forwarded_for_header(webserver_app, monkeypatch):
     )
     assert response.status_code == 200
     assert response.get_json() == {"status": "OK"}
+
+
+def test_shutdown_ignores_spoofed_forwarded_for_entry(webserver_app, monkeypatch):
+    module, client = webserver_app
+    monkeypatch.setattr(module.os, "system", lambda cmd: None)
+    monkeypatch.delenv("SHUTDOWN_TOKEN", raising=False)
+    module.reload_shutdown_token_cache()
+
+    # A client-controlled first entry must not bypass token requirements when the
+    # proxy appends the real address afterwards.
+    response = client.post(
+        "/shutdown",
+        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+        headers={"X-Forwarded-For": "127.0.0.1, 203.0.113.5"},
+    )
+    assert response.status_code == 403
+
+    monkeypatch.setenv("SHUTDOWN_TOKEN", "secret-token")
+    module.reload_shutdown_token_cache()
+
+    response = client.post(
+        "/shutdown",
+        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+        headers={
+            "X-Forwarded-For": "127.0.0.1, 203.0.113.5",
+            "X-Api-Key": "secret-token",
+        },
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "OK"}
