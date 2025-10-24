@@ -257,6 +257,39 @@ def test_update_box_updates_specific_trigger(webserver_app):
     assert config["boxen"]["TestBox"]["delays"]["mo"][0] == module._coerce_delay_value(1.25)
 
 
+def test_update_box_requires_token_for_remote_clients(webserver_app, monkeypatch):
+    module, client = webserver_app
+    module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})
+
+    monkeypatch.delenv(module.SHUTDOWN_TOKEN_ENV, raising=False)
+    module.reload_shutdown_token_cache()
+
+    response = client.post(
+        "/update_box",
+        json={"hostname": "TestBox", "day": "mo", "triggerIndex": 0, "letter": "Z"},
+        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
+    )
+
+    assert response.status_code == 403
+    config = module.load_config()
+    assert config["boxen"]["TestBox"]["letters"]["mo"][0] == ""
+
+    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "valid-token")
+    module.reload_shutdown_token_cache()
+
+    response = client.post(
+        "/update_box",
+        json={"hostname": "TestBox", "day": "mo", "triggerIndex": 0, "letter": "Z"},
+        headers={"X-Api-Key": "valid-token"},
+        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "success"}
+    config = module.load_config()
+    assert config["boxen"]["TestBox"]["letters"]["mo"][0] == "Z"
+
+
 def test_delay_inputs_are_clamped_to_upper_bound(webserver_app, monkeypatch):
     module, client = webserver_app
     box = _empty_box(module)
@@ -312,6 +345,47 @@ def test_delay_inputs_are_clamped_to_upper_bound(webserver_app, monkeypatch):
     assert transfer_response.get_json() == {"status": "✅ Übertragen"}
     assert "json" in captured
     assert captured["json"]["delays"]["mo"][0] == 999
+
+
+def test_update_box_order_requires_token_for_remote_clients(webserver_app, monkeypatch):
+    module, client = webserver_app
+    module.save_config(
+        {
+            "boxen": {
+                "BoxA": _empty_box(module, ip="10.0.0.1"),
+                "BoxB": _empty_box(module, ip="10.0.0.2"),
+            },
+            "boxOrder": ["BoxA", "BoxB"],
+        }
+    )
+
+    monkeypatch.delenv(module.SHUTDOWN_TOKEN_ENV, raising=False)
+    module.reload_shutdown_token_cache()
+
+    response = client.post(
+        "/update_box_order",
+        json={"boxOrder": ["BoxB", "BoxA"]},
+        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
+    )
+
+    assert response.status_code == 403
+    config = module.load_config()
+    assert config["boxOrder"] == ["BoxA", "BoxB"]
+
+    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "valid-token")
+    module.reload_shutdown_token_cache()
+
+    response = client.post(
+        "/update_box_order",
+        json={"boxOrder": ["BoxB", "BoxA"]},
+        headers={"X-Api-Key": "valid-token"},
+        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "success"}
+    config = module.load_config()
+    assert config["boxOrder"] == ["BoxB", "BoxA"]
 
 def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     module, client = webserver_app
