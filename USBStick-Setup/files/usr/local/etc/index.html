@@ -585,6 +585,13 @@ function removeBox(hostname) {
 }
 
 async function transferBox(hostname) {
+  const headers = buildSensitiveHeaders({ prompt: true });
+  if (headers === null) {
+    alert("Übertragung abgebrochen – kein Administrations-Token hinterlegt.");
+    return;
+  }
+  headers["Content-Type"] = "application/json";
+
   transferQueue[hostname] = true;
   const transferBtn = document.getElementById("transferBtn");
   if (!transferring) {
@@ -592,18 +599,42 @@ async function transferBox(hostname) {
     transferBtn.disabled = true;
     transferBtn.innerText = "Übertrage...";
   }
-  const response = await fetch(`/transfer_box?hostname=${hostname}`);
-  const data = await response.json();
-  delete transferQueue[hostname];
-  if (Object.keys(transferQueue).length === 0) {
-    transferring = false;
-    transferBtn.disabled = false;
-    transferBtn.innerText = "✅ Übertragen";
+
+  let statusText = "❌ Unbekannter Fehler";
+
+  try {
+    const response = await fetch("/transfer_box", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ hostname })
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      clearAdminToken();
+      statusText = "❌ Zugriff verweigert";
+    } else if (!response.ok) {
+      statusText = `❌ Fehler (${response.status})`;
+    } else {
+      const data = await response.json();
+      statusText = data.status || "❌ Unerwartete Antwort";
+    }
+  } catch (error) {
+    console.error("Fehler beim Übertragen:", error);
+    statusText = "❌ Netzwerkfehler";
+  } finally {
+    delete transferQueue[hostname];
+    if (Object.keys(transferQueue).length === 0) {
+      transferring = false;
+      transferBtn.disabled = false;
+      transferBtn.innerText = "✅ Übertragen";
+    }
+    statusArea.innerHTML += `<div class="statusEntry">${hostname}: ${statusText}</div>`;
+    setTimeout(() => {
+      if (statusArea.firstChild) {
+        statusArea.removeChild(statusArea.firstChild);
+      }
+    }, 3000);
   }
-  statusArea.innerHTML += `<div class="statusEntry">${hostname}: ${data.status}</div>`;
-  setTimeout(() => {
-    statusArea.removeChild(statusArea.firstChild);
-  }, 3000);
 }
 
 function transferAll() {
