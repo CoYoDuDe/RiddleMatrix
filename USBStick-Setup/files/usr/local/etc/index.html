@@ -140,6 +140,41 @@ const defaultDelay = 0;
 const letterLabels = {"*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
 const letterOptions = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split("");
 let currentWordTrigger = 0;
+const loopbackHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+const shutdownTokenStorageKey = "shutdownToken";
+
+function requiresShutdownToken() {
+  return !loopbackHosts.has(window.location.hostname);
+}
+
+function getStoredShutdownToken() {
+  return localStorage.getItem(shutdownTokenStorageKey) || "";
+}
+
+function requestShutdownToken() {
+  const token = prompt("Bitte Shutdown-Token eingeben:");
+  if (token == null) {
+    return "";
+  }
+  const trimmed = token.trim();
+  if (trimmed) {
+    localStorage.setItem(shutdownTokenStorageKey, trimmed);
+  }
+  return trimmed;
+}
+
+function ensureShutdownToken() {
+  let token = getStoredShutdownToken();
+  if (token) {
+    return token;
+  }
+  token = requestShutdownToken();
+  return token;
+}
+
+function clearShutdownToken() {
+  localStorage.removeItem(shutdownTokenStorageKey);
+}
 
 function init() {
   fetchDevices();
@@ -226,8 +261,54 @@ function openBox(ip) {
   document.getElementById("content").innerHTML = `<iframe src="http://${ip}"></iframe>`;
 }
 
-function shutdown() {
-  fetch("/shutdown", { method: "POST" });
+async function shutdown() {
+  if (!window.confirm("Soll das System wirklich heruntergefahren werden?")) {
+    return;
+  }
+
+  const headers = {};
+  if (requiresShutdownToken()) {
+    const token = ensureShutdownToken();
+    if (!token) {
+      alert("Herunterfahren abgebrochen – kein Shutdown-Token angegeben.");
+      return;
+    }
+    headers["X-Api-Key"] = token;
+  }
+
+  const shutdownButton = document.getElementById("shutdown");
+  const originalLabel = shutdownButton.textContent;
+  shutdownButton.disabled = true;
+  shutdownButton.textContent = "Wird heruntergefahren...";
+
+  try {
+    const response = await fetch("/shutdown", { method: "POST", headers });
+    if (response.status === 401 || response.status === 403) {
+      clearShutdownToken();
+      alert("Authentifizierung fehlgeschlagen. Bitte Shutdown-Token prüfen.");
+      return;
+    }
+    if (!response.ok) {
+      alert("Fehler beim Abschalten: " + response.statusText);
+      return;
+    }
+    let message = "Shutdown ausgelöst.";
+    try {
+      const data = await response.json();
+      if (data && data.status) {
+        message = "Shutdown ausgelöst (" + data.status + ").";
+      }
+    } catch (e) {
+      // JSON optional
+    }
+    alert(message + " Das Gerät kann einige Minuten zum Herunterfahren benötigen.");
+  } catch (error) {
+    console.error(error);
+    alert("Netzwerkfehler beim Abschalten. Bitte erneut versuchen.");
+  } finally {
+    shutdownButton.disabled = false;
+    shutdownButton.textContent = originalLabel;
+  }
 }
 
 function showSetup() {

@@ -588,3 +588,39 @@ def test_migrate_config_adds_delay_matrix(webserver_app):
     for day in module.DAYS:
         assert len(migrated["boxen"]["Legacy"]["delays"][day]) == module.TRIGGER_SLOTS
         assert all(value == module.DEFAULT_DELAY for value in migrated["boxen"]["Legacy"]["delays"][day])
+
+
+def test_shutdown_requires_token_for_remote_clients(webserver_app, monkeypatch):
+    module, client = webserver_app
+    monkeypatch.setattr(module.os, "system", lambda cmd: None)
+    module.reload_shutdown_token_cache()
+    monkeypatch.delenv("SHUTDOWN_TOKEN", raising=False)
+    module.reload_shutdown_token_cache()
+
+    response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "203.0.113.5"})
+    assert response.status_code == 403
+
+    monkeypatch.setenv("SHUTDOWN_TOKEN", "secret-token")
+    module.reload_shutdown_token_cache()
+
+    response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "203.0.113.5"})
+    assert response.status_code == 403
+
+    response = client.post(
+        "/shutdown",
+        environ_overrides={"REMOTE_ADDR": "203.0.113.5"},
+        headers={"X-Api-Key": "secret-token"},
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "OK"}
+
+
+def test_shutdown_allows_loopback_without_token(webserver_app, monkeypatch):
+    module, client = webserver_app
+    monkeypatch.setattr(module.os, "system", lambda cmd: None)
+    monkeypatch.delenv("SHUTDOWN_TOKEN", raising=False)
+    module.reload_shutdown_token_cache()
+
+    response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "127.0.0.1"})
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "OK"}
