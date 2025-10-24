@@ -652,9 +652,11 @@ def _is_shutdown_authorized(remote_addr: str, provided_token: str) -> Tuple[bool
 
 def _resolve_client_address(remote_addr: str, forwarded_for_header: str) -> str:
     if remote_addr in ALLOWED_SHUTDOWN_ADDRESSES and forwarded_for_header:
-        client_addr = forwarded_for_header.split(",")[0].strip()
-        if client_addr:
-            return client_addr
+        forwarded_addrs = [entry.strip() for entry in forwarded_for_header.split(",") if entry.strip()]
+        if forwarded_addrs:
+            # Trust the last hop in the chain so spoofed entries injected by
+            # clients at the beginning of the header do not bypass checks.
+            return forwarded_addrs[-1]
     return remote_addr
 
 
