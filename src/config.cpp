@@ -386,11 +386,13 @@ void loadConfig() {
     bool wifiPasswordHasNonPrintable = containsNonPrintable(wifi_password, sizeof(wifi_password));
     bool wifiPasswordHasFF = contains0xFF(wifi_password, sizeof(wifi_password));
 
-    if (wifiPasswordHasFF || wifiPasswordEmpty || wifiPasswordWhitespaceOnly || wifiPasswordHasNonPrintable) {
+    if (wifiPasswordHasFF || wifiPasswordWhitespaceOnly || wifiPasswordHasNonPrintable) {
         Serial.println(F("🛑 Ungültiges WiFi-Passwort im EEPROM gefunden! Setze Standardwert..."));
         strncpy(wifi_password, DEFAULT_WIFI_PASSWORD, sizeof(wifi_password));
         wifi_password[sizeof(wifi_password) - 1] = '\0';
         eepromUpdated = true;
+    } else if (wifiPasswordEmpty) {
+        Serial.println(F("ℹ️ Leeres WiFi-Passwort erkannt – offene Netzwerke werden unterstützt."));
     }
 
     size_t hostnameLength = strnLength(hostname, sizeof(hostname));
