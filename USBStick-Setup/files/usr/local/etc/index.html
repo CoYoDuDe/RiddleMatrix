@@ -568,11 +568,32 @@ function saveBoxOrder() {
 }
 
 function removeBox(hostname) {
+  const headers = buildSensitiveHeaders({ prompt: true });
+  if (headers === null) {
+    const message = '⚠️ Entfernen abgebrochen – Administrations-Token erforderlich.';
+    if (statusArea) {
+      statusArea.innerHTML = `<div class="statusEntry status">${message}</div>`;
+    }
+    alert(message);
+    return;
+  }
+
+  headers["Content-Type"] = "application/json";
+
   fetch("/remove_box", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ hostname })
   }).then(response => {
+    if (response.status === 401 || response.status === 403) {
+      clearAdminToken();
+      const message = '❌ Zugriff verweigert – bitte Token prüfen.';
+      if (statusArea) {
+        statusArea.innerHTML = `<div class="statusEntry status">${message}</div>`;
+      }
+      alert(message);
+      return;
+    }
     if (!response.ok) {
       statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Entfernen.</div>';
     } else {
