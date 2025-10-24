@@ -496,7 +496,7 @@ void loadConfig() {
     }
 }
 
-void display_updater() {
+void IRAM_ATTR display_updater() {
     display.display();
 }
 
