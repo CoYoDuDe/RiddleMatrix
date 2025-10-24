@@ -12,6 +12,7 @@ Aufgaben – etwa Paketinstallationen oder Firmware-Checks – einzubinden.
 - Bash 5 oder neuer
 - `rsync` (empfohlen, fällt bei Nichtverfügbarkeit automatisch auf `tar` zurück)
 - Root-Rechte, sofern direkt auf `/` geschrieben wird
+- Installiertes `dnsmasq`-Paket (stellt die Gruppe `dnsmasq` bereit, damit die Lease-Datei beschreibbar bleibt)
 
 ## Aufruf
 
@@ -49,6 +50,15 @@ automatisiert um alle Laufzeitabhängigkeiten des Märchen-Managers:
 Die Provisionierung läuft sowohl bei einer Installation ins aktive Root-Dateisystem (`TARGET_ROOT=/`) als auch bei einem
 gemounteten Ziel (sofern `chroot` verfügbar ist). Dadurch müssen Operator:innen die Abhängigkeiten nicht mehr manuell
 nachinstallieren – der Webserver ist nach Abschluss von `setup.sh` sofort startklar.
+
+## Gesicherte Lease-Datei für dnsmasq
+
+`setup.sh` setzt beim Abschluss der Installation die Datei `var/lib/misc/dnsmasq.leases` auf den Eigentümer `root:dnsmasq`
+und den Modus `0640`. Fehlt die Datei, wird sie mit exakt diesen Rechten idempotent angelegt, sodass nachfolgende Läufe keine
+breiteren Berechtigungen vergeben. Sollte die Gruppe `dnsmasq` (bereitgestellt durch das gleichnamige Paket) noch nicht
+existieren, weist das Skript darauf hin. Sobald der Dienst installiert ist, kann `dnsmasq` trotz restriktiver Zugriffsrechte
+problemlos starten und die Lease-Datei exklusiv schreiben, während andere Benutzer:innen nur noch lesenden Zugriff über die
+Gruppenmitgliedschaft erhalten.
 
 ## WLAN / Access Point
 
