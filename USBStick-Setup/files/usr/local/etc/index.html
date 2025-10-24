@@ -385,7 +385,13 @@ function renderDeviceList() {
 }
 
 function openBox(ip) {
-  document.getElementById("content").innerHTML = `<iframe src="http://${ip}"></iframe>`;
+  const container = document.getElementById("content");
+  while (container.firstChild) {
+    container.removeChild(container.firstChild);
+  }
+  const iframe = document.createElement("iframe");
+  iframe.src = `http://${ip}`;
+  container.appendChild(iframe);
 }
 
 async function shutdown() {
