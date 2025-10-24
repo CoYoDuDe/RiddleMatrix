@@ -216,36 +216,76 @@ def extract_box_state_from_soup(soup):
     colors = {day: [DEFAULT_COLOR for _ in range(TRIGGER_SLOTS)] for day in DAYS}
     delays = {day: [DEFAULT_DELAY for _ in range(TRIGGER_SLOTS)] for day in DAYS}
 
-    def _find_field(tag, base_name, firmware_day_index, slot, fallback_day_index=None):
-        name_candidates = []
+    schema_cache = {}
 
-        def extend_candidates(index_value):
-            if slot is not None:
-                name_candidates.extend(
-                    [
-                        f"{base_name}_{index_value}_{slot}",
-                        f"{base_name}{index_value}_{slot}",
-                        f"{base_name}_{slot}_{index_value}",
-                        f"{base_name}_{slot}{index_value}",
-                        f"{base_name}{slot}{index_value}",
-                    ]
-                )
+    def _prefer_fallback(tag, base_name):
+        key = (tag, base_name)
+        if key not in schema_cache:
+            result = False
+            for field in soup.find_all(tag):
+                name = field.get("name")
+                if not name or not name.startswith(base_name):
+                    continue
+                suffix = name[len(base_name) :]
+                if not suffix:
+                    continue
+                if suffix[0].isdigit() and "_" not in suffix:
+                    result = True
+                    break
+                if suffix.startswith("_") and suffix[1:].isdigit():
+                    result = True
+                    break
+            schema_cache[key] = result
+        return schema_cache[key]
+
+    used_fields = set()
+
+    def _find_field(tag, base_name, firmware_day_index, slot, fallback_day_index=None):
+        def build_candidates(index_value):
+            names = []
             if slot == 0:
-                name_candidates.extend(
+                names.extend(
                     [
                         f"{base_name}_{index_value}",
                         f"{base_name}{index_value}",
                     ]
                 )
+            if slot is not None:
+                names.extend(
+                    [
+                        f"{base_name}_{slot}_{index_value}",
+                        f"{base_name}{slot}_{index_value}",
+                        f"{base_name}_{slot}{index_value}",
+                        f"{base_name}{slot}{index_value}",
+                        f"{base_name}_{index_value}_{slot}",
+                        f"{base_name}{index_value}_{slot}",
+                        f"{base_name}_{index_value}{slot}",
+                        f"{base_name}{index_value}{slot}",
+                    ]
+                )
+            return names
 
-        extend_candidates(firmware_day_index)
-        if fallback_day_index is not None and fallback_day_index != firmware_day_index:
-            extend_candidates(fallback_day_index)
+        candidate_groups = []
 
-        for candidate in dict.fromkeys(name_candidates):
-            field = soup.find(tag, {"name": candidate})
-            if field is not None:
-                return field
+        if _prefer_fallback(tag, base_name):
+            if fallback_day_index is not None:
+                candidate_groups.append(build_candidates(fallback_day_index))
+            if firmware_day_index is not None:
+                candidate_groups.append(build_candidates(firmware_day_index))
+        else:
+            if firmware_day_index is not None:
+                candidate_groups.append(build_candidates(firmware_day_index))
+            if fallback_day_index is not None:
+                candidate_groups.append(build_candidates(fallback_day_index))
+
+        for group in candidate_groups:
+            for candidate in dict.fromkeys(group):
+                for field in soup.find_all(tag, {"name": candidate}):
+                    identifier = id(field)
+                    if identifier in used_fields:
+                        continue
+                    used_fields.add(identifier)
+                    return field
         return None
 
     for day_index, day in enumerate(DAYS):
