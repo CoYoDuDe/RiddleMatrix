@@ -376,6 +376,9 @@ def test_extract_box_state_supports_trigger_first_schema(webserver_app):
     expected_colors = {
         day: [module.DEFAULT_COLOR for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS
     }
+    expected_delays = {
+        day: [module.DEFAULT_DELAY for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS
+    }
 
     html_parts = ["<html><body>"]
     for day_index, day in enumerate(module.DAYS):
@@ -385,12 +388,24 @@ def test_extract_box_state_supports_trigger_first_schema(webserver_app):
             expected_letters[day][slot] = letter_value
             expected_colors[day][slot] = color_value
 
+            raw_delay = f"{day_index * 10 + slot + 0.4}"
+            expected_delays[day][slot] = module._coerce_delay_value(raw_delay)
+
             if (day_index + slot) % 2 == 0:
                 select_name = f"letter_{slot}_{day_index}"
                 color_name = f"color_{slot}_{day_index}"
             else:
                 select_name = f"letter{slot}{day_index}"
                 color_name = f"color{slot}{day_index}"
+
+            if slot == 0:
+                delay_name = f"delay_{day_index}"
+            elif (day_index + slot) % 3 == 0:
+                delay_name = f"delay_{slot}_{day_index}"
+            elif (day_index + slot) % 3 == 1:
+                delay_name = f"delay_{day_index}_{slot}"
+            else:
+                delay_name = f"delay{slot}{day_index}"
 
             html_parts.append(
                 "<select name='"
@@ -404,13 +419,17 @@ def test_extract_box_state_supports_trigger_first_schema(webserver_app):
             html_parts.append(
                 f"<input name='{color_name}' value='{color_value}'>"
             )
+            html_parts.append(
+                f"<input type='number' name='{delay_name}' value='{raw_delay}'>"
+            )
     html_parts.append("</body></html>")
 
     soup = module.BeautifulSoup("".join(html_parts), "html.parser")
-    letters, colors = module.extract_box_state_from_soup(soup)
+    letters, colors, delays = module.extract_box_state_from_soup(soup)
 
     assert letters == expected_letters
     assert colors == expected_colors
+    assert delays == expected_delays
 
 
 def test_fetch_trigger_delays_returns_numeric_matrix(webserver_app, monkeypatch):
@@ -444,6 +463,61 @@ def test_fetch_trigger_delays_returns_numeric_matrix(webserver_app, monkeypatch)
     assert delays["di"] == [module._coerce_delay_value(payload["delays"]["di"].get(str(idx))) for idx in range(module.TRIGGER_SLOTS)]
     assert delays["mi"] == [module.DEFAULT_DELAY for _ in range(module.TRIGGER_SLOTS)]
     assert delays["so"] == [module._coerce_delay_value(value) for value in payload["delays"]["so"]]
+
+
+def test_learn_box_uses_html_delays_when_api_unavailable(webserver_app, monkeypatch):
+    module, _ = webserver_app
+
+    expected_delays = {
+        day: [module.DEFAULT_DELAY for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS
+    }
+
+    html_parts = ["<html><body>"]
+    for day_index, day in enumerate(module.DAYS):
+        for slot in range(module.TRIGGER_SLOTS):
+            raw_delay = f"{day_index * 5 + slot + 0.6}"
+            expected_delays[day][slot] = module._coerce_delay_value(raw_delay)
+
+            if slot == 0:
+                delay_name = f"delay_{day_index}"
+            elif slot == 1:
+                delay_name = f"delay_{day_index}_{slot}"
+            else:
+                delay_name = f"delay_{slot}_{day_index}"
+
+            html_parts.append(
+                f"<select name='letter_{slot}_{day_index}'><option value='X{day_index}{slot}' selected></option></select>"
+            )
+            html_parts.append(
+                f"<input name='color_{slot}_{day_index}' value='{module.DEFAULT_COLOR}'>"
+            )
+            html_parts.append(
+                f"<input type='number' name='{delay_name}' value='{raw_delay}'>"
+            )
+    html_parts.append("</body></html>")
+    fake_html = "".join(html_parts)
+
+    class FakeResponse:
+        def __init__(self, text: str, ok: bool = True) -> None:
+            self.text = text
+            self.ok = ok
+
+    def fake_get(url, *args, **kwargs):
+        if url.endswith("/api/trigger-delays"):
+            raise module.requests.RequestException("api down")
+        assert url == "http://1.2.3.4/"
+        return FakeResponse(fake_html, True)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    module.learn_box("1.2.3.4", "HtmlBox")
+
+    config = module.load_config()
+    assert "HtmlBox" in config["boxen"]
+    learned_delays = config["boxen"]["HtmlBox"]["delays"]
+
+    assert learned_delays == expected_delays
+    assert learned_delays != module._default_delay_matrix()
 
 def test_migrate_config_adds_delay_matrix(webserver_app):
     module, _ = webserver_app
