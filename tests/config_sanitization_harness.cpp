@@ -84,6 +84,52 @@ bool verify_legacy_trigger_delay_migration() {
     return true;
 }
 
+bool verify_wifi_password_hostname_recovery() {
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.fill(0xFF);
+
+    char validSsid[sizeof(wifi_ssid)] = {};
+    std::strncpy(validSsid, "ValidSSID", sizeof(validSsid));
+    EEPROM.put(EEPROM_OFFSET_WIFI_SSID, validSsid);
+
+    uint16_t currentVersion = EEPROM_CONFIG_VERSION;
+    EEPROM.put(EEPROM_OFFSET_CONFIG_VERSION, currentVersion);
+
+    loadConfig();
+
+    if (std::strncmp(wifi_ssid, validSsid, sizeof(wifi_ssid)) != 0) {
+        std::cerr << "SSID mismatch – expected ValidSSID got " << wifi_ssid << std::endl;
+        return false;
+    }
+
+    static const char EXPECTED_PASSWORD[] = "YOUR_WIFI_PASSWORD";
+    if (std::strncmp(wifi_password, EXPECTED_PASSWORD, sizeof(wifi_password)) != 0) {
+        std::cerr << "WiFi password fallback failed – got " << wifi_password << std::endl;
+        return false;
+    }
+
+    static const char EXPECTED_HOSTNAME[] = "your-device-hostname";
+    if (std::strncmp(hostname, EXPECTED_HOSTNAME, sizeof(hostname)) != 0) {
+        std::cerr << "Hostname fallback failed – got " << hostname << std::endl;
+        return false;
+    }
+
+    const auto &buffer = EEPROM.data();
+    if (buffer.size() <= EEPROM_OFFSET_WIFI_PASSWORD ||
+        buffer[EEPROM_OFFSET_WIFI_PASSWORD] == 0xFF) {
+        std::cerr << "EEPROM password bytes were not sanitized" << std::endl;
+        return false;
+    }
+
+    if (buffer.size() <= EEPROM_OFFSET_HOSTNAME ||
+        buffer[EEPROM_OFFSET_HOSTNAME] == 0xFF) {
+        std::cerr << "EEPROM hostname bytes were not sanitized" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -92,6 +138,10 @@ int main() {
     }
 
     if (!verify_legacy_trigger_delay_migration()) {
+        return 1;
+    }
+
+    if (!verify_wifi_password_hostname_recovery()) {
         return 1;
     }
 

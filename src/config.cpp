@@ -293,6 +293,27 @@ void loadConfig() {
         return false;
     };
 
+    auto contains0xFF = [](const char *value, size_t maxLength) {
+        for (size_t index = 0; index < maxLength; ++index) {
+            unsigned char current = static_cast<unsigned char>(value[index]);
+            if (current == 0xFF) {
+                return true;
+            }
+            if (current == '\0') {
+                break;
+            }
+        }
+        return false;
+    };
+
+    auto strnLength = [](const char *value, size_t maxLength) {
+        size_t length = 0;
+        while (length < maxLength && value[length] != '\0') {
+            ++length;
+        }
+        return length;
+    };
+
     bool migratedLegacyLayout = false;
     uint16_t versionOffset = EEPROM_OFFSET_CONFIG_VERSION;
     uint16_t storedVersion = readStoredConfigVersion(versionOffset);
@@ -341,30 +362,13 @@ void loadConfig() {
 
     bool eepromUpdated = migratedLegacyLayout;
 
-    bool wifiErased = (static_cast<uint8_t>(wifi_ssid[0]) == 0xFF);
-    bool wifiEmpty = (wifi_ssid[0] == '\0');
-    bool wifiLengthZero = false;
-    if (!wifiErased && !wifiEmpty) {
-        wifiLengthZero = (strlen(wifi_ssid) == 0);
-    }
+    size_t wifiSSIDLength = strnLength(wifi_ssid, sizeof(wifi_ssid));
+    bool wifiSSIDEmpty = (wifiSSIDLength == 0);
+    bool wifiSSIDWhitespaceOnly = isWhitespaceOnly(wifi_ssid, sizeof(wifi_ssid));
+    bool wifiSSIDHasNonPrintable = containsNonPrintable(wifi_ssid, sizeof(wifi_ssid));
+    bool wifiSSIDHasFF = contains0xFF(wifi_ssid, sizeof(wifi_ssid));
 
-    bool wifiPasswordErased = (static_cast<uint8_t>(wifi_password[0]) == 0xFF);
-    bool wifiPasswordEmpty = (wifi_password[0] == '\0');
-    bool wifiPasswordLengthZero = false;
-    if (!wifiPasswordErased && !wifiPasswordEmpty) {
-        wifiPasswordLengthZero = (strlen(wifi_password) == 0);
-    }
-
-    if (wifiPasswordErased || wifiPasswordEmpty || wifiPasswordLengthZero) {
-        Serial.println(F("🛑 Kein gültiges WiFi-Passwort im EEPROM gefunden! Setze Standardwerte..."));
-        strncpy(wifi_password, DEFAULT_WIFI_PASSWORD, sizeof(wifi_password));
-        wifi_password[sizeof(wifi_password) - 1] = '\0';
-        strncpy(hostname, DEFAULT_HOSTNAME, sizeof(hostname));
-        hostname[sizeof(hostname) - 1] = '\0';
-        eepromUpdated = true;
-    }
-
-    if (wifiErased || wifiEmpty || wifiLengthZero) {
+    if (wifiSSIDHasFF || wifiSSIDEmpty || wifiSSIDWhitespaceOnly || wifiSSIDHasNonPrintable) {
         Serial.println(F("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte..."));
         strncpy(wifi_ssid, DEFAULT_WIFI_SSID, sizeof(wifi_ssid));
         wifi_ssid[sizeof(wifi_ssid) - 1] = '\0';
@@ -376,16 +380,26 @@ void loadConfig() {
         eepromUpdated = true;
     }
 
-    bool hostnameErased = (static_cast<uint8_t>(hostname[0]) == 0xFF);
-    size_t hostnameLength = 0;
-    while (hostnameLength < sizeof(hostname) && hostname[hostnameLength] != '\0') {
-        ++hostnameLength;
+    size_t wifiPasswordLength = strnLength(wifi_password, sizeof(wifi_password));
+    bool wifiPasswordEmpty = (wifiPasswordLength == 0);
+    bool wifiPasswordWhitespaceOnly = isWhitespaceOnly(wifi_password, sizeof(wifi_password));
+    bool wifiPasswordHasNonPrintable = containsNonPrintable(wifi_password, sizeof(wifi_password));
+    bool wifiPasswordHasFF = contains0xFF(wifi_password, sizeof(wifi_password));
+
+    if (wifiPasswordHasFF || wifiPasswordEmpty || wifiPasswordWhitespaceOnly || wifiPasswordHasNonPrintable) {
+        Serial.println(F("🛑 Ungültiges WiFi-Passwort im EEPROM gefunden! Setze Standardwert..."));
+        strncpy(wifi_password, DEFAULT_WIFI_PASSWORD, sizeof(wifi_password));
+        wifi_password[sizeof(wifi_password) - 1] = '\0';
+        eepromUpdated = true;
     }
+
+    size_t hostnameLength = strnLength(hostname, sizeof(hostname));
     bool hostnameEmpty = (hostnameLength == 0);
     bool hostnameWhitespaceOnly = isWhitespaceOnly(hostname, sizeof(hostname));
     bool hostnameHasNonPrintable = containsNonPrintable(hostname, sizeof(hostname));
+    bool hostnameHasFF = contains0xFF(hostname, sizeof(hostname));
 
-    if (hostnameErased || hostnameEmpty || hostnameWhitespaceOnly || hostnameHasNonPrintable) {
+    if (hostnameHasFF || hostnameEmpty || hostnameWhitespaceOnly || hostnameHasNonPrintable) {
         Serial.println(F("🛑 Ungültiger Hostname im EEPROM gefunden! Setze Standardwert..."));
         strncpy(hostname, DEFAULT_HOSTNAME, sizeof(hostname));
         hostname[sizeof(hostname) - 1] = '\0';
