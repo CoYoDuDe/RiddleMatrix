@@ -130,6 +130,86 @@ bool verify_wifi_password_hostname_recovery() {
     return true;
 }
 
+bool verify_open_network_password_preserved() {
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.fill(0xFF);
+
+    loadConfig();
+
+    char baselineLetters[NUM_TRIGGERS][NUM_DAYS];
+    std::memcpy(baselineLetters, dailyLetters, sizeof(baselineLetters));
+    char baselineColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH];
+    std::memcpy(baselineColors, dailyLetterColors, sizeof(baselineColors));
+    unsigned long baselineDelays[NUM_TRIGGERS][NUM_DAYS];
+    std::memcpy(baselineDelays, letter_trigger_delays, sizeof(baselineDelays));
+    int baselineBrightness = display_brightness;
+    unsigned long baselineDisplayTime = letter_display_time;
+    unsigned long baselineInterval = letter_auto_display_interval;
+    bool baselineAutoMode = autoDisplayMode;
+    int baselineTimeout = wifi_connect_timeout;
+
+    EEPROM.begin(EEPROM_SIZE);
+    std::uint8_t *raw = EEPROM.raw();
+    std::memset(raw, 0, EEPROM_SIZE);
+
+    char openSsid[sizeof(wifi_ssid)] = {};
+    std::strncpy(openSsid, "OpenNetwork", sizeof(openSsid));
+    std::memcpy(raw + EEPROM_OFFSET_WIFI_SSID, openSsid, sizeof(openSsid));
+
+    char openHostname[sizeof(hostname)] = {};
+    std::strncpy(openHostname, "open-host", sizeof(openHostname));
+    std::memcpy(raw + EEPROM_OFFSET_HOSTNAME, openHostname, sizeof(openHostname));
+
+    std::memcpy(raw + EEPROM_OFFSET_DAILY_LETTERS, baselineLetters, sizeof(baselineLetters));
+    std::memcpy(raw + EEPROM_OFFSET_DAILY_LETTER_COLORS, baselineColors, sizeof(baselineColors));
+
+    std::memcpy(raw + EEPROM_OFFSET_DISPLAY_BRIGHTNESS,
+                &baselineBrightness,
+                sizeof(baselineBrightness));
+
+    std::uint32_t displayTime = static_cast<std::uint32_t>(baselineDisplayTime);
+    std::memcpy(raw + EEPROM_OFFSET_LETTER_DISPLAY_TIME, &displayTime, sizeof(displayTime));
+
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            std::uint32_t value = static_cast<std::uint32_t>(baselineDelays[trigger][day]);
+            size_t index = trigger * NUM_DAYS + day;
+            size_t offset = EEPROM_OFFSET_TRIGGER_DELAY_MATRIX + index * sizeof(std::uint32_t);
+            std::memcpy(raw + offset, &value, sizeof(value));
+        }
+    }
+
+    std::uint32_t interval = static_cast<std::uint32_t>(baselineInterval);
+    std::memcpy(raw + EEPROM_OFFSET_AUTO_INTERVAL, &interval, sizeof(interval));
+
+    std::uint8_t autoModeByte = baselineAutoMode ? 1U : 0U;
+    std::memcpy(raw + EEPROM_OFFSET_AUTO_MODE, &autoModeByte, sizeof(autoModeByte));
+
+    std::memcpy(raw + EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT,
+                &baselineTimeout,
+                sizeof(baselineTimeout));
+
+    std::uint16_t version = EEPROM_CONFIG_VERSION;
+    std::memcpy(raw + EEPROM_OFFSET_CONFIG_VERSION, &version, sizeof(version));
+
+    loadConfig();
+
+    if (wifi_password[0] != '\0') {
+        std::cerr << "Offenes Netz wurde nicht beibehalten – Passwort ist: " << wifi_password
+                  << std::endl;
+        return false;
+    }
+
+    const auto &buffer = EEPROM.data();
+    if (buffer.size() > EEPROM_OFFSET_WIFI_PASSWORD &&
+        buffer[EEPROM_OFFSET_WIFI_PASSWORD] != 0x00) {
+        std::cerr << "EEPROM-Passwort wurde unerwartet überschrieben" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -142,6 +222,10 @@ int main() {
     }
 
     if (!verify_wifi_password_hostname_recovery()) {
+        return 1;
+    }
+
+    if (!verify_open_network_password_preserved()) {
         return 1;
     }
 
