@@ -76,6 +76,14 @@ void resetTriggerDelaysToDefaults() {
     memcpy(letter_trigger_delays, DEFAULT_TRIGGER_DELAYS, sizeof(letter_trigger_delays));
 }
 
+void ensureDailyColorStringsTerminated() {
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+        }
+    }
+}
+
 bool isValidDelayValue(unsigned long value) {
     return value <= 999UL;
 }
@@ -117,6 +125,10 @@ void migrateLegacyLayout(uint16_t storedVersion, bool &migratedLegacyLayout) {
     EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, legacyLetters);
     EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, legacyColors);
 
+    for (size_t day = 0; day < NUM_DAYS; ++day) {
+        legacyColors[day][COLOR_STRING_LENGTH - 1] = '\0';
+    }
+
     unsigned long legacyTriggerDelays[NUM_TRIGGERS] = {};
     size_t legacyOffset = EEPROM_OFFSET_TRIGGER_DELAY_MATRIX;
     for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
@@ -144,6 +156,8 @@ void migrateLegacyLayout(uint16_t storedVersion, bool &migratedLegacyLayout) {
             dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
         }
     }
+
+    ensureDailyColorStringsTerminated();
 
     for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
         unsigned long legacyValue = legacyTriggerDelays[trigger];
@@ -230,6 +244,8 @@ void loadConfig() {
     } else {
         migrateLegacyLayout(storedVersion, migratedLegacyLayout);
     }
+
+    ensureDailyColorStringsTerminated();
 
     Serial.println(F("📂 Geladene Farben für Trigger & Tage:"));
     for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
