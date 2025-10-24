@@ -58,7 +58,7 @@ static constexpr uint16_t EEPROM_OFFSET_AUTO_INTERVAL = EEPROM_OFFSET_TRIGGER_DE
 static constexpr uint16_t EEPROM_OFFSET_AUTO_MODE = EEPROM_OFFSET_AUTO_INTERVAL + EEPROM_SIZEOF_UNSIGNED_LONG;
 static constexpr uint16_t EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT = EEPROM_OFFSET_AUTO_MODE + sizeof(uint8_t);
 static constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION = EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT + sizeof(int);
-static constexpr uint16_t EEPROM_CONFIG_VERSION = 3;
+static constexpr uint16_t EEPROM_CONFIG_VERSION = 4;
 
 static_assert(EEPROM_OFFSET_DAILY_LETTERS + (NUM_TRIGGERS * NUM_DAYS) <= EEPROM_OFFSET_DAILY_LETTER_COLORS,
               "Letter-Block überschneidet sich mit Farb-Block");
