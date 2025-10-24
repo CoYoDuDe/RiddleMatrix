@@ -162,6 +162,20 @@ const adminTokenStorageKey = "shutdownToken";
 const sensitiveHeaderName = "X-Api-Key";
 const AUTH_REQUIRED_MESSAGE = "🔒 Administrations-Token erforderlich – Änderungen sind gesperrt.";
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/`/g, "&#96;");
+}
+
+function escapeJsString(value) {
+  return escapeHtml(JSON.stringify(value ?? ""));
+}
+
 function requiresAdminToken() {
   return !loopbackHosts.has(window.location.hostname);
 }
@@ -451,7 +465,9 @@ function showSetup() {
 
   boxOrder.forEach((hostname, index) => {
     const box = normalizeBox(knownBoxes[hostname] || {});
-    html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${hostname}</h3><div class="weekday-row">`;
+    const escapedHostname = escapeHtml(hostname);
+    const hostnameArgument = escapeJsString(hostname);
+    html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}</h3><div class="weekday-row">`;
     for (let i = 0; i < days.length; i++) {
       const letters = box.letters?.[days[i]] || [];
       const colors = box.colors?.[days[i]] || [];
@@ -474,13 +490,13 @@ function showSetup() {
         html += `
             <div class="trigger-entry">
               <span>Trigger ${trigger + 1}</span>
-              <select onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();" data-requires-auth="true">
+              <select onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();" data-requires-auth="true">
                 ${letterOptionsHtml}
               </select>
-              <input type="color" value="${color}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'color')" data-requires-auth="true">
+              <input type="color" value="${color}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color')" data-requires-auth="true">
               <div class="delay-input-wrapper">
                 <span>Verzögerung (s)</span>
-                <input type="number" class="delay-input" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'delay', true, this)" data-requires-auth="true">
+                <input type="number" class="delay-input" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this)" data-requires-auth="true">
               </div>
             </div>`;
       }
@@ -490,9 +506,9 @@ function showSetup() {
     }
     html += `</div>
       <div class="order-buttons">
-        <button onclick="moveBoxUp('${hostname}')" data-requires-auth="true">↑</button>
-        <button onclick="moveBoxDown('${hostname}')" data-requires-auth="true">↓</button>
-        <button onclick="removeBox('${hostname}')" data-requires-auth="true">❌ Entfernen</button>
+        <button onclick="moveBoxUp(${hostnameArgument})" data-requires-auth="true">↑</button>
+        <button onclick="moveBoxDown(${hostnameArgument})" data-requires-auth="true">↓</button>
+        <button onclick="removeBox(${hostnameArgument})" data-requires-auth="true">❌ Entfernen</button>
       </div></div>`;
   });
 
@@ -759,7 +775,7 @@ async function transferBox(hostname) {
       transferBtn.disabled = false;
       transferBtn.innerText = "✅ Übertragen";
     }
-    statusArea.innerHTML += `<div class="statusEntry">${hostname}: ${statusText}</div>`;
+    statusArea.innerHTML += `<div class="statusEntry">${escapeHtml(hostname)}: ${statusText}</div>`;
     setTimeout(() => {
       if (statusArea.firstChild) {
         statusArea.removeChild(statusArea.firstChild);
