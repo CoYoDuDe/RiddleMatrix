@@ -66,6 +66,8 @@ Nach der Einrichtung zeigt die Firmware die Buchstaben automatisch an und kann �
 
 `config.h` enthält Platzhalter-WLAN-Daten, falls noch nichts im EEPROM gespeichert ist. Echte Zugangsdaten sollten **nicht** ins Repository gelangen. Sie können initial über das EEPROM oder die Konfigurationsseite gesetzt werden. Der Parameter `wifi_connect_timeout` bestimmt, wie lange die Verbindung versucht wird (Standard 30 Sekunden).
 
+> **Hinweis:** Die Firmware erkennt jetzt gelöschte EEPROM-Zellen plattformunabhängig. Vergleiche gegen `0xFF` erfolgen explizit auf `uint8_t`-Basis, sodass Host-Tests und der ESP8266 dieselbe Initialisierung der WLAN-Defaults auslösen.
+
 ### Mehrspuriges Buchstabenraster
 
 Die Tagesbuchstaben werden jetzt dreidimensional abgelegt:
