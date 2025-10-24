@@ -312,6 +312,34 @@ def test_update_box_updates_specific_trigger(webserver_app):
     assert config["boxen"]["TestBox"]["delays"]["mo"][0] == module._coerce_delay_value(1.25)
 
 
+def test_update_box_rejects_malicious_color_payload(webserver_app):
+    module, client = webserver_app
+    module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": ["TestBox"]})
+
+    malicious_color = "#123456\" onfocus=\"alert(1)\""
+    response = client.post(
+        "/update_box",
+        json={
+            "hostname": "TestBox",
+            "day": "mo",
+            "triggerIndex": 0,
+            "color": malicious_color,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "success"}
+
+    config = module.load_config()
+    assert config["boxen"]["TestBox"]["colors"]["mo"][0] == module.DEFAULT_COLOR
+
+    devices_response = client.get("/devices")
+    assert devices_response.status_code == 200
+    payload = devices_response.get_json()
+    assert payload["boxen"]["TestBox"]["colors"]["mo"][0] == module.DEFAULT_COLOR
+    assert malicious_color not in devices_response.get_data(as_text=True)
+
+
 def test_update_box_requires_token_for_remote_clients(webserver_app, monkeypatch):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})

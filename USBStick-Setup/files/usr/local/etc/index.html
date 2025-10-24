@@ -154,6 +154,7 @@ const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const triggersPerDay = 3;
 const defaultColor = "#ffffff";
 const defaultDelay = 0;
+const colorPattern = /^#[0-9A-Fa-f]{6}$/;
 const letterLabels = {"*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
 const letterOptions = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split("");
 let currentWordTrigger = 0;
@@ -170,6 +171,18 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;")
     .replace(/`/g, "&#96;");
+}
+
+function sanitizeColor(color) {
+  const value = typeof color === "string" ? color.trim() : "";
+  if (colorPattern.test(value)) {
+    return value.toLowerCase();
+  }
+  return defaultColor;
+}
+
+function escapeColor(color) {
+  return escapeHtml(sanitizeColor(color));
 }
 
 function escapeJsString(value) {
@@ -305,8 +318,9 @@ function normalizeBox(box) {
     box.letters[day] = letters;
 
     const colors = Array.isArray(box.colors[day]) ? box.colors[day].slice(0, triggersPerDay) : [];
-    while (colors.length < triggersPerDay) colors.push(defaultColor);
-    box.colors[day] = colors;
+    const sanitizedColors = colors.map(sanitizeColor);
+    while (sanitizedColors.length < triggersPerDay) sanitizedColors.push(defaultColor);
+    box.colors[day] = sanitizedColors;
 
     const delays = Array.isArray(box.delays[day]) ? box.delays[day].slice(0, triggersPerDay) : [];
     while (delays.length < triggersPerDay) delays.push(defaultDelay);
@@ -478,7 +492,7 @@ function showSetup() {
           <div class="trigger-container">`;
       for (let trigger = 0; trigger < triggersPerDay; trigger++) {
         const letter = letters[trigger] || "";
-        const color = colors[trigger] || defaultColor;
+        const color = sanitizeColor(colors[trigger] || defaultColor);
         const rawDelay = delays[trigger];
         const parsedDelay = typeof rawDelay === "number" ? rawDelay : parseFloat(String(rawDelay).replace(",", "."));
         const delayValue = Number.isFinite(parsedDelay) && parsedDelay >= 0
@@ -493,7 +507,7 @@ function showSetup() {
               <select onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();" data-requires-auth="true">
                 ${letterOptionsHtml}
               </select>
-              <input type="color" value="${color}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color')" data-requires-auth="true">
+              <input type="color" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color')" data-requires-auth="true">
               <div class="delay-input-wrapper">
                 <span>Verzögerung (s)</span>
                 <input type="number" class="delay-input" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this)" data-requires-auth="true">
@@ -581,7 +595,7 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
   if (fieldType === 'letter') {
     knownBoxes[hostname].letters[day][slotIndex] = value;
   } else if (fieldType === 'color') {
-    const colorValue = value || defaultColor;
+    const colorValue = sanitizeColor(value);
     knownBoxes[hostname].colors[day][slotIndex] = colorValue;
     value = colorValue;
   } else if (fieldType === 'delay') {
@@ -601,7 +615,7 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
   if (fieldType === 'letter') {
     payload.letter = value;
   } else if (fieldType === 'color') {
-    payload.color = value;
+    payload.color = sanitizeColor(value);
   } else if (fieldType === 'delay') {
     payload.delay = value;
   }
