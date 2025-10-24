@@ -714,6 +714,14 @@ void setupWebServer() {
 
     server.on("/updateTriggerDelays", HTTP_POST, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("POST /updateTriggerDelays"));
+
+        unsigned long parsedDelays[NUM_TRIGGERS][NUM_DAYS];
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            for (size_t day = 0; day < NUM_DAYS; ++day) {
+                parsedDelays[trigger][day] = letter_trigger_delays[trigger][day];
+            }
+        }
+
         bool success = true;
 
         for (size_t trigger = 0; trigger < NUM_TRIGGERS && success; ++trigger) {
@@ -750,11 +758,17 @@ void setupWebServer() {
                     break;
                 }
 
-                letter_trigger_delays[trigger][day] = parsed;
+                parsedDelays[trigger][day] = parsed;
             }
         }
 
         if (success) {
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                for (size_t day = 0; day < NUM_DAYS; ++day) {
+                    letter_trigger_delays[trigger][day] = parsedDelays[trigger][day];
+                }
+            }
+
             saveConfig();
             request->send(200, "text/plain", "✅ Verzögerungsmatrix gespeichert!");
         } else {
