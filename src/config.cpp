@@ -165,7 +165,7 @@ void migrateLegacyLayout(uint16_t storedVersion, bool &migratedLegacyLayout) {
 
     for (size_t day = 0; day < NUM_DAYS; ++day) {
         char letter = legacyLetters[day];
-        if (letter == '\xFF' || letter == '\0') {
+        if (static_cast<uint8_t>(letter) == 0xFF || letter == '\0') {
             letter = DEFAULT_DAILY_LETTERS[0][day];
         }
 
@@ -302,7 +302,7 @@ void loadConfig() {
 
     bool eepromUpdated = migratedLegacyLayout;
 
-    bool wifiErased = (wifi_ssid[0] == '\xFF');
+    bool wifiErased = (static_cast<uint8_t>(wifi_ssid[0]) == 0xFF);
     bool wifiEmpty = (wifi_ssid[0] == '\0');
     bool wifiLengthZero = false;
     if (!wifiErased && !wifiEmpty) {
