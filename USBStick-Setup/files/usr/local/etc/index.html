@@ -167,7 +167,7 @@ function normalizeBox(box) {
       if (!Number.isFinite(numeric) || numeric < 0) {
         return defaultDelay;
       }
-      return Math.round(numeric);
+      return Math.min(999, Math.round(numeric));
     });
   });
   return box;
@@ -276,7 +276,9 @@ function showSetup() {
         const color = colors[trigger] || defaultColor;
         const rawDelay = delays[trigger];
         const parsedDelay = typeof rawDelay === "number" ? rawDelay : parseFloat(String(rawDelay).replace(",", "."));
-        const delayValue = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? Math.round(parsedDelay) : defaultDelay;
+        const delayValue = Number.isFinite(parsedDelay) && parsedDelay >= 0
+          ? Math.min(999, Math.round(parsedDelay))
+          : defaultDelay;
         const delayDisplay = delayValue.toString();
         const letterOptionsHtml = letterOptions.map(c =>
           `<option value="${c}" ${c === letter ? "selected" : ""}>${letterLabels[c] || c}</option>`).join("");
@@ -289,7 +291,7 @@ function showSetup() {
               <input type="color" value="${color}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'color')">
               <div class="delay-input-wrapper">
                 <span>Verzögerung (s)</span>
-                <input type="number" class="delay-input" min="0" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
+                <input type="number" class="delay-input" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField('${hostname}', '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
               </div>
             </div>`;
       }
@@ -351,7 +353,7 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
     if (!Number.isFinite(numericValue) || numericValue < 0) {
       numericValue = defaultDelay;
     }
-    numericValue = Math.round(numericValue);
+    numericValue = Math.min(999, Math.max(0, Math.round(numericValue)));
     knownBoxes[hostname].delays[day][slotIndex] = numericValue;
     value = numericValue;
     if (inputElement) {

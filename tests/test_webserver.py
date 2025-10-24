@@ -156,6 +156,62 @@ def test_update_box_updates_specific_trigger(webserver_app):
     assert config["boxen"]["TestBox"]["delays"]["mo"][0] == module._coerce_delay_value(1.25)
 
 
+def test_delay_inputs_are_clamped_to_upper_bound(webserver_app, monkeypatch):
+    module, client = webserver_app
+    box = _empty_box(module)
+    box["ip"] = "1.2.3.4"
+    module.save_config({"boxen": {"TestBox": box}, "boxOrder": []})
+
+    response = client.post(
+        "/update_box",
+        json={"hostname": "TestBox", "day": "mo", "triggerIndex": 0, "delay": 1500},
+    )
+
+    assert response.status_code == 200
+
+    config = module.load_config()
+    assert config["boxen"]["TestBox"]["delays"]["mo"][0] == 999
+
+    class FakeResponse:
+        def __init__(self, text: str = "", ok: bool = True, json_data=None) -> None:
+            self.text = text
+            self.ok = ok
+            self._json = json_data
+
+        def json(self):
+            if self._json is None:
+                raise ValueError("No JSON data")
+            return self._json
+
+    def fake_get(url, *args, **kwargs):
+        if url.endswith("/api/trigger-delays"):
+            return FakeResponse(
+                ok=True,
+                json_data={"delays": {day: [module.DEFAULT_DELAY for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}},
+            )
+        return FakeResponse("<html></html>", True)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    captured = {}
+
+    def fake_post(url, json=None, timeout=3):
+        captured["url"] = url
+        captured["json"] = json
+
+        class PostResponse:
+            ok = True
+
+        return PostResponse()
+
+    monkeypatch.setattr(module.requests, "post", fake_post)
+
+    transfer_response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    assert transfer_response.status_code == 200
+    assert transfer_response.get_json() == {"status": "✅ Übertragen"}
+    assert "json" in captured
+    assert captured["json"]["delays"]["mo"][0] == 999
+
 def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     module, client = webserver_app
     letters = {day: [f"{day}{idx}" for idx in range(module.TRIGGER_SLOTS)] for day in module.DAYS}

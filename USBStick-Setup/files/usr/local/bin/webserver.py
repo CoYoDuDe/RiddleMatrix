@@ -102,7 +102,10 @@ def _coerce_delay_value(value):
     if numeric < 0:
         return DEFAULT_DELAY
 
-    return int(math.floor(numeric + 0.5))
+    coerced = int(math.floor(numeric + 0.5))
+    if coerced < 0:
+        return DEFAULT_DELAY
+    return min(999, coerced)
 
 
 def _normalize_delay_list(values, legacy_value=None):
