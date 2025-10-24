@@ -56,6 +56,18 @@ def test_load_config_recovers_from_corrupted_file(tmp_path):
     assert json.loads(config_path.read_text(encoding="utf-8")) == module._default_config()
 
 
+@pytest.mark.parametrize("payload", [[], None])
+def test_load_config_repairs_non_dict_payload(tmp_path, payload):
+    module = _load_webserver(tmp_path)
+    config_path = Path(module.CONFIG_FILE)
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    data = module.load_config()
+
+    assert data == module._default_config()
+    assert json.loads(config_path.read_text(encoding="utf-8")) == module._default_config()
+
+
 def test_get_hostname_from_web_supports_attribute_variants(webserver_app, monkeypatch):
     module, _client = webserver_app
 
