@@ -40,9 +40,18 @@ def _default_config():
     return {"boxen": {}, "boxOrder": []}
 
 def load_config():
+    changed = False
     try:
         with open(CONFIG_FILE, "r") as f:
             data = json.load(f)
+        if not isinstance(data, dict):
+            app.logger.warning(
+                "Konfigurationsdatei %s enthält unerwarteten Typ (%s) – Standardwerte werden verwendet",
+                CONFIG_FILE,
+                type(data).__name__,
+            )
+            data = _default_config()
+            changed = True
     except (json.JSONDecodeError, OSError) as exc:
         app.logger.warning(
             "Konfigurationsdatei %s defekt – Standardwerte werden verwendet: %s",
@@ -52,7 +61,6 @@ def load_config():
         data = _default_config()
         save_config(data)
 
-    changed = False
     if migrate_config(data):
         changed = True
     if _normalize_config_ips(data):
