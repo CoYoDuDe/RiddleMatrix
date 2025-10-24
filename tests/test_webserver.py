@@ -82,7 +82,7 @@ def test_transfer_box_returns_json_on_get_error(webserver_app, monkeypatch):
 
     monkeypatch.setattr(module.requests, "get", raise_request)
 
-    response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    response = client.post("/transfer_box", json={"hostname": "TestBox"})
     assert response.status_code == 200
     assert response.get_json() == {"status": "❌ Box nicht erreichbar"}
 
@@ -117,9 +117,60 @@ def test_transfer_box_returns_json_on_post_error(webserver_app, monkeypatch):
 
     monkeypatch.setattr(module.requests, "post", raise_post)
 
-    response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    response = client.post("/transfer_box", json={"hostname": "TestBox"})
     assert response.status_code == 200
     assert response.get_json() == {"status": "❌ Fehler bei Übertragung"}
+
+
+def test_transfer_box_requires_authorization(webserver_app, monkeypatch):
+    module, client = webserver_app
+    box = _empty_box(module)
+    module.save_config({"boxen": {"TestBox": box}, "boxOrder": []})
+
+    class FakeResponse:
+        def __init__(self, text: str = "", ok: bool = True, json_data=None) -> None:
+            self.text = text
+            self.ok = ok
+            self._json = json_data
+
+        def json(self):
+            if self._json is None:
+                raise ValueError("No JSON data")
+            return self._json
+
+    def fake_get(url, *args, **kwargs):
+        if url.endswith("/api/trigger-delays"):
+            return FakeResponse(ok=True, json_data={"delays": box["delays"]})
+        return FakeResponse("<html></html>", True)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+    monkeypatch.setattr(module.requests, "post", lambda *args, **kwargs: FakeResponse(ok=True))
+    monkeypatch.setattr(
+        module,
+        "extract_box_state_from_soup",
+        lambda soup: (box["letters"], box["colors"], None),
+    )
+
+    response = client.get("/transfer_box", query_string={"hostname": "TestBox"})
+    assert response.status_code == 405
+
+    response = client.post(
+        "/transfer_box",
+        json={"hostname": "TestBox"},
+        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
+    )
+    assert response.status_code == 403
+
+    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "valid-token")
+    module.reload_shutdown_token_cache()
+    response = client.post(
+        "/transfer_box",
+        json={"hostname": "TestBox"},
+        headers={"X-Api-Key": "valid-token"},
+        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "⏭️ Bereits aktuell"}
 
 
 def test_update_box_updates_specific_trigger(webserver_app):
