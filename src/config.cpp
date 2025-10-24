@@ -138,7 +138,7 @@ uint16_t readStoredConfigVersion(uint16_t &versionOffset) {
     versionOffset = EEPROM_OFFSET_CONFIG_VERSION;
     EEPROM.get(EEPROM_OFFSET_CONFIG_VERSION, storedVersion);
 
-    if (isLikelyValidVersion(storedVersion)) {
+    if (storedVersion == EEPROM_CONFIG_VERSION) {
         return storedVersion;
     }
 
