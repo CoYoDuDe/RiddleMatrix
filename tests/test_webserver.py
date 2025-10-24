@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+import copy
 
 import pytest
 
@@ -71,6 +72,60 @@ def test_get_hostname_from_web_supports_attribute_variants(webserver_app, monkey
     assert module.get_hostname_from_web("1.2.3.4") == "BoxAlpha"
     assert module.get_hostname_from_web("5.6.7.8") == " BoxBeta "
     assert module.get_hostname_from_web("9.8.7.6") == "Unbekannt"
+
+
+def test_learn_box_sanitizes_hostnames_and_devices_output(webserver_app, monkeypatch):
+    module, client = webserver_app
+
+    malicious_hostname = "Box<script>alert(1)</script> _-42"
+    sanitized = module.sanitize_hostname(malicious_hostname)
+    assert sanitized != ""
+
+    template_box = _empty_box(module, ip="192.0.2.5")
+
+    class FakeResponse:
+        def __init__(self, text: str = "", ok: bool = True, json_data=None) -> None:
+            self.text = text
+            self.ok = ok
+            self._json = json_data
+
+        def json(self):
+            if self._json is None:
+                raise ValueError("No JSON data")
+            return self._json
+
+    def fake_get(url, *args, **kwargs):
+        if url.endswith("/api/trigger-delays"):
+            return FakeResponse(ok=True, json_data={"delays": copy.deepcopy(template_box["delays"])})
+        return FakeResponse("<html></html>", True)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+    monkeypatch.setattr(
+        module,
+        "extract_box_state_from_soup",
+        lambda soup: (
+            copy.deepcopy(template_box["letters"]),
+            copy.deepcopy(template_box["colors"]),
+            copy.deepcopy(template_box["delays"]),
+        ),
+    )
+    monkeypatch.setattr(module, "fetch_trigger_delays", lambda ip: copy.deepcopy(template_box["delays"]))
+
+    module.learn_box(template_box["ip"], malicious_hostname)
+
+    config = module.load_config()
+    assert sanitized in config["boxen"]
+    assert malicious_hostname not in config["boxen"]
+    assert config["boxen"][sanitized]["ip"] == template_box["ip"]
+
+    monkeypatch.setattr(module, "get_connected_devices", lambda: [{"ip": template_box["ip"], "hostname": sanitized}])
+
+    response = client.get("/devices")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert sanitized in payload["boxen"]
+    assert payload["connected"][0]["hostname"] == sanitized
+    assert malicious_hostname not in str(payload)
 
 
 def test_transfer_box_returns_json_on_get_error(webserver_app, monkeypatch):
