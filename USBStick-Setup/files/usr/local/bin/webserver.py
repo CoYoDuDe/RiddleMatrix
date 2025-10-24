@@ -3,6 +3,7 @@ from flask import Flask, abort, jsonify, request
 from bs4 import BeautifulSoup
 import math
 import os, json, subprocess, requests
+import tempfile
 import secrets
 import re
 import ipaddress
@@ -72,8 +73,23 @@ def load_config():
     return data
 
 def save_config(data):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    directory = os.path.dirname(CONFIG_FILE)
+    os.makedirs(directory, exist_ok=True)
+
+    fd, temp_path = tempfile.mkstemp(dir=directory, prefix=".config-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as tmp_file:
+            json.dump(data, tmp_file, indent=4)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+
+        os.replace(temp_path, CONFIG_FILE)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
 
 
 if not os.path.exists(CONFIG_FILE):

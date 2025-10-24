@@ -56,6 +56,44 @@ def test_load_config_recovers_from_corrupted_file(tmp_path):
     assert json.loads(config_path.read_text(encoding="utf-8")) == module._default_config()
 
 
+def test_save_config_handles_interrupted_write(tmp_path, monkeypatch):
+    module = _load_webserver(tmp_path)
+    config_path = Path(module.CONFIG_FILE)
+
+    initial_config = {"boxen": {"Alt": _empty_box(module)}, "boxOrder": ["Alt"]}
+    module.save_config(initial_config)
+
+    original_replace = module.os.replace
+    def failing_replace(src, dst):
+        raise RuntimeError("simulierte Unterbrechung während os.replace")
+
+    monkeypatch.setattr(module.os, "replace", failing_replace)
+
+    new_config = {"boxen": {"Neu": _empty_box(module)}, "boxOrder": ["Neu"]}
+
+    with pytest.raises(RuntimeError):
+        module.save_config(new_config)
+
+    content_after_failure = config_path.read_text(encoding="utf-8")
+    assert content_after_failure.strip() != "", "Konfigurationsdatei darf nicht leer sein"
+    assert json.loads(content_after_failure) == initial_config
+
+    # Temporäre Dateien müssen entfernt werden
+    temp_files_remaining = [
+        p
+        for p in config_path.parent.iterdir()
+        if p.is_file() and p.name.startswith(".config-") and p.suffix == ".tmp"
+    ]
+    assert not temp_files_remaining
+
+    # Nach Wiederanlauf (ohne Fehler) muss die neue Konfiguration vollständig geschrieben werden
+    monkeypatch.setattr(module.os, "replace", original_replace)
+    module.save_config(new_config)
+
+    final_content = config_path.read_text(encoding="utf-8")
+    assert final_content.strip() != ""
+    assert json.loads(final_content) == new_config
+
 @pytest.mark.parametrize("payload", [[], None])
 def test_load_config_repairs_non_dict_payload(tmp_path, payload):
     module = _load_webserver(tmp_path)
