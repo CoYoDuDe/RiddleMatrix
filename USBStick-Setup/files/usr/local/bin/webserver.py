@@ -519,7 +519,9 @@ def update_box():
 
 @app.route("/remove_box", methods=["POST"])
 def remove_box():
-    data = request.json
+    _authorize_sensitive_action("Remove-Box")
+
+    data = request.get_json(silent=True) or {}
     hostname = data.get("hostname")
     config = load_config()
     if hostname in config["boxen"]:

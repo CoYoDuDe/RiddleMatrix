@@ -173,6 +173,56 @@ def test_transfer_box_requires_authorization(webserver_app, monkeypatch):
     assert response.get_json() == {"status": "⏭️ Bereits aktuell"}
 
 
+def test_remove_box_rejects_anonymous_request(webserver_app, monkeypatch):
+    module, client = webserver_app
+    module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": ["TestBox"]})
+
+    monkeypatch.delenv(module.SHUTDOWN_TOKEN_ENV, raising=False)
+    module.reload_shutdown_token_cache()
+
+    response = client.post(
+        "/remove_box",
+        json={"hostname": "TestBox"},
+        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
+    )
+
+    assert response.status_code == 403
+
+    config = module.load_config()
+    assert "TestBox" in config["boxen"]
+    assert config["boxOrder"] == ["TestBox"]
+
+
+def test_remove_box_accepts_authorized_request(webserver_app, monkeypatch):
+    module, client = webserver_app
+    module.save_config(
+        {
+            "boxen": {
+                "BoxA": _empty_box(module, ip="10.0.0.1"),
+                "BoxB": _empty_box(module, ip="10.0.0.2"),
+            },
+            "boxOrder": ["BoxA", "BoxB"],
+        }
+    )
+
+    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "valid-token")
+    module.reload_shutdown_token_cache()
+
+    response = client.post(
+        "/remove_box",
+        json={"hostname": "BoxA"},
+        headers={"X-Api-Key": "valid-token"},
+        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "removed"}
+
+    config = module.load_config()
+    assert "BoxA" not in config["boxen"]
+    assert config["boxOrder"] == ["BoxB"]
+
+
 def test_update_box_updates_specific_trigger(webserver_app):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})
