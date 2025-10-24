@@ -36,14 +36,21 @@ PUBLIC_AP_ENV_FILE = os.environ.get("PUBLIC_AP_ENV_FILE", "/etc/usbstick/public_
 SHUTDOWN_TOKEN_ENV = "SHUTDOWN_TOKEN"
 ALLOWED_SHUTDOWN_ADDRESSES = {"127.0.0.1", "::1"}
 
-if not os.path.exists(CONFIG_FILE):
-    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:
-        json.dump({"boxen": {}, "boxOrder": []}, f)
+def _default_config():
+    return {"boxen": {}, "boxOrder": []}
 
 def load_config():
-    with open(CONFIG_FILE, "r") as f:
-        data = json.load(f)
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        app.logger.warning(
+            "Konfigurationsdatei %s defekt – Standardwerte werden verwendet: %s",
+            CONFIG_FILE,
+            exc,
+        )
+        data = _default_config()
+        save_config(data)
 
     changed = False
     if migrate_config(data):
@@ -59,6 +66,11 @@ def load_config():
 def save_config(data):
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=4)
+
+
+if not os.path.exists(CONFIG_FILE):
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    save_config(_default_config())
 
 
 def sanitize_hostname(hostname: Optional[str], *, fallback_prefix: str = "box") -> str:
