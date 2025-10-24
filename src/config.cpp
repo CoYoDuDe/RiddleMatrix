@@ -67,21 +67,50 @@ bool isValidHexColor(const char *value) {
     return true;
 }
 
+// Entfernt 0xFF-Bytefolgen sowie nicht druckbare Zeichen und stellt die Terminierung sicher.
+template <size_t Length>
+void sanitizeColorString(char (&value)[Length]) {
+    static_assert(Length == COLOR_STRING_LENGTH, "Falsche Farbfeld-Länge");
+
+    for (size_t index = 0; index < Length - 1; ++index) {
+        unsigned char current = static_cast<unsigned char>(value[index]);
+
+        if (current == 0xFF || current == '\0') {
+            value[index] = '\0';
+            break;
+        }
+
+        if (!std::isprint(current)) {
+            value[index] = '\0';
+            break;
+        }
+    }
+
+    value[Length - 1] = '\0';
+}
+
+template <size_t Days>
+void sanitizeColorArray(char (&colors)[Days][COLOR_STRING_LENGTH]) {
+    for (size_t day = 0; day < Days; ++day) {
+        sanitizeColorString(colors[day]);
+    }
+}
+
+template <size_t Triggers, size_t Days>
+void sanitizeColorMatrix(char (&colors)[Triggers][Days][COLOR_STRING_LENGTH]) {
+    for (size_t trigger = 0; trigger < Triggers; ++trigger) {
+        sanitizeColorArray(colors[trigger]);
+    }
+}
+
 void resetLettersToDefaults() {
     memcpy(dailyLetters, DEFAULT_DAILY_LETTERS, sizeof(dailyLetters));
     memcpy(dailyLetterColors, DEFAULT_DAILY_COLORS, sizeof(dailyLetterColors));
+    sanitizeColorMatrix(dailyLetterColors);
 }
 
 void resetTriggerDelaysToDefaults() {
     memcpy(letter_trigger_delays, DEFAULT_TRIGGER_DELAYS, sizeof(letter_trigger_delays));
-}
-
-void ensureDailyColorStringsTerminated() {
-    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-        for (size_t day = 0; day < NUM_DAYS; ++day) {
-            dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
-        }
-    }
 }
 
 bool isValidDelayValue(unsigned long value) {
@@ -124,16 +153,13 @@ void migrateLegacyLayout(uint16_t storedVersion, bool &migratedLegacyLayout) {
     char legacyColors[NUM_DAYS][COLOR_STRING_LENGTH] = {};
     EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, legacyLetters);
     EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, legacyColors);
-
-    for (size_t day = 0; day < NUM_DAYS; ++day) {
-        legacyColors[day][COLOR_STRING_LENGTH - 1] = '\0';
-    }
+    sanitizeColorArray(legacyColors);
 
     unsigned long legacyTriggerDelays[NUM_TRIGGERS] = {};
     size_t legacyOffset = EEPROM_OFFSET_TRIGGER_DELAY_MATRIX;
     for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
         unsigned long value = 0;
-        EEPROM.get(static_cast<int>(legacyOffset + trigger * sizeof(unsigned long)), value);
+        EEPROM.get(static_cast<int>(legacyOffset + trigger * EEPROM_SIZEOF_UNSIGNED_LONG), value);
         legacyTriggerDelays[trigger] = value;
     }
 
@@ -157,7 +183,7 @@ void migrateLegacyLayout(uint16_t storedVersion, bool &migratedLegacyLayout) {
         }
     }
 
-    ensureDailyColorStringsTerminated();
+    sanitizeColorMatrix(dailyLetterColors);
 
     for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
         unsigned long legacyValue = legacyTriggerDelays[trigger];
@@ -197,6 +223,7 @@ void saveConfig() {
     EEPROM.put(EEPROM_OFFSET_WIFI_SSID, wifi_ssid);
     EEPROM.put(EEPROM_OFFSET_WIFI_PASSWORD, wifi_password);
     EEPROM.put(EEPROM_OFFSET_HOSTNAME, hostname);
+    sanitizeColorMatrix(dailyLetterColors);
     EEPROM.put(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
     EEPROM.put(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
     EEPROM.put(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
@@ -241,11 +268,12 @@ void loadConfig() {
     if (usingCurrentLayout) {
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
+        sanitizeColorMatrix(dailyLetterColors);
     } else {
         migrateLegacyLayout(storedVersion, migratedLegacyLayout);
     }
 
-    ensureDailyColorStringsTerminated();
+    sanitizeColorMatrix(dailyLetterColors);
 
     Serial.println(F("📂 Geladene Farben für Trigger & Tage:"));
     for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
