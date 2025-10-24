@@ -53,6 +53,20 @@ Nach der Installation muss der Befehl `pio` im `PATH` verfügbar sein.
    pio run -t upload
    ```
 
+## Tests
+
+Vor den Host-Tests müssen die Python-Abhängigkeiten installiert werden. Die Datei
+`requirements-test.txt` bündelt aktuell die Flask-Version, die für die Webserver-Tests
+benötigt wird:
+
+```bash
+pip install -r requirements-test.txt
+pytest tests/test_webserver.py
+```
+
+Die Tests lassen sich beliebig kombinieren, zum Beispiel mit `pytest` ohne
+Dateiangabe für eine vollständige Suite.
+
 ## Weitere Schritte
 
 - LED-Matrix gemäß `config.h` anschließen.
