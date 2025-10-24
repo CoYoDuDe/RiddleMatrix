@@ -22,6 +22,8 @@ TRIGGER_SLOTS = 3
 DEFAULT_COLOR = "#ffffff"
 DEFAULT_DELAY = 0
 
+_HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
 _ALLOWED_HOSTNAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 app = Flask(__name__)
@@ -100,24 +102,31 @@ def _normalize_letter_list(values, legacy_value=None):
     return normalized
 
 
+def _sanitize_color(value) -> str:
+    if isinstance(value, str):
+        candidate = value.strip()
+        if _HEX_COLOR_PATTERN.match(candidate):
+            return candidate.lower()
+    return DEFAULT_COLOR
+
+
 def _normalize_color_list(values, legacy_value=None):
     normalized = [DEFAULT_COLOR for _ in range(TRIGGER_SLOTS)]
     if isinstance(values, list):
         for idx in range(min(TRIGGER_SLOTS, len(values))):
             val = values[idx]
-            if isinstance(val, str) and val:
-                normalized[idx] = val
+            normalized[idx] = _sanitize_color(val)
     elif isinstance(values, dict):
         for key, val in values.items():
             if str(key).isdigit():
                 idx = int(str(key))
-                if 0 <= idx < TRIGGER_SLOTS and isinstance(val, str) and val:
-                    normalized[idx] = val
+                if 0 <= idx < TRIGGER_SLOTS:
+                    normalized[idx] = _sanitize_color(val)
     elif isinstance(values, str) and values:
-        normalized[0] = values
+        normalized[0] = _sanitize_color(values)
 
     if isinstance(legacy_value, str) and (not normalized[0] or normalized[0] == DEFAULT_COLOR):
-        normalized[0] = legacy_value
+        normalized[0] = _sanitize_color(legacy_value)
     return normalized
 
 
@@ -612,7 +621,7 @@ def update_box():
                 box["letters"][day][trigger_index] = letter_value
                 updated = True
         if "color" in data and isinstance(data.get("color"), str):
-            color_value = data["color"] or DEFAULT_COLOR
+            color_value = _sanitize_color(data["color"])
             if box["colors"][day][trigger_index] != color_value:
                 box["colors"][day][trigger_index] = color_value
                 updated = True
