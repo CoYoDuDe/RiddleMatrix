@@ -156,10 +156,28 @@ set_permissions() {
   done
 
   local leases="$TARGET_ROOT/var/lib/misc/dnsmasq.leases"
-  if [[ -e "$leases" ]]; then
-    run_cmd chmod 0777 "$leases"
+  local owner_user="root"
+  local owner_group="dnsmasq"
+  local owner_spec="$owner_user:$owner_group"
+  local group_exists=0
+  if getent group "$owner_group" >/dev/null 2>&1; then
+    group_exists=1
   else
-    warn "Lease file $leases not found; skipping chmod"
+    warn "Gruppe '$owner_group' nicht gefunden; dnsmasq muss installiert sein, damit $leases beschreibbar bleibt"
+  fi
+
+  if [[ -e "$leases" ]]; then
+    run_cmd chmod 0640 "$leases"
+  else
+    if ((group_exists)); then
+      run_cmd install -o "$owner_user" -g "$owner_group" -m 0640 /dev/null "$leases"
+    else
+      run_cmd install -o "$owner_user" -g "$owner_user" -m 0640 /dev/null "$leases"
+    fi
+  fi
+
+  if ((group_exists)); then
+    run_cmd chown "$owner_spec" "$leases"
   fi
 
   if [[ "$TARGET_ROOT" = "/" ]]; then

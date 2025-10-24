@@ -9,3 +9,6 @@
   Button ohne gültiges Token aus, bietet einen Dialog zum Hinterlegen des Tokens, bestätigt den Vorgang zusätzlich und räumt
   bei Fehlversuchen gespeicherte Tokens automatisch.
 - Automatisierter Flask-Test deckt sowohl den blockierten anonymen Reload als auch den erfolgreichen Token-Aufruf ab.
+- `setup.sh` setzt die Lease-Datei `var/lib/misc/dnsmasq.leases` nun mit Eigentümer `root:dnsmasq` auf `0640`, legt sie bei
+  Bedarf idempotent an und dokumentiert die Abhängigkeit vom Dienstkonto, damit `dnsmasq` trotz restriktiver Rechte weiterhin
+  startet.
