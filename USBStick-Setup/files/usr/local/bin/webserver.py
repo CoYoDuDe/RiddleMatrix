@@ -205,6 +205,7 @@ def migrate_config(data):
 def extract_box_state_from_soup(soup):
     letters = {day: ["" for _ in range(TRIGGER_SLOTS)] for day in DAYS}
     colors = {day: [DEFAULT_COLOR for _ in range(TRIGGER_SLOTS)] for day in DAYS}
+    delays = {day: [DEFAULT_DELAY for _ in range(TRIGGER_SLOTS)] for day in DAYS}
 
     def _find_field(tag, base_name, firmware_day_index, slot, fallback_day_index=None):
         name_candidates = []
@@ -261,7 +262,16 @@ def extract_box_state_from_soup(soup):
                 color_value = color_input["value"]
             colors[day][slot] = color_value
 
-    return letters, colors
+            delay_input = _find_field("input", "delay", firmware_day_index, slot, fallback_day_index=day_index)
+
+            delay_value = DEFAULT_DELAY
+            if delay_input is not None:
+                raw_value = delay_input.get("value")
+                if raw_value is not None:
+                    delay_value = _coerce_delay_value(raw_value)
+            delays[day][slot] = delay_value
+
+    return letters, colors, delays
 
 def fetch_trigger_delays(ip):
     try:
@@ -373,8 +383,10 @@ def learn_box(ip, identifier):
         if not r.ok:
             return
         soup = BeautifulSoup(r.text, "html.parser")
-        letters, colors = extract_box_state_from_soup(soup)
+        letters, colors, html_delays = extract_box_state_from_soup(soup)
         delays = fetch_trigger_delays(ip)
+        if delays is None:
+            delays = html_delays
         box = {
             "ip": ip,
             "letters": letters,
@@ -551,7 +563,7 @@ def transfer_box():
         return jsonify({"status": "❌ Box nicht erreichbar"})
 
     soup = BeautifulSoup(r.text, "html.parser")
-    remote_letters, remote_colors = extract_box_state_from_soup(soup)
+    remote_letters, remote_colors, _ = extract_box_state_from_soup(soup)
     remote_delays = fetch_trigger_delays(ip)
 
     stored_letters = {day: list(box["letters"][day]) for day in DAYS}
