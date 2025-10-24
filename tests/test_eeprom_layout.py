@@ -34,11 +34,13 @@ def test_new_letter_matrix_offsets() -> None:
     assert constants["NUM_DAYS"] == 7
     assert constants["COLOR_STRING_LENGTH"] == 8
 
-    letters_end = constants["EEPROM_OFFSET_DAILY_LETTERS"] + constants["NUM_TRIGGERS"] * constants["NUM_DAYS"]
-    assert letters_end <= constants["EEPROM_OFFSET_DAILY_LETTER_COLORS"], "Letter-Block überschneidet sich mit Farben"
+    letters_size = constants["NUM_TRIGGERS"] * constants["NUM_DAYS"]
+    letters_end = constants["EEPROM_OFFSET_DAILY_LETTERS"] + letters_size
+    assert letters_end == constants["EEPROM_OFFSET_DAILY_LETTER_COLORS"], "Farb-Block muss direkt auf Letter-Block folgen"
 
-    colors_end = constants["EEPROM_OFFSET_DAILY_LETTER_COLORS"] + constants["NUM_TRIGGERS"] * constants["NUM_DAYS"] * constants["COLOR_STRING_LENGTH"]
-    assert colors_end <= constants["EEPROM_OFFSET_DISPLAY_BRIGHTNESS"], "Farb-Block überschneidet sich mit Display-Parametern"
+    colors_size = constants["NUM_TRIGGERS"] * constants["NUM_DAYS"] * constants["COLOR_STRING_LENGTH"]
+    colors_end = constants["EEPROM_OFFSET_DAILY_LETTER_COLORS"] + colors_size
+    assert colors_end == constants["EEPROM_OFFSET_DISPLAY_BRIGHTNESS"], "Display-Helligkeit muss direkt nach Farb-Block starten"
 
     matrix_end = constants["EEPROM_OFFSET_TRIGGER_DELAY_MATRIX"] + constants["EEPROM_TRIGGER_DELAY_MATRIX_SIZE"]
     assert matrix_end <= constants["EEPROM_OFFSET_AUTO_INTERVAL"], "Verzögerungsmatrix überschneidet sich mit Auto-Intervall"
