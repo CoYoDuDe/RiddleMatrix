@@ -8,6 +8,7 @@ TARGET_ROOT="/"
 DRY_RUN=0
 SKIP_SYSTEMD=0
 SKIP_HOOKS=0
+DNSMASQ_LEASE_FIX_PENDING=0
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1"
@@ -164,20 +165,25 @@ set_permissions() {
     group_exists=1
   else
     warn "Gruppe '$owner_group' nicht gefunden; dnsmasq muss installiert sein, damit $leases beschreibbar bleibt"
+    DNSMASQ_LEASE_FIX_PENDING=1
   fi
 
   if [[ -e "$leases" ]]; then
     run_cmd chmod 0640 "$leases"
-  else
     if ((group_exists)); then
-      run_cmd install -o "$owner_user" -g "$owner_group" -m 0640 /dev/null "$leases"
+      run_cmd chown "$owner_spec" "$leases"
     else
-      run_cmd install -o "$owner_user" -g "$owner_user" -m 0640 /dev/null "$leases"
+      DNSMASQ_LEASE_FIX_PENDING=1
     fi
-  fi
-
-  if ((group_exists)); then
-    run_cmd chown "$owner_spec" "$leases"
+  elif ((group_exists)); then
+    run_cmd install -o "$owner_user" -g "$owner_group" -m 0640 /dev/null "$leases"
+  else
+    DNSMASQ_LEASE_FIX_PENDING=1
+    if ((DRY_RUN)); then
+      log "[dry-run] would create $leases once Gruppe '$owner_group' existiert"
+    else
+      warn "Überspringe das Anlegen von $leases bis die Gruppe '$owner_group' vorhanden ist"
+    fi
   fi
 
   if [[ "$TARGET_ROOT" = "/" ]]; then
@@ -191,6 +197,29 @@ set_permissions() {
   else
     warn "Skipping ownership updates for $TARGET_ROOT; adjust after mounting"
   fi
+}
+
+finalize_dnsmasq_leases() {
+  ((DNSMASQ_LEASE_FIX_PENDING)) || return
+
+  local leases="$TARGET_ROOT/var/lib/misc/dnsmasq.leases"
+  local owner_user="root"
+  local owner_group="dnsmasq"
+  local owner_spec="$owner_user:$owner_group"
+
+  if ! getent group "$owner_group" >/dev/null 2>&1; then
+    warn "Gruppe '$owner_group' weiterhin nicht vorhanden; bitte dnsmasq installieren, damit $leases beschreibbar wird"
+    return
+  fi
+
+  if [[ -e "$leases" ]]; then
+    run_cmd chown "$owner_spec" "$leases"
+    run_cmd chmod 0640 "$leases"
+  else
+    run_cmd install -o "$owner_user" -g "$owner_group" -m 0640 /dev/null "$leases"
+  fi
+
+  DNSMASQ_LEASE_FIX_PENDING=0
 }
 
 enable_systemd_units() {
@@ -241,6 +270,7 @@ main() {
   set_permissions
   enable_systemd_units
   run_post_install_hooks
+  finalize_dnsmasq_leases
   log "Deployment completed"
 }
 
