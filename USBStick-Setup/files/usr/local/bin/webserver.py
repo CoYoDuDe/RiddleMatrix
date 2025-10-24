@@ -541,6 +541,8 @@ def update_box_order():
 
 @app.route("/reload_all", methods=["POST"])
 def reload_all():
+    _authorize_sensitive_action("Reload-All")
+
     config = load_config()
     config["boxen"] = {}
     config["boxOrder"] = []
@@ -603,17 +605,21 @@ def transfer_box():
 
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
+    _authorize_sensitive_action("Shutdown")
+    os.system("poweroff")
+    return jsonify({"status": "OK"}), 200
+
+
+def _authorize_sensitive_action(label: str) -> None:
     remote_addr = request.remote_addr or "<unbekannt>"
     token = request.headers.get("X-Api-Key", "")
 
     authorized, reason = _is_shutdown_authorized(remote_addr, token)
     if not authorized:
-        app.logger.warning("Shutdown-Anfrage verweigert (%s): %s", reason, remote_addr)
+        app.logger.warning("%s-Anfrage verweigert (%s): %s", label, reason, remote_addr)
         abort(403)
 
-    app.logger.info("Shutdown-Anfrage akzeptiert (%s): %s", reason, remote_addr)
-    os.system("poweroff")
-    return jsonify({"status": "OK"}), 200
+    app.logger.info("%s-Anfrage akzeptiert (%s): %s", label, reason, remote_addr)
 
 
 def _is_shutdown_authorized(remote_addr: str, provided_token: str) -> Tuple[bool, str]:

@@ -141,39 +141,81 @@ const letterLabels = {"*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": 
 const letterOptions = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split("");
 let currentWordTrigger = 0;
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "::1"]);
-const shutdownTokenStorageKey = "shutdownToken";
+const adminTokenStorageKey = "shutdownToken";
+const sensitiveHeaderName = "X-Api-Key";
 
-function requiresShutdownToken() {
+function requiresAdminToken() {
   return !loopbackHosts.has(window.location.hostname);
 }
 
-function getStoredShutdownToken() {
-  return localStorage.getItem(shutdownTokenStorageKey) || "";
+function getStoredAdminToken() {
+  return localStorage.getItem(adminTokenStorageKey) || "";
 }
 
-function requestShutdownToken() {
-  const token = prompt("Bitte Shutdown-Token eingeben:");
+function requestAdminToken() {
+  const token = prompt("Bitte Administrations-Token eingeben:");
   if (token == null) {
     return "";
   }
   const trimmed = token.trim();
   if (trimmed) {
-    localStorage.setItem(shutdownTokenStorageKey, trimmed);
+    localStorage.setItem(adminTokenStorageKey, trimmed);
   }
   return trimmed;
 }
 
-function ensureShutdownToken() {
-  let token = getStoredShutdownToken();
+function ensureAdminToken() {
+  let token = getStoredAdminToken();
   if (token) {
     return token;
   }
-  token = requestShutdownToken();
+  token = requestAdminToken();
   return token;
 }
 
-function clearShutdownToken() {
-  localStorage.removeItem(shutdownTokenStorageKey);
+function clearAdminToken() {
+  localStorage.removeItem(adminTokenStorageKey);
+  updateReloadButtonState();
+}
+
+function isSessionAuthorized() {
+  if (!requiresAdminToken()) {
+    return true;
+  }
+  return !!getStoredAdminToken();
+}
+
+function updateReloadButtonState() {
+  const reloadButton = document.getElementById("reloadBtn");
+  if (!reloadButton) {
+    return;
+  }
+  const authorized = isSessionAuthorized();
+  reloadButton.disabled = !authorized;
+  reloadButton.title = authorized ? "" : "Authentifizierung erforderlich – Token hinterlegen";
+}
+
+function configureAdminToken() {
+  const token = requestAdminToken();
+  if (token) {
+    alert("Token gespeichert. Geschützte Aktionen wurden freigeschaltet.");
+  } else {
+    alert("Kein Token hinterlegt. Geschützte Aktionen bleiben gesperrt.");
+  }
+  updateReloadButtonState();
+}
+
+function buildSensitiveHeaders(options = { prompt: false }) {
+  const headers = {};
+  if (!requiresAdminToken()) {
+    return headers;
+  }
+  const token = options.prompt ? ensureAdminToken() : getStoredAdminToken();
+  if (!token) {
+    return null;
+  }
+  headers[sensitiveHeaderName] = token;
+  return headers;
 }
 
 function init() {
@@ -266,14 +308,17 @@ async function shutdown() {
     return;
   }
 
-  const headers = {};
-  if (requiresShutdownToken()) {
-    const token = ensureShutdownToken();
+  const headers = buildSensitiveHeaders({ prompt: true });
+  if (headers === null) {
+    alert("Herunterfahren abgebrochen – kein Token hinterlegt.");
+    return;
+  }
+  if (requiresAdminToken()) {
+    const token = headers[sensitiveHeaderName];
     if (!token) {
-      alert("Herunterfahren abgebrochen – kein Shutdown-Token angegeben.");
+      alert("Herunterfahren abgebrochen – kein Token hinterlegt.");
       return;
     }
-    headers["X-Api-Key"] = token;
   }
 
   const shutdownButton = document.getElementById("shutdown");
@@ -284,8 +329,9 @@ async function shutdown() {
   try {
     const response = await fetch("/shutdown", { method: "POST", headers });
     if (response.status === 401 || response.status === 403) {
-      clearShutdownToken();
-      alert("Authentifizierung fehlgeschlagen. Bitte Shutdown-Token prüfen.");
+      clearAdminToken();
+      alert("Authentifizierung fehlgeschlagen. Bitte Administrations-Token prüfen.");
+      updateReloadButtonState();
       return;
     }
     if (!response.ok) {
@@ -391,13 +437,15 @@ function showSetup() {
   html += `
   <div class="action-buttons">
     <button onclick="transferAll()" id="transferBtn">✅ Übertragen</button>
-    <button onclick="reloadAll()">🔄 Boxen neu lernen</button>
+    <button onclick="reloadAll()" id="reloadBtn">🔄 Boxen neu lernen</button>
+    <button onclick="configureAdminToken()" id="authBtn">🔐 Zugang hinterlegen</button>
   </div>
   <div id="statusArea"></div>
   `;
 
   document.getElementById("content").innerHTML = html;
   statusArea = document.getElementById("statusArea");
+  updateReloadButtonState();
 }
 
 function handleKeydown(event, day, word, maxLength, inputElement) {
@@ -562,8 +610,48 @@ function transferAll() {
   boxOrder.forEach(transferBox);
 }
 
-function reloadAll() {
-  fetch("/reload_all", { method: "POST" }).then(() => fetchDevices());
+async function reloadAll() {
+  if (!window.confirm("Sollen alle Boxen wirklich neu eingelesen werden?")) {
+    return;
+  }
+
+  const headers = buildSensitiveHeaders();
+  if (headers === null) {
+    alert("Vorgang abgebrochen – kein Administrations-Token hinterlegt.");
+    updateReloadButtonState();
+    return;
+  }
+
+  const reloadButton = document.getElementById("reloadBtn");
+  const originalLabel = reloadButton ? reloadButton.textContent : "";
+  if (reloadButton) {
+    reloadButton.disabled = true;
+    reloadButton.textContent = "Lade Geräte...";
+  }
+
+  try {
+    const response = await fetch("/reload_all", { method: "POST", headers });
+    if (response.status === 401 || response.status === 403) {
+      clearAdminToken();
+      alert("Authentifizierung fehlgeschlagen. Bitte Administrations-Token prüfen.");
+      return;
+    }
+    if (!response.ok) {
+      alert("Fehler beim Neu-Laden der Boxen: " + response.statusText);
+      return;
+    }
+    await fetchDevices();
+    alert("Die Boxen wurden neu eingelesen.");
+  } catch (error) {
+    console.error("Fehler beim Neu-Laden:", error);
+    alert("Netzwerkfehler beim Neu-Laden. Bitte erneut versuchen.");
+  } finally {
+    if (reloadButton) {
+      reloadButton.textContent = originalLabel || "🔄 Boxen neu lernen";
+      reloadButton.disabled = !isSessionAuthorized();
+    }
+    updateReloadButtonState();
+  }
 }
 </script>
 </body>

@@ -147,3 +147,21 @@ Damit nur berechtigte Clients diesen Vorgang starten können, gelten seitdem fol
 
 Vor jedem Abschalten erscheint zusätzlich ein Bestätigungsdialog, damit unbeabsichtigte Klicks keine sofortige
 Abschaltung mehr auslösen. Das Frontend informiert außerdem darüber, dass der Shutdown einige Minuten dauern kann.
+
+### Geschützter Reload-All-Endpunkt
+
+Auch der Verwaltungsendpunkt `/reload_all`, der alle bekannten Boxen aus der Konfigurationsdatei löscht und über
+`dnsmasq.leases` neu erlernt, ist jetzt gegen unbefugte Zugriffe gesichert. Die Regeln entsprechen dem
+Shutdown-Endpoint:
+
+- Lokale Zugriffe (`127.0.0.1` bzw. `::1`) bleiben ohne weiteres Token erlaubt.
+- Für entfernte Clients wird derselbe Header `X-Api-Key` erwartet. Der Schlüssel wird weiterhin über die Variable
+  `SHUTDOWN_TOKEN` (z. B. in `/etc/usbstick/public_ap.env`) bereitgestellt, damit keine zusätzliche Geheimnisverwaltung
+  notwendig ist.
+- Die Weboberfläche blendet den Button „🔄 Boxen neu lernen“ aus, solange kein gültiges Token hinterlegt wurde, und
+  bietet einen separaten Dialog zum Hinterlegen des Tokens an. Vor dem Neu-Laden der Boxen erscheint zusätzlich eine
+  Sicherheitsabfrage.
+- Fehlgeschlagene Versuche führen zu HTTP 403, werden serverseitig protokolliert und löschen das gespeicherte Token im
+  Browser, damit Anwender:innen sofort eine neue Eingabe erzwingen können.
+
+Der Workflow bleibt damit kompatibel zur bestehenden Shutdown-Logik und nutzt dieselbe Konfiguration.
