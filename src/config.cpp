@@ -7,6 +7,9 @@
 char wifi_ssid[50] = "";
 char wifi_password[50] = "";
 char hostname[50] = "";
+constexpr char DEFAULT_WIFI_SSID[] = "YOUR_WIFI_SSID";
+constexpr char DEFAULT_WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
+constexpr char DEFAULT_HOSTNAME[] = "your-device-hostname";
 int wifi_connect_timeout = 30;
 
 static const char DEFAULT_DAILY_LETTERS[NUM_TRIGGERS][NUM_DAYS] = {
@@ -261,6 +264,35 @@ void loadConfig() {
     EEPROM.get(EEPROM_OFFSET_HOSTNAME, hostname);
     hostname[sizeof(hostname) - 1] = '\0';
 
+    auto isWhitespaceOnly = [](const char *value, size_t maxLength) {
+        bool hasCharacters = false;
+        bool hasNonWhitespace = false;
+        for (size_t index = 0; index < maxLength; ++index) {
+            unsigned char current = static_cast<unsigned char>(value[index]);
+            if (current == '\0') {
+                break;
+            }
+            hasCharacters = true;
+            if (std::isspace(current) == 0) {
+                hasNonWhitespace = true;
+            }
+        }
+        return hasCharacters && !hasNonWhitespace;
+    };
+
+    auto containsNonPrintable = [](const char *value, size_t maxLength) {
+        for (size_t index = 0; index < maxLength; ++index) {
+            unsigned char current = static_cast<unsigned char>(value[index]);
+            if (current == '\0') {
+                break;
+            }
+            if (std::isprint(current) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     bool migratedLegacyLayout = false;
     uint16_t versionOffset = EEPROM_OFFSET_CONFIG_VERSION;
     uint16_t storedVersion = readStoredConfigVersion(versionOffset);
@@ -316,12 +348,47 @@ void loadConfig() {
         wifiLengthZero = (strlen(wifi_ssid) == 0);
     }
 
+    bool wifiPasswordErased = (static_cast<uint8_t>(wifi_password[0]) == 0xFF);
+    bool wifiPasswordEmpty = (wifi_password[0] == '\0');
+    bool wifiPasswordLengthZero = false;
+    if (!wifiPasswordErased && !wifiPasswordEmpty) {
+        wifiPasswordLengthZero = (strlen(wifi_password) == 0);
+    }
+
+    if (wifiPasswordErased || wifiPasswordEmpty || wifiPasswordLengthZero) {
+        Serial.println(F("🛑 Kein gültiges WiFi-Passwort im EEPROM gefunden! Setze Standardwerte..."));
+        strncpy(wifi_password, DEFAULT_WIFI_PASSWORD, sizeof(wifi_password));
+        wifi_password[sizeof(wifi_password) - 1] = '\0';
+        strncpy(hostname, DEFAULT_HOSTNAME, sizeof(hostname));
+        hostname[sizeof(hostname) - 1] = '\0';
+        eepromUpdated = true;
+    }
+
     if (wifiErased || wifiEmpty || wifiLengthZero) {
         Serial.println(F("🛑 Kein gültiges WiFi im EEPROM gefunden! Setze Standardwerte..."));
-        strncpy(wifi_ssid, "YOUR_WIFI_SSID", sizeof(wifi_ssid));
-        strncpy(wifi_password, "YOUR_WIFI_PASSWORD", sizeof(wifi_password));
-        strncpy(hostname, "your-device-hostname", sizeof(hostname));
+        strncpy(wifi_ssid, DEFAULT_WIFI_SSID, sizeof(wifi_ssid));
+        wifi_ssid[sizeof(wifi_ssid) - 1] = '\0';
+        strncpy(wifi_password, DEFAULT_WIFI_PASSWORD, sizeof(wifi_password));
+        wifi_password[sizeof(wifi_password) - 1] = '\0';
+        strncpy(hostname, DEFAULT_HOSTNAME, sizeof(hostname));
+        hostname[sizeof(hostname) - 1] = '\0';
         wifi_connect_timeout = 30;
+        eepromUpdated = true;
+    }
+
+    bool hostnameErased = (static_cast<uint8_t>(hostname[0]) == 0xFF);
+    size_t hostnameLength = 0;
+    while (hostnameLength < sizeof(hostname) && hostname[hostnameLength] != '\0') {
+        ++hostnameLength;
+    }
+    bool hostnameEmpty = (hostnameLength == 0);
+    bool hostnameWhitespaceOnly = isWhitespaceOnly(hostname, sizeof(hostname));
+    bool hostnameHasNonPrintable = containsNonPrintable(hostname, sizeof(hostname));
+
+    if (hostnameErased || hostnameEmpty || hostnameWhitespaceOnly || hostnameHasNonPrintable) {
+        Serial.println(F("🛑 Ungültiger Hostname im EEPROM gefunden! Setze Standardwert..."));
+        strncpy(hostname, DEFAULT_HOSTNAME, sizeof(hostname));
+        hostname[sizeof(hostname) - 1] = '\0';
         eepromUpdated = true;
     }
 
