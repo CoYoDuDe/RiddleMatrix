@@ -1,5 +1,6 @@
 #include "config.h"
 
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 
@@ -12,7 +13,11 @@ unsigned long letterStartTime = 0;
 unsigned long wifiStartTime = 0;
 AsyncWebServer server(80);
 
-int main() {
+namespace {
+
+constexpr uint16_t LEGACY_VERSION_OFFSET = 400; // Siehe migrateLegacyLayout()
+
+bool verify_default_color_sanitizing() {
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.fill(0xFF);
 
@@ -31,9 +36,63 @@ int main() {
             if (std::strncmp(actual, expected, COLOR_STRING_LENGTH) != 0) {
                 std::cerr << "Mismatch at trigger " << trigger << ", day " << day << " -> "
                           << actual << " expected " << expected << std::endl;
-                return 1;
+                return false;
             }
         }
+    }
+
+    return true;
+}
+
+bool verify_legacy_trigger_delay_migration() {
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.fill(0xFF);
+
+    const unsigned long legacyDelays[NUM_TRIGGERS] = {111UL, 222UL, 333UL};
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        int offset = static_cast<int>(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX +
+                                      trigger * EEPROM_SIZEOF_UNSIGNED_LONG);
+        EEPROM.put(offset, legacyDelays[trigger]);
+    }
+
+    // Hinterlegte Werte nach dem alten Bereich enthalten absichtlich gültige
+    // Verzögerungszahlen, um sicherzustellen, dass migrateLegacyLayout diese
+    // Fremddaten nicht übernimmt.
+    const unsigned long foreignMatrixValue = 42UL;
+    EEPROM.put(EEPROM_OFFSET_AUTO_INTERVAL, foreignMatrixValue);
+    uint8_t foreignAutoMode = 1;
+    EEPROM.put(EEPROM_OFFSET_AUTO_MODE, foreignAutoMode);
+    int foreignWifiTimeout = 77;
+    EEPROM.put(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, foreignWifiTimeout);
+
+    uint16_t legacyVersion = 2;
+    EEPROM.put(LEGACY_VERSION_OFFSET, legacyVersion);
+    loadConfig();
+
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            unsigned long expected = legacyDelays[trigger];
+            unsigned long actual = letter_trigger_delays[trigger][day];
+            if (actual != expected) {
+                std::cerr << "Legacy delay mismatch at trigger " << trigger << ", day " << day
+                          << ": got " << actual << " expected " << expected << std::endl;
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+} // namespace
+
+int main() {
+    if (!verify_default_color_sanitizing()) {
+        return 1;
+    }
+
+    if (!verify_legacy_trigger_delay_migration()) {
+        return 1;
     }
 
     return 0;
