@@ -5,6 +5,7 @@ import math
 import os, json, subprocess, requests
 import secrets
 import re
+import ipaddress
 from typing import Optional, Tuple
 from functools import lru_cache
 
@@ -26,6 +27,8 @@ _HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 _ALLOWED_HOSTNAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
+SAFE_IP_PLACEHOLDER = "0.0.0.0"
+
 app = Flask(__name__)
 LEASE_FILE = "/var/lib/misc/dnsmasq.leases"
 CONFIG_FILE = "/mnt/persist/boxen_config/boxen_config.json"
@@ -41,8 +44,16 @@ if not os.path.exists(CONFIG_FILE):
 def load_config():
     with open(CONFIG_FILE, "r") as f:
         data = json.load(f)
+
+    changed = False
     if migrate_config(data):
+        changed = True
+    if _normalize_config_ips(data):
+        changed = True
+
+    if changed:
         save_config(data)
+
     return data
 
 def save_config(data):
@@ -72,6 +83,27 @@ def sanitize_hostname(hostname: Optional[str], *, fallback_prefix: str = "box") 
         value = f"{fallback_prefix}-{secrets.token_hex(4)}"
 
     return value[:64]
+
+
+def sanitize_ipv4(value: Optional[str], *, placeholder: str = SAFE_IP_PLACEHOLDER) -> str:
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8", "ignore")
+        except Exception:
+            value = value.decode("latin-1", "ignore")
+    if not isinstance(value, str):
+        return placeholder
+
+    candidate = value.strip()
+    if not candidate:
+        return placeholder
+
+    try:
+        address = ipaddress.IPv4Address(candidate)
+    except ipaddress.AddressValueError:
+        return placeholder
+
+    return str(address)
 
 
 def _normalize_letter_list(values, legacy_value=None):
@@ -169,6 +201,20 @@ def _normalize_delay_list(values, legacy_value=None):
     if legacy_value is not None and normalized[0] == DEFAULT_DELAY:
         normalized[0] = _coerce_delay_value(legacy_value)
     return normalized
+
+
+def _normalize_config_ips(data) -> bool:
+    changed = False
+    if isinstance(data, dict):
+        boxen = data.get("boxen")
+        if isinstance(boxen, dict):
+            for box in boxen.values():
+                if isinstance(box, dict):
+                    sanitized_ip = sanitize_ipv4(box.get("ip"))
+                    if box.get("ip") != sanitized_ip:
+                        box["ip"] = sanitized_ip
+                        changed = True
+    return changed
 
 
 def _default_delay_matrix():
@@ -389,6 +435,9 @@ def extract_box_state_from_soup(soup):
     return letters, colors, delays
 
 def fetch_trigger_delays(ip):
+    ip = sanitize_ipv4(ip)
+    if ip == SAFE_IP_PLACEHOLDER:
+        return None
     try:
         response = requests.get(f"http://{ip}/api/trigger-delays", timeout=3)
     except requests.RequestException:
@@ -427,7 +476,9 @@ def get_connected_devices():
             for line in f:
                 parts = line.split()
                 if len(parts) >= 3:
-                    ip = parts[2]
+                    ip = sanitize_ipv4(parts[2])
+                    if ip == SAFE_IP_PLACEHOLDER:
+                        continue
                     if subprocess.call(["ping", "-c", "1", "-W", "1", ip], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
                         try:
                             r = requests.get(f"http://{ip}/", timeout=3)
@@ -457,7 +508,7 @@ def get_connected_devices():
                             if box["ip"] == ip and existing_identifier != hostname:
                                 ip_exists = True
 
-                                config["boxen"][existing_identifier]["ip"] = "0.0.0.0"
+                                config["boxen"][existing_identifier]["ip"] = SAFE_IP_PLACEHOLDER
                                 save_config(config)
                                 break
 
@@ -468,6 +519,9 @@ def get_connected_devices():
     return devices
 
 def get_hostname_from_web(ip):
+    ip = sanitize_ipv4(ip)
+    if ip == SAFE_IP_PLACEHOLDER:
+        return "Unbekannt"
     try:
         r = requests.get(f"http://{ip}", timeout=3)
         if r.ok:
@@ -482,6 +536,9 @@ def get_hostname_from_web(ip):
     return "Unbekannt"
 
 def learn_box(ip, identifier):
+    ip = sanitize_ipv4(ip)
+    if ip == SAFE_IP_PLACEHOLDER:
+        return
     identifier = sanitize_hostname(identifier)
     config = load_config()
     if identifier in config["boxen"]:
@@ -547,14 +604,15 @@ def update_box():
         config["boxOrder"] = [hostname if h == raw_hostname else h for h in config["boxOrder"]]
         renamed_existing = True
 
-    box = config["boxen"].setdefault(hostname, {"ip": "0.0.0.0"})
+    box = config["boxen"].setdefault(hostname, {"ip": SAFE_IP_PLACEHOLDER})
     changed = ensure_box_structure(box, remove_legacy=True) or renamed_existing
 
     updated = False
 
     if "ip" in data and isinstance(data.get("ip"), str):
-        if box.get("ip") != data["ip"]:
-            box["ip"] = data["ip"]
+        sanitized_ip = sanitize_ipv4(data.get("ip"))
+        if box.get("ip") != sanitized_ip:
+            box["ip"] = sanitized_ip
             updated = True
 
     letters_payload = data.get("letters")

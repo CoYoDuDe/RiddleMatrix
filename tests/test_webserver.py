@@ -340,6 +340,30 @@ def test_update_box_rejects_malicious_color_payload(webserver_app):
     assert malicious_color not in devices_response.get_data(as_text=True)
 
 
+def test_devices_sanitizes_invalid_ip_addresses(webserver_app):
+    module, client = webserver_app
+    module.save_config({"boxen": {}, "boxOrder": []})
+
+    malicious_ip = "192.0.2.99<script>alert(1)</script>"
+    response = client.post(
+        "/update_box",
+        json={"hostname": "TestBox", "ip": malicious_ip},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "success"}
+
+    config = module.load_config()
+    assert config["boxen"]["TestBox"]["ip"] == module.SAFE_IP_PLACEHOLDER
+
+    devices_response = client.get("/devices")
+    assert devices_response.status_code == 200
+    devices_payload = devices_response.get_json()
+    assert devices_payload["boxen"]["TestBox"]["ip"] == module.SAFE_IP_PLACEHOLDER
+    assert module.SAFE_IP_PLACEHOLDER in devices_response.get_data(as_text=True)
+    assert malicious_ip not in devices_response.get_data(as_text=True)
+
+
 def test_update_box_requires_token_for_remote_clients(webserver_app, monkeypatch):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})
