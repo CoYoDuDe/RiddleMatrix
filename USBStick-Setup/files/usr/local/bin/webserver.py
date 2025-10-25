@@ -7,7 +7,7 @@ import tempfile
 import secrets
 import re
 import ipaddress
-from typing import Optional, Tuple
+from typing import Iterable, Optional, Tuple
 from functools import lru_cache
 
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
@@ -886,7 +886,7 @@ def _authorize_sensitive_action(label: str) -> None:
     remote_addr = request.remote_addr or "<unbekannt>"
     token = request.headers.get("X-Api-Key", "")
 
-    authorized, reason = _is_shutdown_authorized(remote_addr, token)
+    authorized, reason = _is_shutdown_authorized(request, token)
     if not authorized:
         app.logger.warning("%s-Anfrage verweigert (%s): %s", label, reason, remote_addr)
         abort(403)
@@ -894,9 +894,9 @@ def _authorize_sensitive_action(label: str) -> None:
     app.logger.info("%s-Anfrage akzeptiert (%s): %s", label, reason, remote_addr)
 
 
-def _is_shutdown_authorized(remote_addr: str, provided_token: str) -> Tuple[bool, str]:
-    if remote_addr in ALLOWED_SHUTDOWN_ADDRESSES:
-        return True, "Loopback"
+def _is_shutdown_authorized(req, provided_token: str) -> Tuple[bool, str]:
+    if _is_trusted_local_request(req):
+        return True, "Vertrauenswürdige Loopback-Anfrage"
 
     expected_token = _load_shutdown_token()
     if not expected_token:
@@ -912,6 +912,97 @@ def _is_shutdown_authorized(remote_addr: str, provided_token: str) -> Tuple[bool
         return False, "Token-Vergleich fehlgeschlagen"
 
     return False, "Token ungültig"
+
+
+def _is_trusted_local_request(req) -> bool:
+    candidates = []
+
+    if req.remote_addr:
+        candidates.append(req.remote_addr)
+
+    # Flask stellt die Weiterleitungskette über access_route bereit (von vorne nach hinten)
+    candidates.extend(_iterable_or_empty(req.access_route))
+
+    forwarded_for = req.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        candidates.extend(_split_header_list(forwarded_for))
+
+    forwarded_header = req.headers.get("Forwarded")
+    if forwarded_header:
+        candidates.extend(_extract_forwarded_for(forwarded_header))
+
+    if not candidates:
+        return False
+
+    return all(_is_loopback_address(value) for value in candidates)
+
+
+def _split_header_list(raw_value: str) -> Iterable[str]:
+    return [entry.strip() for entry in raw_value.split(",") if entry.strip()]
+
+
+def _extract_forwarded_for(header_value: str) -> Iterable[str]:
+    entries = []
+    for part in header_value.split(","):
+        for element in part.split(";"):
+            key, sep, value = element.partition("=")
+            if sep and key.strip().lower() == "for":
+                entries.append(value.strip())
+    return entries
+
+
+def _iterable_or_empty(value) -> Iterable[str]:
+    if not value:
+        return []
+    return list(value)
+
+
+def _is_loopback_address(value: str) -> bool:
+    normalized = _normalize_address_candidate(value)
+    if not normalized:
+        return False
+
+    if normalized in ALLOWED_SHUTDOWN_ADDRESSES:
+        return True
+
+    try:
+        ip_obj = ipaddress.ip_address(normalized)
+    except ValueError:
+        return False
+
+    return ip_obj.is_loopback
+
+
+def _normalize_address_candidate(value: str) -> Optional[str]:
+    if not value:
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+
+    if candidate.startswith("\"") and candidate.endswith("\"") and len(candidate) >= 2:
+        candidate = candidate[1:-1].strip()
+
+    if candidate.lower().startswith("for="):
+        candidate = candidate[4:].strip()
+
+    if candidate.startswith("\"") and candidate.endswith("\"") and len(candidate) >= 2:
+        candidate = candidate[1:-1].strip()
+
+    if candidate.startswith("[") and "]" in candidate:
+        host, _, _rest = candidate[1:].partition("]")
+        candidate = host.strip()
+        # _rest may contain :port which can be ignored
+    elif candidate.count(":") == 1 and "." in candidate.split(":", 1)[0]:
+        # IPv4 mit Portangabe, IPv6 würde mehr Doppelpunkte enthalten
+        host, _, _ = candidate.partition(":")
+        candidate = host.strip()
+
+    if candidate.lower() in {"unknown", ""}:
+        return None
+
+    return candidate
 
 
 @lru_cache(maxsize=1)
