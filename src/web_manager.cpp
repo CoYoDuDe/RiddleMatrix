@@ -369,7 +369,20 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     // 💾 WiFi-Daten speichern
     function saveWiFi() {
-        let form = new FormData(document.getElementById('wifiForm'));
+        const formElement = document.getElementById('wifiForm');
+        let form = new FormData(formElement);
+
+        // Checkbox explizit berücksichtigen: Nur wenn "Passwort löschen" gesetzt ist,
+        // wird das Flag gesendet, ansonsten entfernen wir den Parameter.
+        const removeCheckbox = document.getElementById('password_remove');
+        if (removeCheckbox) {
+            if (removeCheckbox.checked) {
+                form.set('password_remove', 'on');
+            } else {
+                form.delete('password_remove');
+            }
+        }
+
         fetch('/updateWiFi', { method: 'POST', body: form })
             .then(response => response.text())
             .then(alert)
@@ -455,7 +468,9 @@ void setupWebServer() {
         html += "<form id='wifiForm'>";
         html += "<p>SSID und Hostname sind Pflichtfelder (mindestens 2 Zeichen), das Passwort ist optional.</p>";
         html += "SSID: <input type='text' name='ssid' value='" + escapeHtml(String(wifi_ssid)) + "'><br>";
-        html += "Passwort: <input type='password' name='password'><br>";
+        html += "Passwort: <input type='password' name='password' placeholder='Leer lassen, um es zu behalten'><br>";
+        html += "<label><input type='checkbox' id='password_remove' name='password_remove' value='on'> Passwort löschen</label><br>";
+        html += "<p style='margin-top:4px;'>Leer gelassenes Passwort ohne Haken lässt das bisherige Passwort unverändert.</p>";
         html += "Hostname: <input type='text' name='hostname' value='" + escapeHtml(String(hostname)) + "'><br>";
         html += "<button type='button' onclick='saveWiFi()'>Speichern</button>";
         html += "</form>";
@@ -569,9 +584,15 @@ void setupWebServer() {
         if (request->hasParam("ssid", true) && request->hasParam("hostname", true)) {
             const String ssidParam = request->getParam("ssid", true)->value();
             const String hostnameParam = request->getParam("hostname", true)->value();
-            const bool hasPasswordParam = request->hasParam("password", true) &&
-                                          request->getParam("password", true)->value() != "";
-            const String passwordParam = hasPasswordParam ? request->getParam("password", true)->value() : String();
+            const bool hasPasswordField = request->hasParam("password", true);
+            const String passwordParam = hasPasswordField ? request->getParam("password", true)->value() : String();
+            bool wantsPasswordRemoval = false;
+            if (request->hasParam("password_remove", true)) {
+                String removalValue = request->getParam("password_remove", true)->value();
+                removalValue.trim();
+                removalValue.toLowerCase();
+                wantsPasswordRemoval = !removalValue.isEmpty() && removalValue != F("false") && removalValue != F("0");
+            }
 
             auto containsForbiddenChars = [](const String &value) {
                 for (size_t idx = 0; idx < value.length(); ++idx) {
@@ -598,14 +619,19 @@ void setupWebServer() {
             if (containsForbiddenChars(hostnameParam)) {
                 validationError += "Hostname enthält ungültige Zeichen. ";
             }
-            if (hasPasswordParam && containsForbiddenChars(passwordParam)) {
+            if (hasPasswordField && !passwordParam.isEmpty() && containsForbiddenChars(passwordParam)) {
                 validationError += "Passwort enthält ungültige Zeichen. ";
             }
 
             const String sanitizedSsid = normalizeInput(ssidParam);
             const String sanitizedHostname = normalizeInput(hostnameParam);
-            const String sanitizedPassword = hasPasswordParam ? normalizeInput(passwordParam) : String();
-            const bool applyPassword = hasPasswordParam && !sanitizedPassword.isEmpty();
+            const String sanitizedPassword = hasPasswordField ? normalizeInput(passwordParam) : String();
+            const bool applyPassword = hasPasswordField && !sanitizedPassword.isEmpty();
+
+            // Ein neu gesetztes Passwort hat Priorität gegenüber einem Löschwunsch.
+            if (applyPassword) {
+                wantsPasswordRemoval = false;
+            }
 
             if (sanitizedSsid.length() < MIN_SSID_LENGTH) {
                 validationError += "SSID muss mindestens " + String(MIN_SSID_LENGTH) + " Zeichen enthalten. ";
@@ -628,14 +654,19 @@ void setupWebServer() {
             const bool ssidTruncated = copyWithTermination(sanitizedSsid, wifi_ssid, sizeof(wifi_ssid));
             const bool hostnameTruncated = copyWithTermination(sanitizedHostname, hostname, sizeof(hostname));
             bool passwordTruncated = false;
+            bool passwordCleared = false;
+            bool passwordUnchanged = false;
 
             if (applyPassword) {
                 passwordTruncated = copyWithTermination(sanitizedPassword, wifi_password, sizeof(wifi_password));
-            } else {
+            } else if (wantsPasswordRemoval) {
                 for (size_t idx = 0; idx < sizeof(wifi_password); ++idx) {
                     wifi_password[idx] = '\0';
                 }
                 Serial.println(F("[WebManager] WLAN-Passwort zurückgesetzt."));
+                passwordCleared = true;
+            } else {
+                passwordUnchanged = true;
             }
 
             saveConfig();
@@ -649,6 +680,12 @@ void setupWebServer() {
             }
             if (applyPassword && passwordTruncated) {
                 response += " Hinweis: Passwort wurde auf " + String(sizeof(wifi_password) - 1) + " Zeichen gekürzt.";
+            }
+            if (passwordCleared) {
+                response += " Hinweis: Passwort wurde gelöscht.";
+            }
+            if (passwordUnchanged) {
+                response += " Hinweis: Passwort blieb unverändert.";
             }
 
             request->send(200, "text/plain", response);
