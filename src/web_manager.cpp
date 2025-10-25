@@ -1567,6 +1567,9 @@ void setupWebServer() {
 
     server.on("/displayLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /displayLetter"));
+        if (!ensureAuthenticated(request, F("GET /displayLetter"))) {
+            return;
+        }
         if (!request->hasParam("char")) {
             request->send(400, "text/plain", "Fehlender Parameter!");
             return;
@@ -1625,6 +1628,9 @@ void setupWebServer() {
 
     server.on("/triggerLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /triggerLetter"));
+        if (!ensureAuthenticated(request, F("GET /triggerLetter"))) {
+            return;
+        }
         uint8_t triggerIndex = 0;
         if (request->hasParam("trigger")) {
             int triggerValue = request->getParam("trigger")->value().toInt();
