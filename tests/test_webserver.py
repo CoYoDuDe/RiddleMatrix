@@ -1114,3 +1114,37 @@ def test_shutdown_allows_loopback_without_token(webserver_app, monkeypatch):
     response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "127.0.0.1"})
     assert response.status_code == 200
     assert response.get_json() == {"status": "OK"}
+
+
+def test_shutdown_rejects_spoofed_loopback_with_forwarded_for(webserver_app, monkeypatch):
+    module, client = webserver_app
+    monkeypatch.setattr(module.os, "system", lambda cmd: None)
+    monkeypatch.delenv("SHUTDOWN_TOKEN", raising=False)
+    module.reload_shutdown_token_cache()
+
+    response = client.post(
+        "/shutdown",
+        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+        headers={"X-Forwarded-For": "198.51.100.42"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_shutdown_accepts_loopback_with_trusted_forward_headers(webserver_app, monkeypatch):
+    module, client = webserver_app
+    monkeypatch.setattr(module.os, "system", lambda cmd: None)
+    monkeypatch.delenv("SHUTDOWN_TOKEN", raising=False)
+    module.reload_shutdown_token_cache()
+
+    response = client.post(
+        "/shutdown",
+        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+        headers={
+            "X-Forwarded-For": "127.0.0.1",
+            "Forwarded": 'for="127.0.0.1";proto=http',
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "OK"}
