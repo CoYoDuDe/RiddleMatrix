@@ -260,9 +260,250 @@ constexpr const char *const DAY_KEYS[NUM_DAYS] = {
     "so", "mo", "di", "mi", "do", "fr", "sa",
 };
 
+bool isAuthProtectionActive() {
+    return auth_token_required && auth_token[0] != '\0';
+}
+
+size_t authTokenLength(const char *value) {
+    size_t length = 0;
+    while (length < AUTH_TOKEN_MAX_LENGTH && value[length] != '\0') {
+        ++length;
+    }
+    return length;
+}
+
+bool constantTimeEquals(const char *expected, const String &candidate) {
+    if (expected == nullptr) {
+        return false;
+    }
+
+    const size_t expectedLength = authTokenLength(expected);
+    const size_t candidateLength = candidate.length();
+    const size_t maxLength = (expectedLength > candidateLength) ? expectedLength : candidateLength;
+
+    uint8_t diff = static_cast<uint8_t>(expectedLength ^ candidateLength);
+
+    for (size_t index = 0; index < maxLength; ++index) {
+        const char expectedChar = (index < expectedLength) ? expected[index] : 0;
+        const char candidateChar = (index < candidateLength) ? candidate.charAt(index) : 0;
+        diff |= static_cast<uint8_t>(expectedChar ^ candidateChar);
+    }
+
+    return diff == 0;
+}
+
+String extractAuthToken(AsyncWebServerRequest *request) {
+    if (request == nullptr) {
+        return String();
+    }
+
+    if (request->hasHeader(F("X-Auth-Token"))) {
+        return request->header(F("X-Auth-Token"));
+    }
+    if (request->hasHeader(F("x-auth-token"))) {
+        return request->header(F("x-auth-token"));
+    }
+    if (request->hasHeader(F("Authorization"))) {
+        String authorization = request->header(F("Authorization"));
+        authorization.trim();
+        if (authorization.startsWith(F("Bearer "))) {
+            return authorization.substring(7);
+        }
+        if (authorization.startsWith(F("Token "))) {
+            return authorization.substring(6);
+        }
+    }
+
+    if (request->hasParam(F("auth_token"), true)) {
+        return request->getParam(F("auth_token"), true)->value();
+    }
+    if (request->hasParam(F("auth_token"))) {
+        return request->getParam(F("auth_token"))->value();
+    }
+
+    return String();
+}
+
+bool ensureAuthenticated(AsyncWebServerRequest *request, const __FlashStringHelper *operation) {
+    if (!isAuthProtectionActive()) {
+        return true;
+    }
+
+    String providedToken = extractAuthToken(request);
+    providedToken.trim();
+
+    if (providedToken.isEmpty()) {
+        Serial.print(F("🚫 Authentifizierung fehlgeschlagen"));
+        if (operation != nullptr) {
+            Serial.print(F(" bei "));
+            Serial.print(operation);
+        }
+        Serial.println(F(": Kein Token angegeben."));
+        if (request != nullptr) {
+            request->send(401, "text/plain", F("❌ Zugriff verweigert: Authentifizierungs-Token fehlt."));
+        }
+        return false;
+    }
+
+    if (!constantTimeEquals(auth_token, providedToken)) {
+        Serial.print(F("🚫 Authentifizierung fehlgeschlagen"));
+        if (operation != nullptr) {
+            Serial.print(F(" bei "));
+            Serial.print(operation);
+        }
+        Serial.println(F(": Token ungültig."));
+        if (request != nullptr) {
+            request->send(401, "text/plain", F("❌ Zugriff verweigert: Authentifizierungs-Token ungültig."));
+        }
+        return false;
+    }
+
+    return true;
+}
+
+bool isValidAuthTokenFormat(const String &token) {
+    if (token.length() < AUTH_TOKEN_MIN_LENGTH || token.length() >= AUTH_TOKEN_MAX_LENGTH) {
+        return false;
+    }
+
+    for (size_t index = 0; index < token.length(); ++index) {
+        const unsigned char character = static_cast<unsigned char>(token.charAt(index));
+        if (character < 33 || character > 126) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 } // namespace
 
 const char scriptJS[] PROGMEM = R"rawliteral(
+    const AUTH_STORAGE_KEY = 'riddlematrix.authToken';
+
+    function readAuthToken() {
+        const field = document.getElementById('auth_token_runtime');
+        if (!field) {
+            return '';
+        }
+        return (field.value || '').trim();
+    }
+
+    function buildAuthHeaders() {
+        const token = readAuthToken();
+        const headers = {};
+        if (token !== '') {
+            headers['X-Auth-Token'] = token;
+        }
+        return headers;
+    }
+
+    function attachAuthToken(formData) {
+        if (!(formData instanceof FormData)) {
+            return;
+        }
+        const token = readAuthToken();
+        if (token !== '') {
+            formData.set('auth_token', token);
+        } else {
+            formData.delete('auth_token');
+        }
+    }
+
+    function persistAuthTokenPreference() {
+        const tokenField = document.getElementById('auth_token_runtime');
+        const rememberCheckbox = document.getElementById('auth_token_remember');
+        if (!tokenField || !rememberCheckbox) {
+            return;
+        }
+
+        const token = (tokenField.value || '').trim();
+        try {
+            if (rememberCheckbox.checked && token !== '') {
+                localStorage.setItem(AUTH_STORAGE_KEY, token);
+            } else {
+                localStorage.removeItem(AUTH_STORAGE_KEY);
+            }
+        } catch (error) {
+            console.warn('⚠️ Konnte Token-Präferenz nicht speichern:', error);
+        }
+    }
+
+    function initializeAuthTokenField() {
+        try {
+            const storedToken = localStorage.getItem(AUTH_STORAGE_KEY);
+            if (storedToken) {
+                const tokenField = document.getElementById('auth_token_runtime');
+                if (tokenField) {
+                    tokenField.value = storedToken;
+                }
+                const rememberCheckbox = document.getElementById('auth_token_remember');
+                if (rememberCheckbox) {
+                    rememberCheckbox.checked = true;
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Konnte gespeichertes Token nicht lesen:', error);
+        }
+
+        const tokenField = document.getElementById('auth_token_runtime');
+        const rememberCheckbox = document.getElementById('auth_token_remember');
+        if (tokenField) {
+            tokenField.addEventListener('change', persistAuthTokenPreference);
+            tokenField.addEventListener('keyup', persistAuthTokenPreference);
+        }
+        if (rememberCheckbox) {
+            rememberCheckbox.addEventListener('change', persistAuthTokenPreference);
+        }
+    }
+
+    function saveAuthSettings() {
+        const formElement = document.getElementById('authForm');
+        if (!formElement) {
+            alert('❌ Fehler: Formular zur Authentifizierung nicht gefunden.');
+            return;
+        }
+
+        const form = new FormData(formElement);
+        const runtimeToken = readAuthToken();
+        if (!form.get('current_token') && runtimeToken !== '') {
+            form.set('current_token', runtimeToken);
+        }
+
+        attachAuthToken(form);
+        const newTokenCandidate = form.get('new_token');
+        const trimmedNewToken = newTokenCandidate ? String(newTokenCandidate).trim() : '';
+
+        fetch('/updateAuth', {
+            method: 'POST',
+            body: form,
+            headers: buildAuthHeaders()
+        })
+            .then(response => response.text().then(message => ({ ok: response.ok, message })))
+            .then(result => {
+                const text = result.message && result.message.trim() !== ''
+                    ? result.message
+                    : (result.ok ? '✅ Authentifizierung aktualisiert.' : '❌ Fehler beim Aktualisieren der Authentifizierung.');
+                if (!result.ok) {
+                    console.warn('❌ Serverfehler:', text);
+                } else {
+                    console.log('ℹ️ Authentifizierung aktualisiert:', text);
+                    if (trimmedNewToken !== '') {
+                        const runtimeField = document.getElementById('auth_token_runtime');
+                        if (runtimeField) {
+                            runtimeField.value = trimmedNewToken;
+                        }
+                    }
+                }
+                alert(text);
+                persistAuthTokenPreference();
+            })
+            .catch(error => {
+                console.error('❌ Fehler:', error);
+                alert('❌ Fehler: ' + error);
+            });
+    }
+
     // 🕒 Aktuelle Uhrzeit abrufen
     function fetchRTC() {
         fetch('/getTime')
@@ -286,7 +527,8 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     // 🕒 RTC-Zeit setzen
     function setRTC() {
         let form = new FormData(document.getElementById('rtcForm'));
-        fetch('/setTime', { method: 'POST', body: form })
+        attachAuthToken(form);
+        fetch('/setTime', { method: 'POST', body: form, headers: buildAuthHeaders() })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
@@ -294,7 +536,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     // 🌐 Zeit per NTP synchronisieren
     function syncNTP() {
-        fetch('/syncNTP')
+        fetch('/syncNTP', { headers: buildAuthHeaders() })
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => {
                 const text = result.message && result.message.trim() !== ''
@@ -320,7 +562,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             query = '?trigger=' + encodeURIComponent(triggerIndex + 1);
         }
 
-        fetch('/triggerLetter' + query)
+        fetch('/triggerLetter' + query, { headers: buildAuthHeaders() })
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => {
                 const text = result.message && result.message.trim() !== '' ? result.message : (result.ok ? '✅ Trigger erfolgreich!' : '❌ Unbekannter Fehler beim Trigger!');
@@ -350,7 +592,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             url += '&trigger=' + encodeURIComponent(triggerIndex + 1);
         }
 
-        fetch(url)
+        fetch(url, { headers: buildAuthHeaders() })
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => {
                 const text = result.message && result.message.trim() !== '' ? result.message : (result.ok ? '✅ Buchstabe angezeigt!' : '❌ Anzeige fehlgeschlagen!');
@@ -383,7 +625,8 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             }
         }
 
-        fetch('/updateWiFi', { method: 'POST', body: form })
+        attachAuthToken(form);
+        fetch('/updateWiFi', { method: 'POST', body: form, headers: buildAuthHeaders() })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
@@ -394,7 +637,8 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         let form = new FormData(document.getElementById('displayForm'));
         let autoModeChecked = document.getElementById('auto_mode').checked;
         form.set('auto_mode', autoModeChecked ? 'on' : 'off');
-        fetch('/updateDisplaySettings', { method: 'POST', body: form })
+        attachAuthToken(form);
+        fetch('/updateDisplaySettings', { method: 'POST', body: form, headers: buildAuthHeaders() })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
@@ -403,7 +647,8 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     // 💾 Trigger-Verzögerungen speichern
     function saveTriggerDelays() {
         let form = new FormData(document.getElementById('delaysForm'));
-        fetch('/updateTriggerDelays', { method: 'POST', body: form })
+        attachAuthToken(form);
+        fetch('/updateTriggerDelays', { method: 'POST', body: form, headers: buildAuthHeaders() })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
@@ -412,7 +657,8 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     // 💾 Alle Buchstaben & Farben speichern
     function saveAllLetters() {
         let formData = new FormData(document.getElementById('lettersForm'));
-        fetch('/updateAllLetters', { method: 'POST', body: formData })
+        attachAuthToken(formData);
+        fetch('/updateAllLetters', { method: 'POST', body: formData, headers: buildAuthHeaders() })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
@@ -452,6 +698,8 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     } else {
         console.warn('⚠️ Uhrzeiteingabe nicht gefunden, automatische Aktualisierung bleibt aktiv.');
     }
+
+    initializeAuthTokenField();
 )rawliteral";
 
 void setupWebServer() {
@@ -462,6 +710,25 @@ void setupWebServer() {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /"));
         String html = "<h1>Märchen Einstellungen</h1>";
+
+        bool authActive = isAuthProtectionActive();
+        html += "<h2>API-Sicherheit</h2>";
+        html += "<p>Konfigurationsänderungen erfordern ein gültiges Token, sobald der Schutz aktiviert ist.</p>";
+        html += "<p><strong>Status:</strong> " + String(authActive ? "Aktiviert" : "Deaktiviert") + "</p>";
+        html += "<div style='margin-bottom:8px;'>";
+        html += "<label for='auth_token_runtime'>Token für diese Sitzung:</label> ";
+        html += "<input type='password' id='auth_token_runtime' placeholder='Token eingeben' autocomplete='off'> ";
+        html += "<label><input type='checkbox' id='auth_token_remember'> Token im Browser merken</label>";
+        html += "</div>";
+        html += "<form id='authForm'>";
+        html += "<p>Neues Token muss mindestens " + String(AUTH_TOKEN_MIN_LENGTH) + " Zeichen lang sein und darf nur druckbare ASCII-Zeichen enthalten.</p>";
+        html += "<label><input type='checkbox' name='enable_token' value='on' " + String(authActive ? "checked='checked'" : "") + "> Token-Schutz aktivieren</label><br>";
+        html += "<label>Aktuelles Token (zur Bestätigung): <input type='password' name='current_token' autocomplete='off'></label><br>";
+        html += "<label>Neues Token: <input type='password' name='new_token' autocomplete='off' placeholder='Mindestens " + String(AUTH_TOKEN_MIN_LENGTH) + " Zeichen'></label><br>";
+        html += "<label>Neues Token wiederholen: <input type='password' name='new_token_repeat' autocomplete='off'></label><br>";
+        html += "<button type='button' onclick='saveAuthSettings()'>Token-Einstellungen speichern</button>";
+        html += "</form>";
+        html += "<p style='font-size:0.9em;'>Tipp: Das oben eingetragene Sitzungstoken wird automatisch an alle geschützten Anfragen übermittelt.</p>";
 
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
@@ -581,6 +848,9 @@ void setupWebServer() {
 
     server.on("/updateWiFi", HTTP_POST, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("POST /updateWiFi"));
+        if (!ensureAuthenticated(request, F("POST /updateWiFi"))) {
+            return;
+        }
         if (request->hasParam("ssid", true) && request->hasParam("hostname", true)) {
             const String ssidParam = request->getParam("ssid", true)->value();
             const String hostnameParam = request->getParam("hostname", true)->value();
@@ -696,6 +966,9 @@ void setupWebServer() {
 
     server.on("/updateDisplaySettings", HTTP_POST, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("POST /updateDisplaySettings"));
+        if (!ensureAuthenticated(request, F("POST /updateDisplaySettings"))) {
+            return;
+        }
         if (!(request->hasParam("brightness", true) &&
               request->hasParam("letter_time", true) &&
               request->hasParam("auto_interval", true))) {
@@ -750,8 +1023,100 @@ void setupWebServer() {
         request->send(200, "text/plain", "✅ Anzeigeeinstellungen gespeichert!");
     });
 
+    server.on("/updateAuth", HTTP_POST, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("POST /updateAuth"));
+        if (isAuthProtectionActive() && !ensureAuthenticated(request, F("POST /updateAuth"))) {
+            return;
+        }
+
+        auto readParam = [&](const __FlashStringHelper *name) {
+            String value;
+            if (request->hasParam(name, true)) {
+                value = request->getParam(name, true)->value();
+            } else if (request->hasParam(name)) {
+                value = request->getParam(name)->value();
+            }
+            value.trim();
+            return value;
+        };
+
+        String enableValue = readParam(F("enable_token"));
+        enableValue.toLowerCase();
+        bool enableRequested = (enableValue == F("on") || enableValue == F("1") || enableValue == F("true") || enableValue == F("enable"));
+
+        String currentTokenParam = readParam(F("current_token"));
+        String newTokenParam = readParam(F("new_token"));
+        String confirmTokenParam = readParam(F("new_token_repeat"));
+
+        bool newTokenProvided = !newTokenParam.isEmpty();
+        bool confirmTokenProvided = !confirmTokenParam.isEmpty();
+
+        if (!currentTokenParam.isEmpty() && auth_token[0] != '\0' && !constantTimeEquals(auth_token, currentTokenParam)) {
+            Serial.println(F("🚫 Authentifizierung fehlgeschlagen bei POST /updateAuth: Formular-Token stimmt nicht."));
+            request->send(401, "text/plain", F("❌ Zugriff verweigert: Das aktuelle Token ist ungültig."));
+            return;
+        }
+
+        if (newTokenProvided && !confirmTokenProvided) {
+            request->send(400, "text/plain", F("❌ Fehler: Bitte das neue Token zweimal eingeben."));
+            return;
+        }
+
+        if (newTokenProvided && newTokenParam != confirmTokenParam) {
+            request->send(400, "text/plain", F("❌ Fehler: Die neuen Token-Eingaben stimmen nicht überein."));
+            return;
+        }
+
+        if (newTokenProvided && !isValidAuthTokenFormat(newTokenParam)) {
+            String message = F("❌ Fehler: Token muss mindestens ");
+            message += AUTH_TOKEN_MIN_LENGTH;
+            message += F(" Zeichen lang sein und darf nur druckbare ASCII-Zeichen enthalten.");
+            request->send(400, "text/plain", message);
+            return;
+        }
+
+        bool hadStoredToken = (auth_token[0] != '\0');
+
+        if (enableRequested) {
+            if (!hadStoredToken && !newTokenProvided) {
+                String message = F("❌ Fehler: Bitte ein neues Token vergeben, um den Schutz zu aktivieren (mindestens ");
+                message += AUTH_TOKEN_MIN_LENGTH;
+                message += F(" Zeichen).");
+                request->send(400, "text/plain", message);
+                return;
+            }
+
+            if (newTokenProvided) {
+                strncpy(auth_token, newTokenParam.c_str(), AUTH_TOKEN_MAX_LENGTH);
+                auth_token[AUTH_TOKEN_MAX_LENGTH - 1] = '\0';
+            }
+
+            auth_token_required = true;
+            saveConfig();
+
+            if (newTokenProvided) {
+                request->send(200, "text/plain", F("✅ Token-Schutz aktiviert und neues Token gespeichert."));
+            } else {
+                request->send(200, "text/plain", F("✅ Token-Schutz aktiviert."));
+            }
+            return;
+        }
+
+        if (newTokenProvided) {
+            Serial.println(F("ℹ️ Neues Token wurde angegeben, Schutz aber deaktiviert – Token wird verworfen."));
+        }
+
+        auth_token_required = false;
+        auth_token[0] = '\0';
+        saveConfig();
+        request->send(200, "text/plain", F("✅ Token-Schutz deaktiviert."));
+    });
+
     server.on("/updateTriggerDelays", HTTP_POST, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("POST /updateTriggerDelays"));
+        if (!ensureAuthenticated(request, F("POST /updateTriggerDelays"))) {
+            return;
+        }
 
         unsigned long parsedDelays[NUM_TRIGGERS][NUM_DAYS];
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
@@ -845,6 +1210,11 @@ void setupWebServer() {
                     context = nullptr;
                 }
             };
+
+            if (!ensureAuthenticated(request, F("POST /updateAllLetters"))) {
+                cleanup();
+                return;
+            }
 
             if (isJsonRequest(request)) {
                 if (context == nullptr) {
@@ -1311,6 +1681,9 @@ void setupWebServer() {
 
     server.on("/setTime", HTTP_POST, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("POST /setTime"));
+        if (!ensureAuthenticated(request, F("POST /setTime"))) {
+            return;
+        }
         if (request->hasParam("date", true) && request->hasParam("time", true)) {
             String date = request->getParam("date", true)->value();
             String time = request->getParam("time", true)->value();
@@ -1326,6 +1699,9 @@ void setupWebServer() {
 
     server.on("/syncNTP", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /syncNTP"));
+        if (!ensureAuthenticated(request, F("GET /syncNTP"))) {
+            return;
+        }
         if (syncTimeWithNTP()) {
             request->send(200, "text/plain", "✅ NTP Synchronisierung erfolgreich abgeschlossen!");
         } else {

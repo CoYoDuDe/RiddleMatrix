@@ -45,10 +45,15 @@ static constexpr size_t EEPROM_SIZEOF_UNSIGNED_LONG = 4;
 static constexpr size_t EEPROM_SIZEOF_UNSIGNED_LONG = sizeof(unsigned long);
 #endif
 
+static constexpr size_t AUTH_TOKEN_MAX_LENGTH = 64;
+static constexpr size_t AUTH_TOKEN_MIN_LENGTH = 12;
+
 static constexpr uint16_t EEPROM_OFFSET_WIFI_SSID = 0;
 static constexpr uint16_t EEPROM_OFFSET_WIFI_PASSWORD = EEPROM_OFFSET_WIFI_SSID + 50;
 static constexpr uint16_t EEPROM_OFFSET_HOSTNAME = EEPROM_OFFSET_WIFI_PASSWORD + 50;
-static constexpr uint16_t EEPROM_OFFSET_DAILY_LETTERS = EEPROM_OFFSET_HOSTNAME + 50;
+static constexpr uint16_t EEPROM_OFFSET_AUTH_TOKEN = EEPROM_OFFSET_HOSTNAME + 50;
+static constexpr uint16_t EEPROM_OFFSET_AUTH_TOKEN_ENABLED = EEPROM_OFFSET_AUTH_TOKEN + AUTH_TOKEN_MAX_LENGTH;
+static constexpr uint16_t EEPROM_OFFSET_DAILY_LETTERS = EEPROM_OFFSET_AUTH_TOKEN_ENABLED + sizeof(uint8_t);
 static constexpr uint16_t EEPROM_OFFSET_DAILY_LETTER_COLORS = EEPROM_OFFSET_DAILY_LETTERS + (NUM_TRIGGERS * NUM_DAYS);
 static constexpr uint16_t EEPROM_OFFSET_DISPLAY_BRIGHTNESS = EEPROM_OFFSET_DAILY_LETTER_COLORS + (NUM_TRIGGERS * NUM_DAYS * COLOR_STRING_LENGTH);
 static constexpr uint16_t EEPROM_OFFSET_LETTER_DISPLAY_TIME = EEPROM_OFFSET_DISPLAY_BRIGHTNESS + sizeof(int);
@@ -58,7 +63,7 @@ static constexpr uint16_t EEPROM_OFFSET_AUTO_INTERVAL = EEPROM_OFFSET_TRIGGER_DE
 static constexpr uint16_t EEPROM_OFFSET_AUTO_MODE = EEPROM_OFFSET_AUTO_INTERVAL + EEPROM_SIZEOF_UNSIGNED_LONG;
 static constexpr uint16_t EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT = EEPROM_OFFSET_AUTO_MODE + sizeof(uint8_t);
 static constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION = EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT + sizeof(int);
-static constexpr uint16_t EEPROM_CONFIG_VERSION = 3;
+static constexpr uint16_t EEPROM_CONFIG_VERSION = 4;
 
 static_assert(EEPROM_OFFSET_DAILY_LETTERS + (NUM_TRIGGERS * NUM_DAYS) <= EEPROM_OFFSET_DAILY_LETTER_COLORS,
               "Letter-Block überschneidet sich mit Farb-Block");
@@ -74,6 +79,8 @@ extern char wifi_ssid[50];
 extern char wifi_password[50];
 extern char hostname[50];
 extern int wifi_connect_timeout; // Timeout für die WLAN-Verbindung in Sekunden
+extern char auth_token[AUTH_TOKEN_MAX_LENGTH];
+extern bool auth_token_required;
 
 // **Globale Variablen für die Anzeige**
 
