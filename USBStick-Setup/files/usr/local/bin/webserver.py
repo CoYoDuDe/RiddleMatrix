@@ -40,6 +40,42 @@ PUBLIC_AP_ENV_FILE = os.environ.get("PUBLIC_AP_ENV_FILE", "/etc/usbstick/public_
 SHUTDOWN_TOKEN_ENV = "SHUTDOWN_TOKEN"
 ALLOWED_SHUTDOWN_ADDRESSES = {"127.0.0.1", "::1"}
 
+
+class RedirectResponseError(RuntimeError):
+    def __init__(self, action: str, host: str, status_code: int) -> None:
+        super().__init__(f"{action} ({host})")
+        self.action = action
+        self.host = host
+        self.status_code = status_code
+
+
+def _ensure_no_redirect(response, *, action: str, host: str) -> None:
+    status_code = getattr(response, "status_code", 0)
+    if (
+        getattr(response, "is_redirect", False)
+        or getattr(response, "is_permanent_redirect", False)
+        or 300 <= status_code < 400
+    ):
+        app.logger.warning(
+            "%s für %s abgebrochen: unerwartete Weiterleitung (HTTP %s)",
+            action,
+            host,
+            status_code,
+        )
+        raise RedirectResponseError(action, host, status_code)
+
+
+def _redirect_error_response(error: RedirectResponseError):
+    return (
+        jsonify(
+            {
+                "status": "❌ Unerwartete Weiterleitung",
+                "details": f"{error.action} ({error.host}) lieferte HTTP {error.status_code} mit Weiterleitung",
+            }
+        ),
+        502,
+    )
+
 def _default_config():
     return {"boxen": {}, "boxOrder": []}
 
@@ -499,9 +535,15 @@ def fetch_trigger_delays(ip):
     if ip == SAFE_IP_PLACEHOLDER:
         return None
     try:
-        response = requests.get(f"http://{ip}/api/trigger-delays", timeout=3)
+        response = requests.get(
+            f"http://{ip}/api/trigger-delays",
+            timeout=3,
+            allow_redirects=False,
+        )
     except requests.RequestException:
         return None
+
+    _ensure_no_redirect(response, action="Trigger-Delay-Abfrage", host=ip)
 
     if not response.ok:
         return None
@@ -541,10 +583,17 @@ def get_connected_devices():
                         continue
                     if subprocess.call(["ping", "-c", "1", "-W", "1", ip], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
                         try:
-                            r = requests.get(f"http://{ip}/", timeout=3)
-                            if not r.ok or "name='hostname'" not in r.text:
-                                continue
-                        except:
+                            r = requests.get(
+                                f"http://{ip}/",
+                                timeout=3,
+                                allow_redirects=False,
+                            )
+                        except requests.RequestException:
+                            continue
+
+                        _ensure_no_redirect(r, action="Geräte-Scan", host=ip)
+
+                        if not r.ok or "name='hostname'" not in r.text:
                             continue
 
                         hostname = get_hostname_from_web(ip)
@@ -583,16 +632,23 @@ def get_hostname_from_web(ip):
     if ip == SAFE_IP_PLACEHOLDER:
         return "Unbekannt"
     try:
-        r = requests.get(f"http://{ip}", timeout=3)
-        if r.ok:
-            soup = BeautifulSoup(r.text, "html.parser")
-            hostname_field = soup.find("input", {"name": "hostname"})
-            if hostname_field is not None:
-                value = hostname_field.get("value")
-                if value is not None:
-                    return value
-    except:
-        pass
+        r = requests.get(
+            f"http://{ip}",
+            timeout=3,
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        return "Unbekannt"
+
+    _ensure_no_redirect(r, action="Hostname-Abfrage", host=ip)
+
+    if r.ok:
+        soup = BeautifulSoup(r.text, "html.parser")
+        hostname_field = soup.find("input", {"name": "hostname"})
+        if hostname_field is not None:
+            value = hostname_field.get("value")
+            if value is not None:
+                return value
     return "Unbekannt"
 
 def learn_box(ip, identifier):
@@ -614,27 +670,43 @@ def learn_box(ip, identifier):
         return
 
     try:
-        r = requests.get(f"http://{ip}/", timeout=3)
-        if not r.ok:
-            return
-        soup = BeautifulSoup(r.text, "html.parser")
-        letters, colors, html_delays = extract_box_state_from_soup(soup)
+        r = requests.get(
+            f"http://{ip}/",
+            timeout=3,
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        return
+
+    _ensure_no_redirect(r, action="Box-Lernvorgang", host=ip)
+
+    if not r.ok:
+        return
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    letters, colors, html_delays = extract_box_state_from_soup(soup)
+
+    try:
         delays = fetch_trigger_delays(ip)
-        if delays is None:
-            delays = html_delays
-        box = {
-            "ip": ip,
-            "letters": letters,
-            "colors": colors,
-            "delays": delays if delays is not None else _default_delay_matrix(),
-        }
-        ensure_box_structure(box, remove_legacy=True)
-        config["boxen"][identifier] = box
-        if identifier not in config["boxOrder"]:
-            config["boxOrder"].append(identifier)
-        save_config(config)
+    except RedirectResponseError:
+        raise
     except Exception:
-        pass
+        delays = None
+
+    if delays is None:
+        delays = html_delays
+
+    box = {
+        "ip": ip,
+        "letters": letters,
+        "colors": colors,
+        "delays": delays if delays is not None else _default_delay_matrix(),
+    }
+    ensure_box_structure(box, remove_legacy=True)
+    config["boxen"][identifier] = box
+    if identifier not in config["boxOrder"]:
+        config["boxOrder"].append(identifier)
+    save_config(config)
 
 @app.route("/")
 def index():
@@ -643,7 +715,10 @@ def index():
 
 @app.route("/devices")
 def devices():
-    connected = get_connected_devices()
+    try:
+        connected = get_connected_devices()
+    except RedirectResponseError as exc:
+        return _redirect_error_response(exc)
     config = load_config()
     return jsonify({"boxen": config["boxen"], "connected": connected, "boxOrder": config["boxOrder"]})
 
@@ -807,7 +882,10 @@ def reload_all():
     config["boxen"] = {}
     config["boxOrder"] = []
     save_config(config)
-    get_connected_devices()
+    try:
+        get_connected_devices()
+    except RedirectResponseError as exc:
+        return _redirect_error_response(exc)
     return jsonify({"status": "reloaded"})
 
 @app.route("/transfer_box", methods=["POST"])
@@ -862,7 +940,10 @@ def transfer_box():
 
     soup = BeautifulSoup(r.text, "html.parser")
     remote_letters, remote_colors, _ = extract_box_state_from_soup(soup)
-    remote_delays = fetch_trigger_delays(ip)
+    try:
+        remote_delays = fetch_trigger_delays(ip)
+    except RedirectResponseError as exc:
+        return _redirect_error_response(exc)
 
     stored_letters = {day: list(box["letters"][day]) for day in DAYS}
     stored_colors = {day: list(box["colors"][day]) for day in DAYS}
