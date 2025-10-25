@@ -103,6 +103,10 @@ Trigger-Index `0` entspricht RS485-Trigger 1, Index `1` Trigger 2 usw. Die Web
 
 Die HTTP-Endpunkte `/displayLetter` und `/triggerLetter` akzeptieren optional den Parameter `trigger=<1-3>` für Tests je Leitung. Wird kein Trigger angegeben, nutzt die Firmware standardmäßig Leitung 1. Ältere EEPROM-Daten mit eindimensionalen Tagesbuchstaben werden beim ersten Start automatisch migriert.
 
+### Zusatzglyphen
+
+Neben den Großbuchstaben stehen mehrere vordefinierte Symbole zur Verfügung. `'#'` rendert die Sonne, `'~'` das WLAN-Symbol, `'&'` das Riesenrad und `'?'` den Riddler. Neu hinzugekommen ist `'*'` für das kombinierte „Sun+Rad“-Glyph, das Sonne und Riesenrad zu einem 32×32-Pixelmotiv verschmilzt.
+
 ### Verzögerungsmatrix pro Trigger & Tag
 
 - `letter_trigger_delays[trigger][tag]` verwaltet die Wartezeit (Sekunden) vor der Anzeige.
