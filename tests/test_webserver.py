@@ -123,6 +123,7 @@ def test_get_hostname_from_web_supports_attribute_variants(webserver_app, monkey
     call_state = {"index": 0}
 
     def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
         index = call_state["index"]
         if index >= len(html_variants):
             pytest.fail("Unerwarteter zusätzlicher Aufruf von requests.get")
@@ -157,6 +158,7 @@ def test_learn_box_sanitizes_hostnames_and_devices_output(webserver_app, monkeyp
             return self._json
 
     def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
         if url.endswith("/api/trigger-delays"):
             return FakeResponse(ok=True, json_data={"delays": copy.deepcopy(template_box["delays"])})
         return FakeResponse("<html></html>", True)
@@ -222,6 +224,7 @@ def test_transfer_box_returns_json_on_post_error(webserver_app, monkeypatch):
             return self._json
 
     def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
         if url.endswith("/api/trigger-delays"):
             delays = {day: [module.DEFAULT_DELAY for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
             return FakeResponse(ok=True, json_data={"delays": delays})
@@ -274,6 +277,59 @@ def test_transfer_box_rejects_redirects(webserver_app, monkeypatch):
     }
 
 
+def test_transfer_box_blocks_trigger_delay_redirect(webserver_app, monkeypatch):
+    module, client = webserver_app
+
+    box = _empty_box(module)
+    module.save_config({"boxen": {"TestBox": box}, "boxOrder": []})
+
+    class FakeResponse:
+        def __init__(self, text: str = "", status_code: int = 200, *, is_redirect: bool = False) -> None:
+            self.text = text
+            self.status_code = status_code
+            self.ok = status_code == 200
+            self.is_redirect = is_redirect
+            self.is_permanent_redirect = False
+
+        def json(self):  # pragma: no cover - sollte nicht genutzt werden
+            raise AssertionError("json() darf für Redirect-Test nicht aufgerufen werden")
+
+    sample_letters = {day: ["" for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+    sample_colors = {day: [module.DEFAULT_COLOR for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+    sample_delays = {day: [module.DEFAULT_DELAY for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
+
+    def fake_extract(_soup):
+        return sample_letters, sample_colors, sample_delays
+
+    call_state = {"trigger": False}
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        if url.endswith("/api/trigger-delays"):
+            assert not call_state["trigger"], "Trigger-Delays API darf nur einmal abgefragt werden"
+            call_state["trigger"] = True
+            return FakeResponse(status_code=307, is_redirect=True)
+        if url.endswith("/"):
+            return FakeResponse("<html></html>")
+        pytest.fail(f"Unerwarteter GET-Aufruf: {url}")
+
+    def fake_post(*args, **kwargs):  # pragma: no cover - sollte nicht aufgerufen werden
+        pytest.fail("POST darf bei Redirect nicht aufgerufen werden")
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+    monkeypatch.setattr(module.requests, "post", fake_post)
+    monkeypatch.setattr(module, "extract_box_state_from_soup", fake_extract)
+
+    response = client.post("/transfer_box", json={"hostname": "TestBox"})
+
+    assert call_state["trigger"] is True
+    assert response.status_code == 502
+    assert response.get_json() == {
+        "status": "❌ Unerwartete Weiterleitung",
+        "details": "Trigger-Delay-Abfrage (1.2.3.4) lieferte HTTP 307 mit Weiterleitung",
+    }
+
+
 def test_transfer_box_requires_authorization(webserver_app, monkeypatch):
     module, client = webserver_app
     box = _empty_box(module)
@@ -291,6 +347,7 @@ def test_transfer_box_requires_authorization(webserver_app, monkeypatch):
             return self._json
 
     def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
         if url.endswith("/api/trigger-delays"):
             return FakeResponse(ok=True, json_data={"delays": box["delays"]})
         return FakeResponse("<html></html>", True)
@@ -499,6 +556,7 @@ def test_update_box_sanitizes_letters_and_transfer(webserver_app, monkeypatch):
             self.ok = ok
 
     def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
         assert url == "http://1.2.3.4/"
         return FakeResponse("<html></html>", True)
 
@@ -565,6 +623,126 @@ def test_devices_sanitizes_invalid_ip_addresses(webserver_app):
     assert malicious_ip not in devices_response.get_data(as_text=True)
 
 
+def test_devices_blocks_redirect_during_scan(webserver_app, monkeypatch, tmp_path):
+    module, client = webserver_app
+
+    module.LEASE_FILE = str(tmp_path / "dnsmasq.leases")
+    Path(module.LEASE_FILE).write_text("0 00:11:22:33:44:55 1.2.3.4 hostname * *\n", encoding="utf-8")
+
+    monkeypatch.setattr(module.subprocess, "call", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(module, "learn_box", lambda *args, **kwargs: pytest.fail("learn_box darf nicht aufgerufen werden"))
+
+    class RedirectResponse:
+        status_code = 302
+        ok = True
+        text = ""
+        is_redirect = True
+        is_permanent_redirect = False
+
+    call_state = {"count": 0}
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        call_state["count"] += 1
+        if url == "http://1.2.3.4/":
+            return RedirectResponse()
+        pytest.fail(f"Unerwarteter GET-Aufruf: {url}")
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    response = client.get("/devices")
+
+    assert call_state["count"] == 1
+    assert response.status_code == 502
+    assert response.get_json() == {
+        "status": "❌ Unerwartete Weiterleitung",
+        "details": "Geräte-Scan (1.2.3.4) lieferte HTTP 302 mit Weiterleitung",
+    }
+
+
+def test_devices_blocks_redirect_during_hostname_lookup(webserver_app, monkeypatch, tmp_path):
+    module, client = webserver_app
+
+    module.LEASE_FILE = str(tmp_path / "dnsmasq.leases")
+    Path(module.LEASE_FILE).write_text("0 00:11:22:33:44:55 1.2.3.4 hostname * *\n", encoding="utf-8")
+
+    monkeypatch.setattr(module.subprocess, "call", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(module, "learn_box", lambda *args, **kwargs: pytest.fail("learn_box darf nicht aufgerufen werden"))
+
+    class FakeResponse:
+        def __init__(self, text: str = "", status_code: int = 200, *, is_redirect: bool = False) -> None:
+            self.text = text
+            self.status_code = status_code
+            self.ok = status_code == 200
+            self.is_redirect = is_redirect
+            self.is_permanent_redirect = False
+
+    call_state = {"count": 0}
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        if url == "http://1.2.3.4/":
+            call_state["count"] += 1
+            if call_state["count"] == 1:
+                return FakeResponse("<html><body><input name='hostname' value='BoxX'></body></html>")
+            if call_state["count"] == 2:
+                return FakeResponse(status_code=307, is_redirect=True)
+        pytest.fail(f"Unerwarteter GET-Aufruf: {url}")
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    response = client.get("/devices")
+
+    assert call_state["count"] == 2
+    assert response.status_code == 502
+    assert response.get_json() == {
+        "status": "❌ Unerwartete Weiterleitung",
+        "details": "Hostname-Abfrage (1.2.3.4) lieferte HTTP 307 mit Weiterleitung",
+    }
+
+
+def test_devices_blocks_redirect_during_learn_box(webserver_app, monkeypatch, tmp_path):
+    module, client = webserver_app
+
+    module.LEASE_FILE = str(tmp_path / "dnsmasq.leases")
+    Path(module.LEASE_FILE).write_text("0 00:11:22:33:44:55 1.2.3.4 hostname * *\n", encoding="utf-8")
+
+    monkeypatch.setattr(module.subprocess, "call", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(module, "get_hostname_from_web", lambda ip: "BoxNeu")
+    monkeypatch.setattr(module, "fetch_trigger_delays", lambda ip: pytest.fail("Trigger-Delays dürfen nicht abgefragt werden"))
+
+    class FakeResponse:
+        def __init__(self, text: str = "", status_code: int = 200, *, is_redirect: bool = False) -> None:
+            self.text = text
+            self.status_code = status_code
+            self.ok = status_code == 200
+            self.is_redirect = is_redirect
+            self.is_permanent_redirect = False
+
+    call_state = {"count": 0}
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        if url == "http://1.2.3.4/":
+            call_state["count"] += 1
+            if call_state["count"] == 1:
+                return FakeResponse("<html><body><input name='hostname' value='BoxNeu'></body></html>")
+            if call_state["count"] == 2:
+                return FakeResponse(status_code=302, is_redirect=True)
+        pytest.fail(f"Unerwarteter GET-Aufruf: {url}")
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    response = client.get("/devices")
+
+    assert call_state["count"] == 2
+    assert response.status_code == 502
+    assert response.get_json() == {
+        "status": "❌ Unerwartete Weiterleitung",
+        "details": "Box-Lernvorgang (1.2.3.4) lieferte HTTP 302 mit Weiterleitung",
+    }
+
+
 def test_update_box_requires_token_for_remote_clients(webserver_app, monkeypatch):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})
@@ -626,6 +804,7 @@ def test_delay_inputs_are_clamped_to_upper_bound(webserver_app, monkeypatch):
             return self._json
 
     def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
         if url.endswith("/api/trigger-delays"):
             return FakeResponse(
                 ok=True,
@@ -739,6 +918,7 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
             return self._json
 
     def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
         if url.endswith("/api/trigger-delays"):
             return FakeResponse(ok=True, json_data={"delays": {day: [0 for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}})
         return FakeResponse(fake_html, True)
@@ -787,6 +967,7 @@ def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypa
             return self._json
 
     def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
         if url.endswith("/api/trigger-delays"):
             return FakeResponse(ok=True, json_data={"delays": {day: [0 for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}})
         return FakeResponse("<html></html>", True)
@@ -926,6 +1107,7 @@ def test_transfer_box_matches_firmware_day_index_mapping(webserver_app, monkeypa
             return self._json
 
     def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
         if url.endswith("/api/trigger-delays"):
             return FakeResponse(ok=True, json_data=fake_delays_payload)
         return FakeResponse(fake_html, True)
@@ -1033,6 +1215,7 @@ def test_fetch_trigger_delays_returns_numeric_matrix(webserver_app, monkeypatch)
 
     def fake_get(url, *args, **kwargs):
         assert url == "http://1.2.3.4/api/trigger-delays"
+        assert kwargs.get("allow_redirects") is False
         return FakeResponse()
 
     monkeypatch.setattr(module.requests, "get", fake_get)
@@ -1087,6 +1270,7 @@ def test_learn_box_uses_html_delays_when_api_unavailable(webserver_app, monkeypa
         if url.endswith("/api/trigger-delays"):
             raise module.requests.RequestException("api down")
         assert url == "http://1.2.3.4/"
+        assert kwargs.get("allow_redirects") is False
         return FakeResponse(fake_html, True)
 
     monkeypatch.setattr(module.requests, "get", fake_get)
