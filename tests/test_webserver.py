@@ -239,6 +239,41 @@ def test_transfer_box_returns_json_on_post_error(webserver_app, monkeypatch):
     assert response.get_json() == {"status": "❌ Fehler bei Übertragung"}
 
 
+def test_transfer_box_rejects_redirects(webserver_app, monkeypatch):
+    module, client = webserver_app
+    box = _empty_box(module)
+    module.save_config({"boxen": {"TestBox": box}, "boxOrder": []})
+
+    class RedirectResponse:
+        def __init__(self, status_code=307):
+            self.status_code = status_code
+            self.headers = {"Location": "http://127.0.0.1:8080/shutdown"}
+            self.ok = True
+            self.text = ""
+            self.is_redirect = True
+            self.is_permanent_redirect = False
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        if url == f"http://{box['ip']}/":
+            return RedirectResponse()
+        pytest.fail(f"Unerwarteter GET-Aufruf: {url}")
+
+    def fake_post(*args, **kwargs):
+        pytest.fail("POST darf bei Redirect nicht aufgerufen werden")
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+    monkeypatch.setattr(module.requests, "post", fake_post)
+
+    response = client.post("/transfer_box", json={"hostname": "TestBox"})
+
+    assert response.status_code == 502
+    assert response.get_json() == {
+        "status": "❌ Unerwartete Weiterleitung",
+        "details": "Box antwortete mit HTTP 307 und Weiterleitung",
+    }
+
+
 def test_transfer_box_requires_authorization(webserver_app, monkeypatch):
     module, client = webserver_app
     box = _empty_box(module)

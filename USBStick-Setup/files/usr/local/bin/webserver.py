@@ -839,9 +839,24 @@ def transfer_box():
         return jsonify({"status": "❌ IP unbekannt"})
 
     try:
-        r = requests.get(f"http://{ip}/", timeout=3)
+        r = requests.get(f"http://{ip}/", timeout=3, allow_redirects=False)
     except requests.RequestException:
         return jsonify({"status": "❌ Box nicht erreichbar"})
+    if r.is_redirect or r.is_permanent_redirect or 300 <= r.status_code < 400:
+        app.logger.warning(
+            "Transfer-Box für %s abgebrochen: unerwartete Weiterleitung (HTTP %s)",
+            hostname,
+            r.status_code,
+        )
+        return (
+            jsonify(
+                {
+                    "status": "❌ Unerwartete Weiterleitung",
+                    "details": f"Box antwortete mit HTTP {r.status_code} und Weiterleitung",
+                }
+            ),
+            502,
+        )
     if not r.ok:
         return jsonify({"status": "❌ Box nicht erreichbar"})
 
@@ -867,9 +882,29 @@ def transfer_box():
     }
 
     try:
-        r = requests.post(f"http://{ip}/updateAllLetters", json=payload, timeout=3)
+        r = requests.post(
+            f"http://{ip}/updateAllLetters",
+            json=payload,
+            timeout=3,
+            allow_redirects=False,
+        )
     except requests.RequestException:
         return jsonify({"status": "❌ Fehler bei Übertragung"})
+    if r.is_redirect or r.is_permanent_redirect or 300 <= r.status_code < 400:
+        app.logger.warning(
+            "Transfer-Box für %s abgebrochen: unerwartete Weiterleitung beim Update (HTTP %s)",
+            hostname,
+            r.status_code,
+        )
+        return (
+            jsonify(
+                {
+                    "status": "❌ Unerwartete Weiterleitung",
+                    "details": f"Update-Anfrage erhielt HTTP {r.status_code} mit Weiterleitung",
+                }
+            ),
+            502,
+        )
     if not r.ok:
         return jsonify({"status": "❌ Fehler bei Übertragung"})
 
