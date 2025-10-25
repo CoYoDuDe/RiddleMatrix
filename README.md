@@ -158,6 +158,9 @@ Damit nur berechtigte Clients diesen Vorgang starten können, gelten seitdem fol
   auf „Herunterfahren“ ab, speichert es im Browser und übermittelt es anschließend per HTTP-Header `X-Api-Key`.
 - Ungültige oder fehlende Tokens führen zu HTTP 403. Der Browser blendet in diesem Fall einen Hinweis ein und verlangt
   bei Bedarf die erneute Eingabe.
+- Reverse-Proxies oder HTTP-Weiterleitungen müssen künftig den gültigen Administrations-Token weiterreichen. Anfragen,
+  deren `X-Forwarded-For`- oder `Forwarded`-Header nicht ausschließlich lokale (`127.0.0.1`/`::1`) Stationen enthalten,
+  werden ohne Token konsequent mit HTTP 403 beantwortet.
 
 Vor jedem Abschalten erscheint zusätzlich ein Bestätigungsdialog, damit unbeabsichtigte Klicks keine sofortige
 Abschaltung mehr auslösen. Das Frontend informiert außerdem darüber, dass der Shutdown einige Minuten dauern kann.
@@ -177,5 +180,7 @@ Shutdown-Endpoint:
   Sicherheitsabfrage.
 - Fehlgeschlagene Versuche führen zu HTTP 403, werden serverseitig protokolliert und löschen das gespeicherte Token im
   Browser, damit Anwender:innen sofort eine neue Eingabe erzwingen können.
+- Auch hier gilt: Proxy-Ketten mit externen Hops müssen ein gültiges `X-Api-Key`-Token beilegen. Reine Loopback-Hop-Ketten
+  bleiben ohne Token zulässig.
 
 Der Workflow bleibt damit kompatibel zur bestehenden Shutdown-Logik und nutzt dieselbe Konfiguration.

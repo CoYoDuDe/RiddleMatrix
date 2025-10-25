@@ -5,6 +5,8 @@
 - `/shutdown` verlangt jetzt ein gültiges `SHUTDOWN_TOKEN` (außer bei Loopback-Anfragen), protokolliert fehlgeschlagene Versuche
   und liefert JSON-Antworten. Die Weboberfläche fragt das Token ab, bestätigt den Vorgang sichtbar und weist auf die Dauer des
   Herunterfahrens hin.
+- Loopback-Ausnahmen akzeptieren nur noch eindeutig lokale Verbindungswege; sobald `X-Forwarded-For` oder `Forwarded`
+  nicht ausschließlich Loopback-Adressen enthalten, ist zwingend ein gültiger Administrations-Token erforderlich.
 - `/reload_all` erfordert nun dieselbe Authentifizierung wie `/shutdown` (Token oder Loopback). Die Weboberfläche blendet den
   Button ohne gültiges Token aus, bietet einen Dialog zum Hinterlegen des Tokens, bestätigt den Vorgang zusätzlich und räumt
   bei Fehlversuchen gespeicherte Tokens automatisch.
