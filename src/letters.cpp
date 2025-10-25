@@ -32,6 +32,7 @@ void loadLetterData() {
     letterData['Z'] = letter_Z;
     letterData['#'] = letter_SUN;
     letterData['~'] = letter_WIFI;
+    letterData['*'] = letter_SUNPLUSRAD;
     letterData['&'] = letter_RIESENRAD;
     letterData['?'] = letter_RIDDLER;
 }
