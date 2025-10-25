@@ -11,6 +11,8 @@ constexpr char DEFAULT_WIFI_SSID[] = "YOUR_WIFI_SSID";
 constexpr char DEFAULT_WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
 constexpr char DEFAULT_HOSTNAME[] = "your-device-hostname";
 int wifi_connect_timeout = 30;
+char auth_token[AUTH_TOKEN_MAX_LENGTH] = "";
+bool auth_token_required = false;
 
 static const char DEFAULT_DAILY_LETTERS[NUM_TRIGGERS][NUM_DAYS] = {
     {'A', 'B', 'C', 'D', 'E', 'F', 'G'},
@@ -120,6 +122,14 @@ bool isValidDelayValue(unsigned long value) {
     return value <= 999UL;
 }
 
+size_t strnLength(const char *value, size_t maxLength) {
+    size_t length = 0;
+    while (length < maxLength && value[length] != '\0') {
+        ++length;
+    }
+    return length;
+}
+
 bool isLikelyValidVersion(uint16_t value) {
     return value != EEPROM_VERSION_INVALID && value != 0x0000 && value <= EEPROM_CONFIG_VERSION;
 }
@@ -224,6 +234,39 @@ void migrateLegacyLayout(uint16_t storedVersion, bool &migratedLegacyLayout) {
     migratedLegacyLayout = true;
 }
 
+bool containsInvalidTokenCharacters(const char *token, size_t maxLength) {
+    for (size_t index = 0; index < maxLength; ++index) {
+        unsigned char current = static_cast<unsigned char>(token[index]);
+        if (current == '\0') {
+            break;
+        }
+        if (current == 0xFF || current < 33 || current > 126) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void sanitizeAuthToken(char (&token)[AUTH_TOKEN_MAX_LENGTH]) {
+    bool invalid = false;
+    for (size_t index = 0; index < AUTH_TOKEN_MAX_LENGTH; ++index) {
+        unsigned char current = static_cast<unsigned char>(token[index]);
+        if (current == '\0') {
+            break;
+        }
+        if (current == 0xFF || current < 33 || current > 126) {
+            invalid = true;
+            break;
+        }
+    }
+
+    if (invalid) {
+        token[0] = '\0';
+    }
+
+    token[AUTH_TOKEN_MAX_LENGTH - 1] = '\0';
+}
+
 } // namespace
 
 void saveConfig() {
@@ -233,6 +276,10 @@ void saveConfig() {
     EEPROM.put(EEPROM_OFFSET_WIFI_SSID, wifi_ssid);
     EEPROM.put(EEPROM_OFFSET_WIFI_PASSWORD, wifi_password);
     EEPROM.put(EEPROM_OFFSET_HOSTNAME, hostname);
+    sanitizeAuthToken(auth_token);
+    EEPROM.put(EEPROM_OFFSET_AUTH_TOKEN, auth_token);
+    uint8_t authFlag = auth_token_required ? 1U : 0U;
+    EEPROM.put(EEPROM_OFFSET_AUTH_TOKEN_ENABLED, authFlag);
     sanitizeColorMatrix(dailyLetterColors);
     EEPROM.put(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
     EEPROM.put(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
@@ -255,6 +302,8 @@ void loadConfig() {
 
     resetLettersToDefaults();
     resetTriggerDelaysToDefaults();
+    auth_token[0] = '\0';
+    auth_token_required = false;
 
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.get(EEPROM_OFFSET_WIFI_SSID, wifi_ssid);
@@ -306,14 +355,6 @@ void loadConfig() {
         return false;
     };
 
-    auto strnLength = [](const char *value, size_t maxLength) {
-        size_t length = 0;
-        while (length < maxLength && value[length] != '\0') {
-            ++length;
-        }
-        return length;
-    };
-
     bool migratedLegacyLayout = false;
     uint16_t versionOffset = EEPROM_OFFSET_CONFIG_VERSION;
     uint16_t storedVersion = readStoredConfigVersion(versionOffset);
@@ -326,11 +367,19 @@ void loadConfig() {
     }
 
     if (usingCurrentLayout) {
+        EEPROM.get(EEPROM_OFFSET_AUTH_TOKEN, auth_token);
+        auth_token[AUTH_TOKEN_MAX_LENGTH - 1] = '\0';
+        sanitizeAuthToken(auth_token);
+        uint8_t storedAuthFlag = 0;
+        EEPROM.get(EEPROM_OFFSET_AUTH_TOKEN_ENABLED, storedAuthFlag);
+        auth_token_required = (storedAuthFlag == 1U);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
         sanitizeColorMatrix(dailyLetterColors);
     } else {
         migrateLegacyLayout(storedVersion, migratedLegacyLayout);
+        auth_token[0] = '\0';
+        auth_token_required = false;
     }
 
     sanitizeColorMatrix(dailyLetterColors);
@@ -489,6 +538,30 @@ void loadConfig() {
     if (autoModeByte > 1) {
         Serial.println(F("⚠️ Ungültiger Wert für autoDisplayMode! Setze Standard auf false."));
         autoDisplayMode = false;
+        eepromUpdated = true;
+    }
+
+    size_t tokenLength = strnLength(auth_token, AUTH_TOKEN_MAX_LENGTH);
+    bool tokenTooShort = auth_token_required && tokenLength < AUTH_TOKEN_MIN_LENGTH;
+    bool tokenInvalidChars = containsInvalidTokenCharacters(auth_token, AUTH_TOKEN_MAX_LENGTH);
+
+    if (tokenInvalidChars) {
+        Serial.println(F("🛑 Ungültige Zeichen im gespeicherten Auth-Token – Schutz deaktiviert."));
+        auth_token[0] = '\0';
+        auth_token_required = false;
+        eepromUpdated = true;
+    }
+
+    if (auth_token_required && tokenTooShort) {
+        Serial.println(F("🛑 Gespeichertes Auth-Token zu kurz – Schutz deaktiviert."));
+        auth_token[0] = '\0';
+        auth_token_required = false;
+        eepromUpdated = true;
+    }
+
+    if (!auth_token_required && tokenLength > 0) {
+        Serial.println(F("ℹ️ Authentifizierung deaktiviert – gespeichertes Token entfernt."));
+        auth_token[0] = '\0';
         eepromUpdated = true;
     }
 
