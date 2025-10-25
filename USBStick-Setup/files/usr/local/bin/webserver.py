@@ -30,6 +30,9 @@ _ALLOWED_HOSTNAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 SAFE_IP_PLACEHOLDER = "0.0.0.0"
 
+_FIRMWARE_LETTERS = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?")
+_ALLOWED_LETTERS = set(_FIRMWARE_LETTERS)
+
 app = Flask(__name__)
 LEASE_FILE = "/var/lib/misc/dnsmasq.leases"
 CONFIG_FILE = "/mnt/persist/boxen_config/boxen_config.json"
@@ -142,31 +145,52 @@ def sanitize_ipv4(value: Optional[str], *, placeholder: str = SAFE_IP_PLACEHOLDE
     return str(address)
 
 
+def sanitize_letter(value, *, default: str = "") -> str:
+    if value is None:
+        return default
+
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8", "ignore")
+        except Exception:
+            value = value.decode("latin-1", "ignore")
+    elif not isinstance(value, str):
+        value = str(value)
+
+    candidate = value.strip()
+    if not candidate:
+        return default
+
+    first_char = candidate[0]
+    if "a" <= first_char <= "z":
+        first_char = first_char.upper()
+
+    if first_char in _ALLOWED_LETTERS:
+        return first_char
+
+    return default
+
+
 def _normalize_letter_list(values, legacy_value=None):
     normalized = ["" for _ in range(TRIGGER_SLOTS)]
     if isinstance(values, list):
         for idx in range(min(TRIGGER_SLOTS, len(values))):
-            val = values[idx]
-            if isinstance(val, str):
-                normalized[idx] = val
-            elif val is not None:
-                normalized[idx] = str(val)
+            normalized[idx] = sanitize_letter(values[idx])
     elif isinstance(values, dict):
         for key, val in values.items():
             if str(key).isdigit():
                 idx = int(str(key))
                 if 0 <= idx < TRIGGER_SLOTS:
-                    if isinstance(val, str):
-                        normalized[idx] = val
-                    elif val is not None:
-                        normalized[idx] = str(val)
+                    normalized[idx] = sanitize_letter(val)
     elif isinstance(values, str):
-        normalized[0] = values
+        normalized[0] = sanitize_letter(values)
     elif values is not None:
-        normalized[0] = str(values)
+        normalized[0] = sanitize_letter(values)
 
     if isinstance(legacy_value, str) and not normalized[0]:
-        normalized[0] = legacy_value
+        legacy_sanitized = sanitize_letter(legacy_value)
+        if legacy_sanitized:
+            normalized[0] = legacy_sanitized
     return normalized
 
 
@@ -710,9 +734,9 @@ def update_box():
 
     if day in DAYS and isinstance(trigger_index, int) and 0 <= trigger_index < TRIGGER_SLOTS:
         if "letter" in data and isinstance(data.get("letter"), str):
-            letter_value = data["letter"]
-            if box["letters"][day][trigger_index] != letter_value:
-                box["letters"][day][trigger_index] = letter_value
+            sanitized_letter = sanitize_letter(data["letter"])
+            if box["letters"][day][trigger_index] != sanitized_letter:
+                box["letters"][day][trigger_index] = sanitized_letter
                 updated = True
         if "color" in data and isinstance(data.get("color"), str):
             color_value = _sanitize_color(data["color"])
