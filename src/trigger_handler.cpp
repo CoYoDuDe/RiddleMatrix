@@ -247,12 +247,6 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
 
     triggerActive = true;
 
-    if (letter == '*') {
-        letter = (random(2) == 0) ? '#' : '&';
-        Serial.print(F("🔀 `*` wurde ersetzt durch: "));
-        Serial.println(letter);
-    }
-
     int today = getRTCWeekday();
     Serial.print(F("📅 Heutiger Wochentag: "));
     Serial.println(today);
