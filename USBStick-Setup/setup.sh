@@ -211,7 +211,7 @@ enable_systemd_units() {
 
   local kiosk_unit="kiosk-startx.service"
   if [[ -f "$TARGET_ROOT/etc/systemd/system/$kiosk_unit" ]]; then
-    run_cmd systemctl restart "$kiosk_unit"
+    run_cmd systemctl restart --no-block "$kiosk_unit"
   else
     warn "Service file $kiosk_unit missing; cannot restart"
   fi
