@@ -163,7 +163,7 @@ Legacy-Skripte wurden in [`USBStick-Setup/archive/legacy-root-scripts/`](USBStic
 ### Hotspot-Zugangsdaten für den USB-Stick-Installer
 
 - Die Vorlage [`USBStick-Setup/files/etc/usbstick/public_ap.env.example`](USBStick-Setup/files/etc/usbstick/public_ap.env.example) enthält gültige Platzhalterwerte (`RiddleMatrix-Hotspot`, `BittePasswortAnpassen123!`) für SSID und WPA-Passphrase.
-- `setup.sh` kopiert die Vorlage bei der Installation einmalig nach `/etc/usbstick/public_ap.env`, sofern dort noch keine Datei existiert. Dry-Runs weisen den Schritt explizit als geplante Aktion aus.
+- `setup.sh` kopiert die Vorlage bei der Installation einmalig nach `/etc/usbstick/public_ap.env`, sofern dort noch keine Datei existiert. Dry-Runs weisen den Schritt explizit als geplante Aktion aus. Sowohl der reguläre `rsync`-Pfad als auch der `tar`-Fallback schließen die Datei beim reinen Kopieren des Payloads aus und protokollieren, dass vorhandene Hotspot-Konfigurationen unangetastet bleiben.
 - `bootlocal.sh` und `root/install_public_ap.sh` protokollieren fehlende oder unvollständige Dateien, verweisen auf die Vorlage und greifen automatisch auf dieselben Standardwerte zurück, anstatt mit einem Fehler abzubrechen.
 - Nach der Installation sollten die Werte in `/etc/usbstick/public_ap.env` direkt angepasst werden, um individuelle Hotspot-Zugangsdaten zu verwenden.
 
