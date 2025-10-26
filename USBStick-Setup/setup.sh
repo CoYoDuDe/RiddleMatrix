@@ -191,6 +191,7 @@ ensure_directories() {
     "$TARGET_ROOT/usr/local/bin"
     "$TARGET_ROOT/usr/local/libexec"
     "$TARGET_ROOT/etc/systemd/system"
+    "$TARGET_ROOT/etc/dnsmasq.d"
     "$TARGET_ROOT/etc/usbstick"
   )
   for dir in "${dirs[@]}"; do
@@ -222,6 +223,7 @@ set_permissions() {
 
   local -a config_paths=(
     "home/kioskuser/.xinitrc"
+    "etc/dnsmasq.d/riddlematrix-hotspot.conf"
   )
   for rel in "${config_paths[@]}"; do
     local target="$TARGET_ROOT/$rel"
