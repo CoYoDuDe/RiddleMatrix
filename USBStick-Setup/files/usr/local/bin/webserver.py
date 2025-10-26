@@ -853,9 +853,9 @@ def remove_box():
 @app.route("/update_box_order", methods=["POST"])
 def update_box_order():
 
-    data = request.json
+    data = request.get_json(silent=True) or {}
     boxOrder = data.get("boxOrder")
-    if boxOrder and isinstance(boxOrder, list):
+    if isinstance(boxOrder, list):
         config = load_config()
         sanitized_order = []
         seen = set()
