@@ -22,9 +22,8 @@ if ! public_ap_load_env; then
             FALLBACK_CREDENTIALS=1
             ;;
         missing_ssid|missing_passphrase)
-            echo "⚠️ $PUBLIC_AP_ENV_ERROR Verwende Standardwerte aus dem Installer." >&2
-            public_ap_apply_defaults
-            FALLBACK_CREDENTIALS=1
+            echo "❌ $PUBLIC_AP_ENV_ERROR Hotspot-Start wird abgebrochen." >&2
+            exit 1
             ;;
         *)
             echo "⚠️ $PUBLIC_AP_ENV_ERROR Hotspot-Start wird übersprungen." >&2
