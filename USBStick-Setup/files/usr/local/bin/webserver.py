@@ -253,6 +253,26 @@ def sanitize_hostname(hostname: Optional[str], *, fallback_prefix: str = "box") 
     return value[:64]
 
 
+def _allocate_unique_hostname(base_name: str, config: dict) -> str:
+    target = sanitize_hostname(base_name)
+    if not isinstance(config, dict):
+        return target
+
+    boxen = config.get("boxen")
+    if not isinstance(boxen, dict):
+        return target
+
+    if target not in boxen:
+        return target
+
+    suffix = 2
+    while True:
+        candidate = sanitize_hostname(f"{target}-{suffix}")
+        if candidate not in boxen:
+            return candidate
+        suffix += 1
+
+
 def sanitize_ipv4(value: Optional[str], *, placeholder: str = SAFE_IP_PLACEHOLDER) -> str:
     if isinstance(value, bytes):
         try:
@@ -719,30 +739,29 @@ def get_connected_devices():
                             continue
 
                         hostname = sanitize_hostname(hostname)
+                        boxen = config.get("boxen", {})
+                        identifier = _allocate_unique_hostname(hostname, config)
 
-                        hostname_exists = False
-                        for existing_identifier, box in list(config["boxen"].items()):
-                            if existing_identifier == hostname:
-                                hostname_exists = True
+                        existing_box = boxen.get(identifier)
+                        if isinstance(existing_box, dict) and existing_box.get("ip") != ip:
+                            existing_box["ip"] = ip
+                            save_config(config)
 
-                                if box["ip"] != ip:
-                                    config["boxen"][hostname]["ip"] = ip
-                                    save_config(config)
-                                break
-
-                        ip_exists = False
-                        for existing_identifier, box in list(config["boxen"].items()):
-                            if box["ip"] == ip and existing_identifier != hostname:
-                                ip_exists = True
-
-                                config["boxen"][existing_identifier]["ip"] = SAFE_IP_PLACEHOLDER
+                        for existing_identifier, box in list(boxen.items()):
+                            if (
+                                isinstance(box, dict)
+                                and box.get("ip") == ip
+                                and existing_identifier != identifier
+                            ):
+                                box["ip"] = SAFE_IP_PLACEHOLDER
                                 save_config(config)
                                 break
 
-                        devices.append({"ip": ip, "hostname": hostname})
+                        devices.append({"ip": ip, "hostname": identifier})
 
-                        if not hostname_exists:
-                            learn_box(ip, hostname)
+                        if existing_box is None:
+                            learn_box(ip, identifier)
+                            config = load_config()
     return devices
 
 def get_hostname_from_web(ip):

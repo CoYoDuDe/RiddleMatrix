@@ -240,6 +240,82 @@ def test_get_connected_devices_accepts_double_quote_hostname(webserver_app, tmp_
     assert devices == [{"ip": "192.0.2.10", "hostname": "BoxAlpha"}]
 
 
+def test_get_connected_devices_assigns_unique_names_for_collisions(
+    webserver_app, tmp_path, monkeypatch
+):
+    module, _client = webserver_app
+
+    lease_path = tmp_path / "dnsmasq.leases"
+    lease_path.write_text(
+        "\n".join(
+            [
+                "1697043087 aa:bb:cc:dd:ee:01 192.0.2.20 box-one *",
+                "1697043088 aa:bb:cc:dd:ee:02 192.0.2.21 box-two *",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    module.LEASE_FILE = str(lease_path)
+
+    module.save_config({"boxen": {}, "boxOrder": []})
+
+    monkeypatch.setattr(module.subprocess, "call", lambda *args, **kwargs: 0)
+
+    class FakeResponse:
+        def __init__(self, text: str, ok: bool = True) -> None:
+            self.text = text
+            self.ok = ok
+            self.status_code = 200
+            self.is_redirect = False
+            self.is_permanent_redirect = False
+
+    html_by_ip = {
+        "192.0.2.20": "<html><body><input name=\"hostname\" value=\"Box!\"></body></html>",
+        "192.0.2.21": "<html><body><input name=\"hostname\" value=\"Box?\"></body></html>",
+    }
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        ip = url.split("//", 1)[1].split("/", 1)[0]
+        html = html_by_ip.get(ip)
+        if html is None:
+            pytest.fail(f"Unbekannte URL {url}")
+        return FakeResponse(html)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    learn_calls = []
+
+    def fake_learn_box(ip, identifier):
+        learn_calls.append((ip, identifier))
+        config = module.load_config()
+        if identifier not in config["boxen"]:
+            config["boxen"][identifier] = _empty_box(module, ip=ip)
+            if identifier not in config["boxOrder"]:
+                config["boxOrder"].append(identifier)
+            module.save_config(config)
+
+    monkeypatch.setattr(module, "learn_box", fake_learn_box)
+
+    devices = module.get_connected_devices()
+
+    assert devices == [
+        {"ip": "192.0.2.20", "hostname": "Box"},
+        {"ip": "192.0.2.21", "hostname": "Box-2"},
+    ]
+
+    assert learn_calls == [
+        ("192.0.2.20", "Box"),
+        ("192.0.2.21", "Box-2"),
+    ]
+
+    persisted = json.loads(Path(module.CONFIG_FILE).read_text(encoding="utf-8"))
+    assert set(persisted["boxen"].keys()) == {"Box", "Box-2"}
+    assert persisted["boxen"]["Box"]["ip"] == "192.0.2.20"
+    assert persisted["boxen"]["Box-2"]["ip"] == "192.0.2.21"
+
+
 def test_learn_box_sanitizes_hostnames_and_devices_output(webserver_app, monkeypatch):
     module, client = webserver_app
 
