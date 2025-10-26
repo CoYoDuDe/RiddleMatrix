@@ -35,6 +35,10 @@ sudo systemctl restart kiosk-startx.service
 sudo systemctl status kiosk-startx.service
 ```
 
+`kiosk-startx.service` ist jetzt als `Type=simple` ausgelegt und startet `startx` ohne Zeitlimit. Dank `Restart=on-failure`
+und `RestartSec=5` versucht systemd einen Neustart, falls Firefox oder der X-Server unerwartet enden. Damit die neue
+Konfiguration greift, ist `systemctl daemon-reload` nach jeder Änderung an der Service-Datei zwingend erforderlich.
+
 Während `setup.sh` auf dem Live-System läuft, prüft es zusätzlich, ob der Benutzer `kioskuser` existiert, und legt ihn bei
 Bedarf samt Home-Verzeichnis und `/bin/bash` als Login-Shell an. Jeder Pfad wird im Log dokumentiert – inklusive Dry-Run-
 Hinweisen sowie klarer Warnungen, falls das Anlegen scheitert. Misslingt die Benutzeranlage trotz Versuch, wird der Neustart
