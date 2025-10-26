@@ -77,7 +77,9 @@ nachinstallieren – der Webserver ist nach Abschluss von `setup.sh` sofort star
 Der USB-Stick liefert mit [`files/etc/usbstick/public_ap.env.example`](files/etc/usbstick/public_ap.env.example) eine Vorlage
 für die WLAN-Zugangsdaten des Boot-Hotspots. Während der Installation kopiert `setup.sh` die Vorlage nach
 `/etc/usbstick/public_ap.env`, sofern dort noch keine individuelle Datei existiert. Die Datei wird mit restriktiven Rechten
-(`0640`) abgelegt.
+(`0640`) abgelegt. Das reine Kopieren des Payloads schließt `/etc/usbstick/public_ap.env` konsequent aus – unabhängig davon,
+ob `setup.sh` den bevorzugten `rsync`-Pfad oder den automatischen `tar`-Fallback nutzt. Das Skript protokolliert den Ausschluss
+explizit, sodass in den Logs ersichtlich bleibt, dass vorhandene Hotspot-Konfigurationen nicht überschrieben werden.
 
 Passen Sie unmittelbar nach der Installation SSID und WPA-Passphrase an, damit der Hotspot nicht mit den Standardwerten
 (`RiddleMatrix-Hotspot` / `BittePasswortAnpassen123!`) aktiv bleibt:
