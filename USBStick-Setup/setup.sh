@@ -104,8 +104,14 @@ validate_environment() {
 
 copy_payload() {
   log "Deploying files from $FILES_DIR to $TARGET_ROOT"
-  local -a excluded_exact_paths=("$PUBLIC_AP_ENV_FILE")
-  local -a excluded_pattern_paths=(".gitkeep")
+  local -a excluded_exact_paths=(
+    "$PUBLIC_AP_ENV_FILE"
+    "etc/usbstick/public_ap.env.local"
+  )
+  local -a excluded_pattern_paths=(
+    ".gitkeep"
+    "etc/usbstick/public_ap.env.d/*"
+  )
 
   for rel in "${excluded_exact_paths[@]}"; do
     log "Bestehende Hotspot-Konfiguration $TARGET_ROOT/$rel bleibt unverändert (vom Kopiervorgang ausgeschlossen)"
@@ -123,11 +129,29 @@ copy_payload() {
     rsync "${rsync_args[@]}" "$FILES_DIR"/ "$TARGET_ROOT"/
   else
     warn "rsync not available; falling back to tar for deployment"
+    local -a tar_exclude_display=()
+    local -a tar_exclude_args=()
+    for pattern in "${excluded_pattern_paths[@]}"; do
+      tar_exclude_display+=("$pattern")
+      tar_exclude_args+=("--exclude=$pattern" "--exclude=./$pattern")
+      if [[ "$pattern" != */* ]]; then
+        tar_exclude_args+=("--exclude=*/$pattern")
+      fi
+    done
+    for rel in "${excluded_exact_paths[@]}"; do
+      tar_exclude_display+=("$rel")
+      tar_exclude_args+=("--exclude=$rel" "--exclude=./$rel")
+    done
+
     if ((DRY_RUN)); then
       (cd "$FILES_DIR" && find . -mindepth 1 -print | sed 's#^./##' | while read -r path; do
         local skip=0
         for pattern in "${excluded_pattern_paths[@]}"; do
-          if [[ "$path" == *"$pattern" ]]; then
+          if [[ "$path" == $pattern ]]; then
+            skip=1
+            break
+          fi
+          if [[ "$pattern" != */* && "$path" == */$pattern ]]; then
             skip=1
             break
           fi
@@ -147,13 +171,14 @@ copy_payload() {
         log "[dry-run] copy $path"
       done)
     else
+      if ((${#tar_exclude_display[@]})); then
+        local joined=""
+        printf -v joined '%s, ' "${tar_exclude_display[@]}"
+        joined=${joined%%, }
+        log "Tar-Fallback überspringt kundenspezifische Dateien: $joined"
+      fi
       local -a tar_args=(cf -)
-      for pattern in "${excluded_pattern_paths[@]}"; do
-        tar_args+=("--exclude=$pattern")
-      done
-      for rel in "${excluded_exact_paths[@]}"; do
-        tar_args+=("--exclude=./$rel")
-      done
+      tar_args+=("${tar_exclude_args[@]}")
       (cd "$FILES_DIR" && tar "${tar_args[@]}" .) | (cd "$TARGET_ROOT" && tar xpf -)
     fi
   fi
