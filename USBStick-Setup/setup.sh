@@ -8,6 +8,8 @@ TARGET_ROOT="/"
 DRY_RUN=0
 SKIP_SYSTEMD=0
 SKIP_HOOKS=0
+PUBLIC_AP_ENV_TEMPLATE="etc/usbstick/public_ap.env.example"
+PUBLIC_AP_ENV_FILE="etc/usbstick/public_ap.env"
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1"
@@ -106,6 +108,7 @@ copy_payload() {
     local -a rsync_args=(-a)
     ((DRY_RUN)) && rsync_args+=(-n -v)
     rsync_args+=(--exclude='.gitkeep')
+    rsync_args+=(--exclude="$PUBLIC_AP_ENV_FILE")
     rsync "${rsync_args[@]}" "$FILES_DIR"/ "$TARGET_ROOT"/
   else
     warn "rsync not available; falling back to tar for deployment"
@@ -116,6 +119,34 @@ copy_payload() {
     else
       (cd "$FILES_DIR" && tar cf - .) | (cd "$TARGET_ROOT" && tar xpf -)
     fi
+  fi
+}
+
+deploy_public_ap_env() {
+  local template_source="$FILES_DIR/$PUBLIC_AP_ENV_TEMPLATE"
+  local target_file="$TARGET_ROOT/$PUBLIC_AP_ENV_FILE"
+
+  [[ -f "$template_source" ]] || return
+
+  if ((DRY_RUN)); then
+    if [[ -f "$target_file" ]]; then
+      log "[dry-run] Hotspot-Umgebung $target_file bleibt unverändert"
+    else
+      log "[dry-run] install -m 0640 $template_source $target_file"
+    fi
+    return
+  fi
+
+  mkdir -p "$(dirname "$target_file")"
+  if [[ ! -f "$target_file" ]]; then
+    install -m 0640 "$template_source" "$target_file"
+    return
+  fi
+
+  if cmp -s "$template_source" "$target_file"; then
+    install -m 0640 "$template_source" "$target_file"
+  else
+    warn "Bestehende Hotspot-Umgebungsdatei $target_file bleibt unverändert"
   fi
 }
 
@@ -166,6 +197,15 @@ set_permissions() {
       warn "Konfigurationsdatei $rel fehlt; überspringe chmod"
     fi
   done
+
+  local public_ap_env="$TARGET_ROOT/$PUBLIC_AP_ENV_FILE"
+  if [[ -e "$public_ap_env" ]]; then
+    run_cmd chmod 0640 "$public_ap_env"
+  elif ((DRY_RUN)); then
+    log "[dry-run] Hotspot-Umgebungsdatei $public_ap_env würde erzeugt"
+  else
+    warn "Hotspot-Umgebungsdatei $PUBLIC_AP_ENV_FILE wurde nicht gefunden"
+  fi
 
   local leases="$TARGET_ROOT/var/lib/misc/dnsmasq.leases"
   local owner_user="root"
@@ -257,6 +297,7 @@ main() {
   validate_environment
   ensure_directories
   copy_payload
+  deploy_public_ap_env
   set_permissions
   enable_systemd_units
   run_post_install_hooks

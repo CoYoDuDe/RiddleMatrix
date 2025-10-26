@@ -7,32 +7,60 @@ PUBLIC_AP_HOSTAPD_CONFIG=${PUBLIC_AP_HOSTAPD_CONFIG:-${PUBLIC_AP_HOSTAPD_DIR}/ho
 PUBLIC_AP_HOSTAPD_TEMPLATE=${PUBLIC_AP_HOSTAPD_TEMPLATE:-${PUBLIC_AP_HOSTAPD_DIR}/hostapd.conf.template}
 PUBLIC_AP_DNSMASQ_CONFIG=${PUBLIC_AP_DNSMASQ_CONFIG:-/etc/dnsmasq.conf}
 
+PUBLIC_AP_DEFAULT_SSID=${PUBLIC_AP_DEFAULT_SSID:-"RiddleMatrix-Hotspot"}
+PUBLIC_AP_DEFAULT_WPA_PASSPHRASE=${PUBLIC_AP_DEFAULT_WPA_PASSPHRASE:-"BittePasswortAnpassen123!"}
+
+PUBLIC_AP_ENV_STATUS="uninitialized"
+PUBLIC_AP_ENV_ERROR=""
+
 public_ap_log() {
     printf '%s\n' "$*"
 }
 
+public_ap_apply_defaults() {
+    SSID=$PUBLIC_AP_DEFAULT_SSID
+    WPA_PASSPHRASE=$PUBLIC_AP_DEFAULT_WPA_PASSPHRASE
+    PUBLIC_AP_ENV_STATUS="defaults"
+    PUBLIC_AP_ENV_ERROR=""
+}
+
 public_ap_load_env() {
     local env_file=${1:-$PUBLIC_AP_ENV_FILE}
+    PUBLIC_AP_ENV_STATUS="error"
+    PUBLIC_AP_ENV_ERROR=""
+
     if [[ ! -f "$env_file" ]]; then
-        public_ap_log "❌ Umgebungsdatei $env_file fehlt."
+        PUBLIC_AP_ENV_STATUS="missing_file"
+        PUBLIC_AP_ENV_ERROR="Umgebungsdatei $env_file fehlt."
+        return 1
+    fi
+    if [[ ! -s "$env_file" ]]; then
+        PUBLIC_AP_ENV_STATUS="empty_file"
+        PUBLIC_AP_ENV_ERROR="Umgebungsdatei $env_file ist leer."
         return 1
     fi
     # shellcheck disable=SC1090
     source "$env_file"
 
     if [[ -z ${SSID:-} ]]; then
-        public_ap_log "❌ SSID ist nicht gesetzt (Datei: $env_file)."
+        PUBLIC_AP_ENV_STATUS="missing_ssid"
+        PUBLIC_AP_ENV_ERROR="SSID ist nicht gesetzt (Datei: $env_file)."
         return 1
     fi
     if [[ -z ${WPA_PASSPHRASE:-} ]]; then
-        public_ap_log "❌ WPA_PASSPHRASE ist nicht gesetzt (Datei: $env_file)."
+        PUBLIC_AP_ENV_STATUS="missing_passphrase"
+        PUBLIC_AP_ENV_ERROR="WPA_PASSPHRASE ist nicht gesetzt (Datei: $env_file)."
         return 1
     fi
     local pass_length=${#WPA_PASSPHRASE}
     if ((pass_length < 8 || pass_length > 63)); then
-        public_ap_log "❌ WPA_PASSPHRASE muss zwischen 8 und 63 Zeichen lang sein (aktuell: $pass_length)."
+        PUBLIC_AP_ENV_STATUS="invalid_passphrase_length"
+        PUBLIC_AP_ENV_ERROR="WPA_PASSPHRASE muss zwischen 8 und 63 Zeichen lang sein (aktuell: $pass_length)."
         return 1
     fi
+
+    PUBLIC_AP_ENV_STATUS="ok"
+    PUBLIC_AP_ENV_ERROR=""
 }
 
 public_ap_detect_wifi_iface() {
@@ -81,7 +109,7 @@ public_ap_render_hostapd_config() {
 
     if [[ -f $config && -f $template ]]; then
         :
-    elif [[ -f $config && grep -q '@SSID@' "$config" ]]; then
+    elif [[ -f $config ]] && grep -q '@SSID@' "$config"; then
         cp "$config" "$template"
     elif [[ -f $config && ! -f $template ]]; then
         local tmp_template
