@@ -72,8 +72,8 @@ nachinstallieren – der Webserver ist nach Abschluss von `setup.sh` sofort star
 
 Der USB-Stick liefert mit [`files/etc/usbstick/public_ap.env.example`](files/etc/usbstick/public_ap.env.example) eine Vorlage
 für die WLAN-Zugangsdaten des Boot-Hotspots. Während der Installation kopiert `setup.sh` die Vorlage nach
-`/etc/usbstick/public_ap.env`, sofern dort noch keine individuelle Datei existiert oder lediglich die unveränderte Vorlage
-vorliegt. Die Datei wird mit restriktiven Rechten (`0640`) abgelegt.
+`/etc/usbstick/public_ap.env`, sofern dort noch keine individuelle Datei existiert. Die Datei wird mit restriktiven Rechten
+(`0640`) abgelegt.
 
 Passen Sie unmittelbar nach der Installation SSID und WPA-Passphrase an, damit der Hotspot nicht mit den Standardwerten
 (`RiddleMatrix-Hotspot` / `BittePasswortAnpassen123!`) aktiv bleibt:
@@ -86,8 +86,9 @@ WPA_PASSPHRASE="SehrSicheresKennwort123"
 ```
 
 `bootlocal.sh` und `root/install_public_ap.sh` starten den Hotspot weiterhin, selbst wenn die Datei fehlt oder leer ist: Sie
-protokollieren den Grund und greifen auf dieselben Standardwerte zurück. Sobald gültige Werte eingetragen wurden, greifen die
-Skripte automatisch auf die konfigurierte SSID/Passphrase zurück und geben im Fehlerfall eine gut verständliche Meldung aus.
+protokollieren den Grund, verweisen auf die Vorlage und greifen auf dieselben Standardwerte zurück. Sobald gültige Werte
+eingetragen wurden, nutzen die Skripte automatisch die konfigurierte SSID/Passphrase und geben im Fehlerfall eine gut
+verständliche Meldung aus.
 
 ## Gesicherte Lease-Datei für dnsmasq
 
