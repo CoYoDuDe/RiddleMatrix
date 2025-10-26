@@ -145,6 +145,7 @@ set_permissions() {
     "etc/hostapd/ifupdown.sh"
     "root/install_public_ap.sh"
     "root/install_public_ap_setuphelper.sh"
+    "home/kioskuser/.xinitrc"
   )
   for rel in "${exec_paths[@]}"; do
     local target="$TARGET_ROOT/$rel"
@@ -155,9 +156,7 @@ set_permissions() {
     fi
   done
 
-  local -a config_paths=(
-    "home/kioskuser/.xinitrc"
-  )
+  local -a config_paths=()
   for rel in "${config_paths[@]}"; do
     local target="$TARGET_ROOT/$rel"
     if [[ -e "$target" ]]; then
