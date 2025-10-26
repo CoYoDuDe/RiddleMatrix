@@ -342,6 +342,7 @@ enable_systemd_units() {
 
   local -a units=(bootlocal.service webserver.service kiosk-startx.service)
   run_cmd systemctl daemon-reload
+  log "Systemd-Konfiguration neu geladen; kiosk-startx.service läuft nun als Type=simple mit automatischem Neustart bei Fehlern."
   for unit in "${units[@]}"; do
     if [[ -f "$TARGET_ROOT/etc/systemd/system/$unit" ]]; then
       run_cmd systemctl enable "$unit"
