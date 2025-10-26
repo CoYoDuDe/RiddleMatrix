@@ -1097,6 +1097,61 @@ def test_transfer_box_matches_firmware_day_index_mapping(webserver_app, monkeypa
     assert post_calls == []
 
 
+def test_transfer_box_ignores_remote_color_case_differences(webserver_app, monkeypatch):
+    module, client = webserver_app
+
+    box = _empty_box(module)
+    box["letters"]["mo"][0] = "A"
+    box["colors"]["mo"][0] = "#ff00ff"
+
+    module.save_config({"boxen": {"TestBox": box}, "boxOrder": []})
+
+    remote_html = (
+        "<html><body>"
+        "<select name='letter_0_1'><option value='A' selected>A</option></select>"
+        "<input type='color' name='color_0_1' value='#FF00FF'>"
+        "</body></html>"
+    )
+
+    delays_payload = {"delays": {day: list(box["delays"][day]) for day in module.DAYS}}
+
+    class FakeResponse:
+        def __init__(self, text: str = "", ok: bool = True, json_data=None, status_code: int = 200) -> None:
+            self.text = text
+            self.ok = ok
+            self._json = json_data
+            self.status_code = status_code
+            self.is_redirect = False
+            self.is_permanent_redirect = False
+
+        def json(self):
+            if self._json is None:
+                raise ValueError("No JSON data")
+            return self._json
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        if url.endswith("/api/trigger-delays"):
+            return FakeResponse(ok=True, json_data=delays_payload)
+        assert url == f"http://{box['ip']}/"
+        return FakeResponse(remote_html, True)
+
+    post_calls = []
+
+    def fake_post(*args, **kwargs):
+        post_calls.append((args, kwargs))
+        return FakeResponse()
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+    monkeypatch.setattr(module.requests, "post", fake_post)
+
+    response = client.post("/transfer_box", json={"hostname": "TestBox"})
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "⏭️ Bereits aktuell"}
+    assert post_calls == []
+
+
 def test_extract_box_state_supports_trigger_first_schema(webserver_app):
     module, _client = webserver_app
 
