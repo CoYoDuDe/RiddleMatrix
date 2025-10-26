@@ -13,9 +13,9 @@ Diese Datei enthält eine Übersicht offener und bereits umgesetzter Aufgaben f�
 - [x] RS485‑Trigger mit tagesabhängigen Verzögerungsmatrizen
 - [x] Automatische Buchstabenausgabe in festen Intervallen
 - [x] Mehrspurige Tageskonfiguration (Buchstaben & Farben pro Triggerleitung)
-- [x] Weboberfläche für WLAN‑Daten, Anzeigeparameter und RTC‑Zeit
-- [x] Web‑UI absichern (Authentifizierung, Schutzmechanismen) – historische Token-Implementierung, bleibt deaktiviert (siehe README)
-- [x] WiFi‑Symbolanzeige und automatisches Abschalten des Webservers bei Verbindungsverlust
+- [x] Weboberfläche für Netzwerkparameter, Anzeigeeinstellungen und RTC-Zeit
+- [x] Web-UI absichern (Authentifizierung, Schutzmechanismen) – dokumentierte Altmechanik bleibt deaktiviert
+- [x] Funksignal-Symbolanzeige und automatisches Abschalten des Webservers bei Verbindungsverlust
 - [x] EEPROM‑Speicherung aller Einstellungen inklusive Farben je Wochentag
 - [x] CI aufsetzen, die den Arduino‑Code baut
 - [x] Zeitsynchronisation per NTP

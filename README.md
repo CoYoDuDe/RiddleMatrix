@@ -1,7 +1,7 @@
 # RiddleMatrix
 
 Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details.
-RiddleMatrix ist eine Firmware für den ESP8266, die eine 64x64 RGB-LED-Matrix ansteuert. Für jeden Wochentag und jede der drei RS485-Triggerleitungen lassen sich individuelle Buchstaben, Farben **und Verzögerungszeiten** festlegen. Die Buchstaben erscheinen entweder zeitgesteuert oder per RS485-Trigger. Über WLAN lässt sich das Gerät konfigurieren; alle Einstellungen werden im EEPROM gespeichert.
+RiddleMatrix ist eine Firmware für den ESP8266, die eine 64x64 RGB-LED-Matrix ansteuert. Für jeden Wochentag und jede der drei RS485-Triggerleitungen lassen sich individuelle Buchstaben, Farben **und Verzögerungszeiten** festlegen. Die Buchstaben erscheinen entweder zeitgesteuert oder per RS485-Trigger. Die Konfiguration erfolgt über die integrierte Weboberfläche; alle Einstellungen werden im EEPROM gespeichert.
 
 Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
@@ -13,22 +13,11 @@ Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 - **RS485-Transceiver** für externe Trigger
 - Verdrahtung gemäß `config.h`
 
-## WLAN-Konfiguration
+## Konfigurationsoberfläche
 
-1. In `config.h` `wifi_ssid`, `wifi_password`, `hostname` und optional `wifi_connect_timeout` anpassen.
+1. In `config.h` die Variablen `wifi_ssid`, `wifi_password`, `hostname` und optional `wifi_connect_timeout` anpassen.
 2. Firmware kompilieren und hochladen.
 3. Nach erfolgreicher Verbindung `http://<hostname>` aufrufen und die Zugangsdaten im EEPROM speichern.
-
-### Token-basierter Administrationsschutz (historisch)
-
-- Die frühere Token-Mechanik bleibt als historische Referenz im Code und in der Weboberfläche dokumentiert, ist jedoch dauerhaft deaktiviert.
-- Ein erneutes Aktivieren ist ausdrücklich **nicht vorgesehen**; bitte diese Funktion nicht wieder einschalten, um das aktuelle Sicherheitskonzept nicht zu verwässern.
-- Der WLAN-Zugang des Systems steht ausschließlich in einem kurzen Zeitfenster direkt nach dem Neustart zur Verfügung. Sobald die anfängliche Konfigurationsphase abgeschlossen ist, schaltet die Firmware das Funkmodul ab und arbeitet dauerhaft offline.
-- Bereits im EEPROM hinterlegte Tokens werden nicht mehr ausgewertet. Beim Booten entfernt die Firmware sie weiterhin, damit keine Altbestände aktiv bleiben.
-
-## Sicherheitsstrategie
-
-RiddleMatrix wird ausschließlich über das temporäre WLAN-Fenster unmittelbar nach einem Neustart administriert. Danach bleibt das Gerät vollständig offline; eine Passwort-, Token- oder sonstige Authentifizierungslogik ist bewusst nicht vorgesehen. Bitte dieses Konzept unverändert beibehalten, damit der Angriffsradius minimal bleibt und die Wartungsabläufe konsistent bleiben.
 
 ## Kompilieren und Hochladen
 
@@ -89,9 +78,9 @@ Nach der Einrichtung zeigt die Firmware die Buchstaben automatisch an und kann �
 
 ## Konfiguration
 
-`config.h` enthält Platzhalter-WLAN-Daten, falls noch nichts im EEPROM gespeichert ist. Echte Zugangsdaten sollten **nicht** ins Repository gelangen. Sie können initial über das EEPROM oder die Konfigurationsseite gesetzt werden. Der Parameter `wifi_connect_timeout` bestimmt, wie lange die Verbindung versucht wird (Standard 30 Sekunden).
+`config.h` enthält Platzhalter für drahtlose Zugangsdaten, falls noch nichts im EEPROM gespeichert ist. Echte Zugangsdaten sollten **nicht** ins Repository gelangen. Sie können initial über das EEPROM oder die Konfigurationsseite gesetzt werden. Der Parameter `wifi_connect_timeout` bestimmt, wie lange die Verbindung versucht wird (Standard 30 Sekunden).
 
-> **Hinweis:** Die Firmware erkennt jetzt gelöschte EEPROM-Zellen plattformunabhängig. Vergleiche gegen `0xFF` erfolgen explizit auf `uint8_t`-Basis, sodass Host-Tests und der ESP8266 dieselbe Initialisierung der WLAN-Defaults auslösen.
+> **Hinweis:** Die Firmware erkennt jetzt gelöschte EEPROM-Zellen plattformunabhängig. Vergleiche gegen `0xFF` erfolgen explizit auf `uint8_t`-Basis, sodass Host-Tests und der ESP8266 dieselbe Initialisierung der Voreinstellungen auslösen.
 
 ### Mehrspuriges Buchstabenraster
 
@@ -116,7 +105,7 @@ Die HTTP-Endpunkte `/displayLetter` und `/triggerLetter` akzeptieren optional de
 
 ### Zusatzglyphen
 
-Neben den Großbuchstaben stehen mehrere vordefinierte Symbole zur Verfügung. `'#'` rendert die Sonne, `'~'` das WLAN-Symbol, `'&'` das Riesenrad und `'?'` den Riddler. Neu hinzugekommen ist `'*'` für das kombinierte „Sun+Rad“-Glyph, das Sonne und Riesenrad zu einem 32×32-Pixelmotiv verschmilzt.
+Neben den Großbuchstaben stehen mehrere vordefinierte Symbole zur Verfügung. `'#'` rendert die Sonne, `'~'` zeigt ein Funksignal, `'&'` das Riesenrad und `'?'` den Riddler. Neu hinzugekommen ist `'*'` für das kombinierte „Sun+Rad“-Glyph, das Sonne und Riesenrad zu einem 32×32-Pixelmotiv verschmilzt.
 
 ### Verzögerungsmatrix pro Trigger & Tag
 
@@ -162,20 +151,3 @@ Der Installer kopiert standardmäßig den Inhalt von `USBStick-Setup/files/` auf
 
 Legacy-Skripte wurden in [`USBStick-Setup/archive/legacy-root-scripts/`](USBStick-Setup/archive/legacy-root-scripts) abgelegt und stehen weiterhin als Referenz zur Verfügung.
 
-### Shutdown- und Verwaltungs-Endpunkte ohne Tokenpflicht
-
-Die Weboberfläche des USB-Stick-Setups löst das Herunterfahren des Geräts über den Endpunkt `/shutdown` aus und kann über
-`/reload_all` sämtliche bekannten Boxen neu einlesen. Beide Aktionen sind bewusst ohne zusätzliche Token- oder Passwort-
-Abfrage implementiert, damit Installationen im geschlossenen WLAN-Netz der Boxenfamilie ohne zusätzlichen Verwaltungs-
-aufwand auskommen.
-
-- Der Schutz erfolgt ausschließlich über das WLAN selbst: Wer Zugriff auf das Setup-WLAN besitzt, darf auch die Admin-
-  Funktionen auslösen.
-- Die Oberfläche blendet weiterhin Sicherheitsabfragen ein (z. B. Bestätigungsdialoge), damit unbeabsichtigte Klicks
-  keine sofortigen Aktionen auslösen.
-- Reverse-Proxies oder VPN-Zugriffe benötigen keine zusätzlichen Header mehr. Netzbetreibende sollten stattdessen auf
-  Netzwerkisolation, das zeitlich begrenzte Setup-WLAN sowie planmäßige Neustarts setzen.
-
-Bitte berücksichtigen: Durch den Wegfall der Tokenlogik können externe Netze die Aktionen auslösen, sofern sie auf den
-Webserver gelangen. In produktiven Umgebungen empfiehlt sich daher, den Dienst nur temporär (z. B. während des Setups)
-freizuschalten oder das Setup-WLAN strikt zu segmentieren.
