@@ -142,6 +142,7 @@ set_permissions() {
     "usr/local/bin/bootlocal.sh"
     "usr/local/bin/webserver.py"
     "home/kioskuser/start_firefox.sh"
+    "home/kioskuser/.xinitrc"
     "etc/hostapd/ifupdown.sh"
     "root/install_public_ap.sh"
     "root/install_public_ap_setuphelper.sh"
@@ -207,6 +208,13 @@ enable_systemd_units() {
       warn "Service file $unit missing; cannot enable"
     fi
   done
+
+  local kiosk_unit="kiosk-startx.service"
+  if [[ -f "$TARGET_ROOT/etc/systemd/system/$kiosk_unit" ]]; then
+    run_cmd systemctl restart "$kiosk_unit"
+  else
+    warn "Service file $kiosk_unit missing; cannot restart"
+  fi
 }
 
 run_post_install_hooks() {
