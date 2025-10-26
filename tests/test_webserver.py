@@ -175,8 +175,32 @@ def test_get_hostname_from_web_supports_attribute_variants(webserver_app, monkey
     monkeypatch.setattr(module.requests, "get", fake_get)
 
     assert module.get_hostname_from_web("1.2.3.4") == "BoxAlpha"
-    assert module.get_hostname_from_web("5.6.7.8") == " BoxBeta "
+    assert module.get_hostname_from_web("5.6.7.8") == "BoxBeta"
     assert module.get_hostname_from_web("9.8.7.6") == "Unbekannt"
+
+
+def test_get_hostname_from_web_returns_unknown_for_empty_value(webserver_app, monkeypatch):
+    module, _client = webserver_app
+
+    class FakeResponse:
+        def __init__(self, text: str, ok: bool = True) -> None:
+            self.text = text
+            self.ok = ok
+            self.status_code = 200
+            self.is_redirect = False
+            self.is_permanent_redirect = False
+
+    html = "<html><body><input type=\"text\" name=\"hostname\" value=\"   \"/></body></html>"
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        return FakeResponse(html)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    hostname = module.get_hostname_from_web("1.2.3.4")
+    assert hostname == "Unbekannt"
+    assert module.sanitize_hostname(hostname) == "Unbekannt"
 
 
 def test_get_connected_devices_accepts_double_quote_hostname(webserver_app, tmp_path, monkeypatch):
