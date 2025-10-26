@@ -224,11 +224,14 @@ async function fetchDevices() {
     boxOrder = newBoxOrder;
 
     renderDeviceList();
-    // Nur showSetup() aufrufen, wenn kein Textfeld oder Dropdown-Menü fokussiert ist
-    if (hasChanges && statusArea && !transferring &&
-        !document.activeElement.classList.contains("word-input") &&
-        !document.activeElement.classList.contains("delay-input") &&
-        document.activeElement.tagName !== "SELECT") {
+    const activeElement = document.activeElement;
+    const isLiveEditElement = !!(activeElement && (
+      (typeof activeElement.matches === "function" && activeElement.matches('[data-live-edit]')) ||
+      (activeElement.classList && (activeElement.classList.contains("word-input") || activeElement.classList.contains("delay-input"))) ||
+      activeElement.tagName === "SELECT"
+    ));
+    // Nur showSetup() aufrufen, wenn kein relevantes Eingabefeld fokussiert ist
+    if (hasChanges && statusArea && !transferring && !isLiveEditElement) {
       showSetup();
     }
   } catch (e) {
@@ -301,7 +304,7 @@ function showSetup() {
   html += '<div class="box-card"><h3>Wörter für Wochentage</h3>';
   html += '<div class="word-trigger-selector">';
   html += '<label for="wordTriggerSelect">Trigger-Spalte:</label>';
-  html += '<select id="wordTriggerSelect" onchange="changeWordTrigger(parseInt(this.value, 10))">';
+  html += '<select id="wordTriggerSelect" data-live-edit="true" onchange="changeWordTrigger(parseInt(this.value, 10))">';
   for (let trigger = 0; trigger < triggersPerDay; trigger++) {
     const selected = trigger === currentWordTrigger ? "selected" : "";
     html += `<option value="${trigger}" ${selected}>Trigger ${trigger + 1}</option>`;
@@ -317,7 +320,7 @@ function showSetup() {
     html += `
       <div class="weekday-col">
         <label>${dayNames[i]}</label>
-        <input type="text" class="word-input" placeholder="Wort eingeben (max ${maxLength} Zeichen)"
+        <input type="text" class="word-input" data-live-edit="true" placeholder="Wort eingeben (max ${maxLength} Zeichen)"
           value="${currentWord}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this)"
           onkeydown="handleKeydown(event, '${days[i]}', this.value, ${maxLength}, this)">
       </div>`;
@@ -351,13 +354,13 @@ function showSetup() {
         html += `
             <div class="trigger-entry">
               <span>Trigger ${trigger + 1}</span>
-              <select onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
+              <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
                 ${letterOptionsHtml}
               </select>
-              <input type="color" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color')">
+              <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color')">
               <div class="delay-input-wrapper">
                 <span>Verzögerung (s)</span>
-                <input type="number" class="delay-input" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
+                <input type="number" class="delay-input" data-live-edit="true" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
               </div>
             </div>`;
       }
