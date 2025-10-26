@@ -7,6 +7,17 @@ Der zentrale Einstiegspunkt ist [`setup.sh`](setup.sh). Das Skript kopiert den v
 aktiviert optional die bereitgestellten Systemd-Units. Darüber hinaus können optionale Hooks ausgeführt werden, um zusätzliche
 Aufgaben – etwa Paketinstallationen oder Firmware-Checks – einzubinden.
 
+## Frontend-Abhängigkeiten
+
+Die Weboberfläche im Unterverzeichnis [`files/usr/local/etc/`](files/usr/local/etc/) lädt alle benötigten Bibliotheken lokal von
+der Box, um Offline-Betrieb zu gewährleisten. Neue oder aktualisierte Abhängigkeiten werden versioniert unter
+`files/usr/local/etc/vendor/` abgelegt.
+
+- [`vendor/xlsx.full.min.js`](files/usr/local/etc/vendor/xlsx.full.min.js) – SheetJS **xlsx** v0.20.2 (Build vom offiziellen CDN
+  [`cdn.sheetjs.com`](https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js)). Die Bibliothek wird vor unserem eigenen
+  Frontend-Skript eingebunden, sodass `XLSX` global verfügbar ist und `loadFileData()` `.xlsx`-Uploads ohne `ReferenceError`
+  verarbeiten kann.
+
 ## Voraussetzungen
 
 - Bash 5 oder neuer
