@@ -4,6 +4,10 @@ set -euo pipefail
 PERSIST_ROOT="/mnt/persist"
 PERSIST_USR_LOCAL="${PERSIST_ROOT}/usr_local"
 
+PUBLIC_AP_DNSMASQ_DROPIN_DEFAULT="/etc/dnsmasq.d/riddlematrix-hotspot.conf"
+LEGACY_DNSMASQ_CONFIG="/etc/dnsmasq.conf"
+export PUBLIC_AP_DNSMASQ_CONFIG="${PUBLIC_AP_DNSMASQ_CONFIG:-$PUBLIC_AP_DNSMASQ_DROPIN_DEFAULT}"
+
 PUBLIC_AP_HELPER="/usr/local/libexec/public_ap.sh"
 if [[ ! -f "$PUBLIC_AP_HELPER" ]]; then
     echo "❌ Fehlendes Helferskript $PUBLIC_AP_HELPER" >&2
@@ -12,6 +16,16 @@ fi
 
 # shellcheck disable=SC1090
 source "$PUBLIC_AP_HELPER"
+
+notify_legacy_dnsmasq() {
+    if [[ -f "$LEGACY_DNSMASQ_CONFIG" && ! -L "$LEGACY_DNSMASQ_CONFIG" ]]; then
+        if grep -q "RiddleMatrix-Hotspot" "$LEGACY_DNSMASQ_CONFIG" 2>/dev/null; then
+            echo "ℹ️ Legacy-Hotspot-Konfiguration $LEGACY_DNSMASQ_CONFIG bleibt unverändert; Drop-in $PUBLIC_AP_DNSMASQ_CONFIG wird aktualisiert."
+        else
+            echo "ℹ️ Bestehende dnsmasq-Konfiguration $LEGACY_DNSMASQ_CONFIG bleibt unangetastet; Drop-in $PUBLIC_AP_DNSMASQ_CONFIG übernimmt die Hotspot-Einstellungen."
+        fi
+    fi
+}
 
 FALLBACK_CREDENTIALS=0
 if ! public_ap_load_env; then
@@ -62,6 +76,7 @@ ip addr add 192.168.10.1/24 dev "$WIFI_IFACE"
 ip link set "$WIFI_IFACE" up
 
 public_ap_write_dnsmasq_config "$WIFI_IFACE"
+notify_legacy_dnsmasq
 public_ap_render_hostapd_config "$WIFI_IFACE"
 
 mkdir -p /var/lib/misc
