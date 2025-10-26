@@ -8,7 +8,7 @@ import secrets
 import re
 import ipaddress
 import hmac
-from typing import Optional
+from typing import List, Optional, Set
 from functools import lru_cache
 
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
@@ -253,7 +253,29 @@ def sanitize_hostname(hostname: Optional[str], *, fallback_prefix: str = "box") 
     return value[:64]
 
 
-def _allocate_unique_hostname(base_name: str, config: dict) -> str:
+def _matching_identifiers_for_hostname(base_name: str, boxen: dict) -> List[str]:
+    target = sanitize_hostname(base_name)
+    if not target or not isinstance(boxen, dict):
+        return []
+
+    pattern = re.compile(rf"^{re.escape(target)}(?:-(\d+))?$")
+    matches = []
+    for identifier in boxen.keys():
+        if not isinstance(identifier, str):
+            continue
+        match = pattern.fullmatch(identifier)
+        if match:
+            suffix = match.group(1)
+            order = int(suffix) if suffix is not None else 0
+            matches.append((order, identifier))
+
+    matches.sort(key=lambda item: item[0])
+    return [identifier for _order, identifier in matches]
+
+
+def _allocate_unique_hostname(
+    base_name: str, config: dict, *, reserved: Optional[Set[str]] = None
+) -> str:
     target = sanitize_hostname(base_name)
     if not isinstance(config, dict):
         return target
@@ -262,13 +284,15 @@ def _allocate_unique_hostname(base_name: str, config: dict) -> str:
     if not isinstance(boxen, dict):
         return target
 
-    if target not in boxen:
+    reserved_identifiers: Set[str] = set(reserved or ())
+
+    if target not in boxen and target not in reserved_identifiers:
         return target
 
     suffix = 2
     while True:
         candidate = sanitize_hostname(f"{target}-{suffix}")
-        if candidate not in boxen:
+        if candidate not in boxen and candidate not in reserved_identifiers:
             return candidate
         suffix += 1
 
@@ -691,6 +715,7 @@ def fetch_trigger_delays(ip):
 
 def get_connected_devices():
     devices = []
+    assigned_identifiers: Set[str] = set()
     config = load_config()
     if os.path.exists(LEASE_FILE):
         with open(LEASE_FILE, "r") as f:
@@ -740,7 +765,28 @@ def get_connected_devices():
 
                         hostname = sanitize_hostname(hostname)
                         boxen = config.get("boxen", {})
-                        identifier = _allocate_unique_hostname(hostname, config)
+
+                        identifier = None
+                        matching_identifiers = _matching_identifiers_for_hostname(hostname, boxen)
+
+                        for candidate in matching_identifiers:
+                            if candidate in assigned_identifiers:
+                                continue
+                            box = boxen.get(candidate)
+                            if isinstance(box, dict) and box.get("ip") == ip:
+                                identifier = candidate
+                                break
+
+                        if identifier is None:
+                            for candidate in matching_identifiers:
+                                if candidate not in assigned_identifiers:
+                                    identifier = candidate
+                                    break
+
+                        if identifier is None:
+                            identifier = _allocate_unique_hostname(
+                                hostname, config, reserved=assigned_identifiers
+                            )
 
                         existing_box = boxen.get(identifier)
                         if isinstance(existing_box, dict) and existing_box.get("ip") != ip:
@@ -758,6 +804,7 @@ def get_connected_devices():
                                 break
 
                         devices.append({"ip": ip, "hostname": identifier})
+                        assigned_identifiers.add(identifier)
 
                         if existing_box is None:
                             learn_box(ip, identifier)
