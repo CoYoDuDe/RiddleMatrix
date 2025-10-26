@@ -381,6 +381,8 @@ def migrate_config(data):
 
     sanitized_boxen = {}
     rename_map = {}
+    original_order = list(data["boxen"].keys())
+    renamed_or_reordered = False
     for original_hostname, box in list(data["boxen"].items()):
         target = sanitize_hostname(original_hostname)
         suffix = 1
@@ -391,11 +393,14 @@ def migrate_config(data):
         rename_map[original_hostname] = candidate
         sanitized_boxen[candidate] = box
         if candidate != original_hostname:
-            changed = True
+            renamed_or_reordered = True
         if ensure_box_structure(box, remove_legacy=True):
             changed = True
 
-    if sanitized_boxen and sanitized_boxen is not data["boxen"]:
+    if not renamed_or_reordered and original_order != list(sanitized_boxen.keys()):
+        renamed_or_reordered = True
+
+    if renamed_or_reordered:
         data["boxen"] = sanitized_boxen
         changed = True
 
