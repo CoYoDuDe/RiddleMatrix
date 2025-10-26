@@ -1015,6 +1015,10 @@ void setupWebServer() {
         }
 
         display_brightness = static_cast<int>(brightnessCandidate);
+        display.setBrightness(display_brightness);
+        if (!triggerActive && wifiSymbolVisible) {
+            display.display();
+        }
         letter_display_time = letterTimeCandidate;
         letter_auto_display_interval = autoIntervalCandidate;
         autoDisplayMode = autoModeCandidate;
