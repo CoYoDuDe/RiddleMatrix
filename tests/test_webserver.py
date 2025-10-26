@@ -152,6 +152,9 @@ def test_get_hostname_from_web_supports_attribute_variants(webserver_app, monkey
         def __init__(self, text: str, ok: bool = True) -> None:
             self.text = text
             self.ok = ok
+            self.status_code = 200
+            self.is_redirect = False
+            self.is_permanent_redirect = False
 
     html_variants = [
         "<html><body><input type=\"text\" name=\"hostname\" value=\"BoxAlpha\"></body></html>",
@@ -174,6 +177,43 @@ def test_get_hostname_from_web_supports_attribute_variants(webserver_app, monkey
     assert module.get_hostname_from_web("1.2.3.4") == "BoxAlpha"
     assert module.get_hostname_from_web("5.6.7.8") == " BoxBeta "
     assert module.get_hostname_from_web("9.8.7.6") == "Unbekannt"
+
+
+def test_get_connected_devices_accepts_double_quote_hostname(webserver_app, tmp_path, monkeypatch):
+    module, _client = webserver_app
+
+    lease_path = tmp_path / "dnsmasq.leases"
+    lease_path.write_text("1697043087 aa:bb:cc:dd:ee:ff 192.0.2.10 device *\n", encoding="utf-8")
+    module.LEASE_FILE = str(lease_path)
+
+    monkeypatch.setattr(module.subprocess, "call", lambda *args, **kwargs: 0)
+    module.save_config({"boxen": {}, "boxOrder": []})
+
+    class FakeResponse:
+        def __init__(self, text: str, ok: bool = True) -> None:
+            self.text = text
+            self.ok = ok
+            self.status_code = 200
+            self.is_redirect = False
+            self.is_permanent_redirect = False
+
+    responses = [
+        FakeResponse('<html><body><input type="text" name="hostname" value="BoxAlpha"></body></html>'),
+        FakeResponse('<html><body><input type="text" name="hostname" value="BoxAlpha"></body></html>'),
+    ]
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        if not responses:
+            pytest.fail("requests.get wurde unerwartet oft aufgerufen")
+        return responses.pop(0)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+    monkeypatch.setattr(module, "learn_box", lambda *args, **kwargs: None)
+
+    devices = module.get_connected_devices()
+
+    assert devices == [{"ip": "192.0.2.10", "hostname": "BoxAlpha"}]
 
 
 def test_learn_box_sanitizes_hostnames_and_devices_output(webserver_app, monkeypatch):
