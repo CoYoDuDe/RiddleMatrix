@@ -231,6 +231,8 @@ ensure_directories() {
 ensure_kioskuser() {
   local user="kioskuser"
   local shell="/bin/bash"
+  local home_dir="/home/$user"
+  local -a useradd_opts=(-r -s "$shell" -d "$home_dir")
 
   if [[ "$TARGET_ROOT" != "/" ]]; then
     log "Benutzerprüfung für '$user' wird für Ziel $TARGET_ROOT übersprungen; Benutzer bitte im Zielsystem anlegen"
@@ -242,13 +244,20 @@ ensure_kioskuser() {
     return 0
   fi
 
+  if [[ -d "$home_dir" ]]; then
+    log "Home-Verzeichnis $home_dir existiert bereits; useradd wird ohne -m ausgeführt"
+    useradd_opts+=(-M)
+  else
+    useradd_opts+=(-m)
+  fi
+
   if ((DRY_RUN)); then
-    log "[dry-run] useradd -m -r -s $shell $user"
+    log "[dry-run] useradd ${useradd_opts[*]} $user"
     log "[dry-run] Benutzer '$user' würde angelegt"
     return 0
   fi
 
-  if run_cmd useradd -m -r -s "$shell" "$user"; then
+  if run_cmd useradd "${useradd_opts[@]}" "$user"; then
     log "Benutzer '$user' wurde erfolgreich angelegt"
     return 0
   fi
