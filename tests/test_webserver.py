@@ -330,7 +330,7 @@ def test_transfer_box_blocks_trigger_delay_redirect(webserver_app, monkeypatch):
     }
 
 
-def test_transfer_box_requires_authorization(webserver_app, monkeypatch):
+def test_transfer_box_allows_remote_clients(webserver_app, monkeypatch):
     module, client = webserver_app
     box = _empty_box(module)
     module.save_config({"boxen": {"TestBox": box}, "boxOrder": []})
@@ -368,68 +368,25 @@ def test_transfer_box_requires_authorization(webserver_app, monkeypatch):
         json={"hostname": "TestBox"},
         environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
     )
-    assert response.status_code == 403
-
-    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "valid-token")
-    module.reload_shutdown_token_cache()
-    response = client.post(
-        "/transfer_box",
-        json={"hostname": "TestBox"},
-        headers={"X-Api-Key": "valid-token"},
-        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
-    )
     assert response.status_code == 200
     assert response.get_json() == {"status": "⏭️ Bereits aktuell"}
 
 
-def test_remove_box_rejects_anonymous_request(webserver_app, monkeypatch):
+def test_remove_box_allows_remote_clients(webserver_app):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": ["TestBox"]})
-
-    monkeypatch.delenv(module.SHUTDOWN_TOKEN_ENV, raising=False)
-    module.reload_shutdown_token_cache()
 
     response = client.post(
         "/remove_box",
         json={"hostname": "TestBox"},
         environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
     )
-
-    assert response.status_code == 403
-
-    config = module.load_config()
-    assert "TestBox" in config["boxen"]
-    assert config["boxOrder"] == ["TestBox"]
-
-
-def test_remove_box_accepts_authorized_request(webserver_app, monkeypatch):
-    module, client = webserver_app
-    module.save_config(
-        {
-            "boxen": {
-                "BoxA": _empty_box(module, ip="10.0.0.1"),
-                "BoxB": _empty_box(module, ip="10.0.0.2"),
-            },
-            "boxOrder": ["BoxA", "BoxB"],
-        }
-    )
-
-    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "valid-token")
-    module.reload_shutdown_token_cache()
-
-    response = client.post(
-        "/remove_box",
-        json={"hostname": "BoxA"},
-        headers={"X-Api-Key": "valid-token"},
-        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
-    )
-
     assert response.status_code == 200
     assert response.get_json() == {"status": "removed"}
 
     config = module.load_config()
-    assert "BoxA" not in config["boxen"]
-    assert config["boxOrder"] == ["BoxB"]
+    assert "TestBox" not in config["boxen"]
+    assert config["boxOrder"] == []
 
 
 def test_update_box_updates_specific_trigger(webserver_app):
@@ -743,30 +700,13 @@ def test_devices_blocks_redirect_during_learn_box(webserver_app, monkeypatch, tm
     }
 
 
-def test_update_box_requires_token_for_remote_clients(webserver_app, monkeypatch):
+def test_update_box_allows_remote_clients(webserver_app):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})
 
-    monkeypatch.delenv(module.SHUTDOWN_TOKEN_ENV, raising=False)
-    module.reload_shutdown_token_cache()
-
     response = client.post(
         "/update_box",
         json={"hostname": "TestBox", "day": "mo", "triggerIndex": 0, "letter": "Z"},
-        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
-    )
-
-    assert response.status_code == 403
-    config = module.load_config()
-    assert config["boxen"]["TestBox"]["letters"]["mo"][0] == ""
-
-    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "valid-token")
-    module.reload_shutdown_token_cache()
-
-    response = client.post(
-        "/update_box",
-        json={"hostname": "TestBox", "day": "mo", "triggerIndex": 0, "letter": "Z"},
-        headers={"X-Api-Key": "valid-token"},
         environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
     )
 
@@ -834,7 +774,7 @@ def test_delay_inputs_are_clamped_to_upper_bound(webserver_app, monkeypatch):
     assert captured["json"]["delays"]["mo"][0] == 999
 
 
-def test_update_box_order_requires_token_for_remote_clients(webserver_app, monkeypatch):
+def test_update_box_order_allows_remote_clients(webserver_app):
     module, client = webserver_app
     module.save_config(
         {
@@ -846,26 +786,9 @@ def test_update_box_order_requires_token_for_remote_clients(webserver_app, monke
         }
     )
 
-    monkeypatch.delenv(module.SHUTDOWN_TOKEN_ENV, raising=False)
-    module.reload_shutdown_token_cache()
-
     response = client.post(
         "/update_box_order",
         json={"boxOrder": ["BoxB", "BoxA"]},
-        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
-    )
-
-    assert response.status_code == 403
-    config = module.load_config()
-    assert config["boxOrder"] == ["BoxA", "BoxB"]
-
-    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "valid-token")
-    module.reload_shutdown_token_cache()
-
-    response = client.post(
-        "/update_box_order",
-        json={"boxOrder": ["BoxB", "BoxA"]},
-        headers={"X-Api-Key": "valid-token"},
         environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
     )
 
@@ -1001,23 +924,8 @@ def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypa
         assert all(isinstance(value, int) for value in captured["json"]["delays"][day])
 
 
-def test_reload_all_blocks_unauthenticated_remote_client(webserver_app, monkeypatch):
+def test_reload_all_allows_remote_clients(webserver_app, monkeypatch):
     module, client = webserver_app
-    module.PUBLIC_AP_ENV_FILE = None
-    monkeypatch.delenv(module.SHUTDOWN_TOKEN_ENV, raising=False)
-    module.reload_shutdown_token_cache()
-
-    response = client.post("/reload_all", environ_base={"REMOTE_ADDR": "203.0.113.5"})
-
-    assert response.status_code == 403
-
-
-def test_reload_all_accepts_token_authenticated_client(webserver_app, monkeypatch):
-    module, client = webserver_app
-    module.PUBLIC_AP_ENV_FILE = None
-    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV, "topsecret")
-    module.reload_shutdown_token_cache()
-
     module.save_config({"boxen": {"AltBox": {"ip": "1.2.3.4"}}, "boxOrder": ["AltBox"]})
 
     called = {"count": 0}
@@ -1031,7 +939,6 @@ def test_reload_all_accepts_token_authenticated_client(webserver_app, monkeypatc
     response = client.post(
         "/reload_all",
         environ_base={"REMOTE_ADDR": "198.51.100.10"},
-        headers={"X-Api-Key": "topsecret"},
     )
 
     assert response.status_code == 200
@@ -1299,71 +1206,25 @@ def test_migrate_config_adds_delay_matrix(webserver_app):
         assert all(value == module.DEFAULT_DELAY for value in migrated["boxen"]["Legacy"]["delays"][day])
 
 
-def test_shutdown_requires_token_for_remote_clients(webserver_app, monkeypatch):
+def test_shutdown_allows_remote_clients(webserver_app, monkeypatch):
     module, client = webserver_app
-    monkeypatch.setattr(module.os, "system", lambda cmd: None)
-    module.reload_shutdown_token_cache()
-    monkeypatch.delenv("SHUTDOWN_TOKEN", raising=False)
-    module.reload_shutdown_token_cache()
+    calls = []
+
+    def fake_system(cmd: str) -> None:
+        calls.append(cmd)
+
+    monkeypatch.setattr(module.os, "system", fake_system)
 
     response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "203.0.113.5"})
-    assert response.status_code == 403
-
-    monkeypatch.setenv("SHUTDOWN_TOKEN", "secret-token")
-    module.reload_shutdown_token_cache()
-
-    response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "203.0.113.5"})
-    assert response.status_code == 403
-
-    response = client.post(
-        "/shutdown",
-        environ_overrides={"REMOTE_ADDR": "203.0.113.5"},
-        headers={"X-Api-Key": "secret-token"},
-    )
     assert response.status_code == 200
     assert response.get_json() == {"status": "OK"}
+    assert calls == ["poweroff"]
 
 
 def test_shutdown_allows_loopback_without_token(webserver_app, monkeypatch):
     module, client = webserver_app
     monkeypatch.setattr(module.os, "system", lambda cmd: None)
-    monkeypatch.delenv("SHUTDOWN_TOKEN", raising=False)
-    module.reload_shutdown_token_cache()
 
     response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "127.0.0.1"})
-    assert response.status_code == 200
-    assert response.get_json() == {"status": "OK"}
-
-
-def test_shutdown_rejects_spoofed_loopback_with_forwarded_for(webserver_app, monkeypatch):
-    module, client = webserver_app
-    monkeypatch.setattr(module.os, "system", lambda cmd: None)
-    monkeypatch.delenv("SHUTDOWN_TOKEN", raising=False)
-    module.reload_shutdown_token_cache()
-
-    response = client.post(
-        "/shutdown",
-        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
-        headers={"X-Forwarded-For": "198.51.100.42"},
-    )
-
-    assert response.status_code == 403
-
-
-def test_shutdown_accepts_loopback_with_trusted_forward_headers(webserver_app, monkeypatch):
-    module, client = webserver_app
-    monkeypatch.setattr(module.os, "system", lambda cmd: None)
-    monkeypatch.delenv("SHUTDOWN_TOKEN", raising=False)
-    module.reload_shutdown_token_cache()
-
-    response = client.post(
-        "/shutdown",
-        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
-        headers={
-            "X-Forwarded-For": "127.0.0.1",
-            "Forwarded": 'for="127.0.0.1";proto=http',
-        },
-    )
-
     assert response.status_code == 200
     assert response.get_json() == {"status": "OK"}
