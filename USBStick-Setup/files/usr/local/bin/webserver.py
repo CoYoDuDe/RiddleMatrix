@@ -766,7 +766,10 @@ def get_hostname_from_web(ip):
         if hostname_field is not None:
             value = hostname_field.get("value")
             if value is not None:
-                return value
+                if isinstance(value, str):
+                    value = value.strip()
+                if value:
+                    return value
     return "Unbekannt"
 
 def learn_box(ip, identifier):
