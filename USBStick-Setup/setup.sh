@@ -228,6 +228,35 @@ ensure_directories() {
   done
 }
 
+ensure_kioskuser() {
+  local user="kioskuser"
+  local shell="/bin/bash"
+
+  if [[ "$TARGET_ROOT" != "/" ]]; then
+    log "Benutzerprüfung für '$user' wird für Ziel $TARGET_ROOT übersprungen; Benutzer bitte im Zielsystem anlegen"
+    return 0
+  fi
+
+  if id "$user" >/dev/null 2>&1; then
+    log "Benutzer '$user' ist bereits vorhanden"
+    return 0
+  fi
+
+  if ((DRY_RUN)); then
+    log "[dry-run] useradd -m -r -s $shell $user"
+    log "[dry-run] Benutzer '$user' würde angelegt"
+    return 0
+  fi
+
+  if run_cmd useradd -m -r -s "$shell" "$user"; then
+    log "Benutzer '$user' wurde erfolgreich angelegt"
+    return 0
+  fi
+
+  warn "Benutzer '$user' konnte nicht angelegt werden; bitte Systemprotokolle prüfen"
+  return 1
+}
+
 set_permissions() {
   local -a exec_paths=(
     "usr/local/bin/bootlocal.sh"
@@ -294,12 +323,12 @@ set_permissions() {
   fi
 
   if [[ "$TARGET_ROOT" = "/" ]]; then
-    if id kioskuser >/dev/null 2>&1; then
+    if ensure_kioskuser; then
       if [[ -d "$TARGET_ROOT/home/kioskuser" ]]; then
         run_cmd chown -R kioskuser:kioskuser "$TARGET_ROOT/home/kioskuser"
       fi
     else
-      warn "User 'kioskuser' not present; skipping ownership adjustments"
+      warn "Benutzer 'kioskuser' fehlt weiterhin; Besitzanpassungen werden übersprungen"
     fi
   else
     warn "Skipping ownership updates for $TARGET_ROOT; adjust after mounting"
@@ -323,7 +352,11 @@ enable_systemd_units() {
 
   local kiosk_unit="kiosk-startx.service"
   if [[ -f "$TARGET_ROOT/etc/systemd/system/$kiosk_unit" ]]; then
-    run_cmd systemctl restart "$kiosk_unit"
+    if ensure_kioskuser; then
+      run_cmd systemctl restart "$kiosk_unit"
+    else
+      warn "Überspringe Neustart von $kiosk_unit, da 'kioskuser' nicht angelegt werden konnte"
+    fi
   else
     warn "Service file $kiosk_unit missing; cannot restart"
   fi

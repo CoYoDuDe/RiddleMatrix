@@ -35,6 +35,11 @@ sudo systemctl restart kiosk-startx.service
 sudo systemctl status kiosk-startx.service
 ```
 
+Während `setup.sh` auf dem Live-System läuft, prüft es zusätzlich, ob der Benutzer `kioskuser` existiert, und legt ihn bei
+Bedarf samt Home-Verzeichnis und `/bin/bash` als Login-Shell an. Jeder Pfad wird im Log dokumentiert – inklusive Dry-Run-
+Hinweisen sowie klarer Warnungen, falls das Anlegen scheitert. Misslingt die Benutzeranlage trotz Versuch, wird der Neustart
+von `kiosk-startx.service` übersprungen und im Log als Warnung vermerkt; alle übrigen Installationsschritte laufen jedoch weiter.
+
 Die Datei [`files/home/kioskuser/.xinitrc`](files/home/kioskuser/.xinitrc) sorgt dafür, dass `startx` direkt das Skript
 [`start_firefox.sh`](files/home/kioskuser/start_firefox.sh) ausführt. So wird der Firefox-Kiosk nach einem Neustart zuverlässig
 im Vollbild gestartet.
