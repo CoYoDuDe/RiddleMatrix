@@ -10,7 +10,29 @@ fi
 # shellcheck disable=SC1090
 source "$PUBLIC_AP_HELPER"
 
-public_ap_load_env
+FALLBACK_CREDENTIALS=0
+if ! public_ap_load_env; then
+    case "$PUBLIC_AP_ENV_STATUS" in
+        missing_file|empty_file)
+            echo "⚠️ $PUBLIC_AP_ENV_ERROR Hotspot wird mit Standardwerten gestartet." >&2
+            public_ap_apply_defaults
+            FALLBACK_CREDENTIALS=1
+            ;;
+        missing_ssid|missing_passphrase)
+            echo "⚠️ $PUBLIC_AP_ENV_ERROR Verwende Standardwerte aus dem Installer." >&2
+            public_ap_apply_defaults
+            FALLBACK_CREDENTIALS=1
+            ;;
+        *)
+            echo "⚠️ $PUBLIC_AP_ENV_ERROR Hotspot-Installation wird übersprungen." >&2
+            exit 0
+            ;;
+    esac
+fi
+
+if (( FALLBACK_CREDENTIALS )); then
+    echo "ℹ️ Standard-Hotspot \"$SSID\" aktiv. Bitte /etc/usbstick/public_ap.env anpassen."
+fi
 
 echo "🔐 Wende Zugangsdaten für Hotspot \"$SSID\" an..."
 
