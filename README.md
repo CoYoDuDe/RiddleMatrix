@@ -56,8 +56,9 @@ Nach der Installation muss der Befehl `pio` im `PATH` verfügbar sein.
 ## Tests
 
 Vor den Host-Tests müssen die Python-Abhängigkeiten installiert werden. Die Datei
-`requirements-test.txt` bündelt aktuell die Flask-Version, die für die Webserver-Tests
-benötigt wird:
+`requirements-test.txt` bündelt aktuell die für die Host-Tests benötigten Pakete –
+inklusive `pytest` für die Testausführung sowie der Webserver-Abhängigkeiten (`Flask`,
+`beautifulsoup4`, `requests`):
 
 ```bash
 pip install -r requirements-test.txt
