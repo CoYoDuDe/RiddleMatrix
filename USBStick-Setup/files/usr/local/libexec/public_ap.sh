@@ -6,7 +6,31 @@ PUBLIC_AP_ENV_TEMPLATE=${PUBLIC_AP_ENV_TEMPLATE:-/etc/usbstick/public_ap.env.exa
 PUBLIC_AP_HOSTAPD_DIR=${PUBLIC_AP_HOSTAPD_DIR:-/etc/hostapd}
 PUBLIC_AP_HOSTAPD_CONFIG=${PUBLIC_AP_HOSTAPD_CONFIG:-${PUBLIC_AP_HOSTAPD_DIR}/hostapd.conf}
 PUBLIC_AP_HOSTAPD_TEMPLATE=${PUBLIC_AP_HOSTAPD_TEMPLATE:-${PUBLIC_AP_HOSTAPD_DIR}/hostapd.conf.template}
-PUBLIC_AP_DNSMASQ_CONFIG=${PUBLIC_AP_DNSMASQ_CONFIG:-/etc/dnsmasq.d/riddlematrix-hotspot.conf}
+PUBLIC_AP_DNSMASQ_DROPIN_DEFAULT=${PUBLIC_AP_DNSMASQ_DROPIN_DEFAULT:-/etc/dnsmasq.d/riddlematrix-hotspot.conf}
+PUBLIC_AP_LEGACY_DNSMASQ_CONFIG=${PUBLIC_AP_LEGACY_DNSMASQ_CONFIG:-/etc/dnsmasq.conf}
+
+public_ap_detect_legacy_dnsmasq_config() {
+    PUBLIC_AP_DNSMASQ_LEGACY_REASON=""
+    local legacy_config=$PUBLIC_AP_LEGACY_DNSMASQ_CONFIG
+    [[ -f $legacy_config && ! -L $legacy_config ]] || return 1
+    if grep -Eq '^[[:space:]]*conf-dir[[:space:]]*=/etc/dnsmasq\.d\b' "$legacy_config"; then
+        return 1
+    fi
+    PUBLIC_AP_DNSMASQ_LEGACY_REASON="missing_conf_dir"
+    return 0
+}
+
+if [[ -z ${PUBLIC_AP_DNSMASQ_CONFIG+x} || -z $PUBLIC_AP_DNSMASQ_CONFIG ]]; then
+    if public_ap_detect_legacy_dnsmasq_config; then
+        PUBLIC_AP_DNSMASQ_CONFIG=$PUBLIC_AP_LEGACY_DNSMASQ_CONFIG
+        PUBLIC_AP_DNSMASQ_CONFIG_MODE="legacy"
+    else
+        PUBLIC_AP_DNSMASQ_CONFIG=$PUBLIC_AP_DNSMASQ_DROPIN_DEFAULT
+        PUBLIC_AP_DNSMASQ_CONFIG_MODE="dropin"
+    fi
+else
+    PUBLIC_AP_DNSMASQ_CONFIG_MODE="custom"
+fi
 
 PUBLIC_AP_DEFAULT_SSID=${PUBLIC_AP_DEFAULT_SSID:-"RiddleMatrix-Hotspot"}
 PUBLIC_AP_DEFAULT_WPA_PASSPHRASE=${PUBLIC_AP_DEFAULT_WPA_PASSPHRASE:-"BittePasswortAnpassen123!"}
