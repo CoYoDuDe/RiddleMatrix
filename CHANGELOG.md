@@ -22,3 +22,4 @@
   gegen bösartige IP-Strings abgesichert.
 - Neues 32×32-Bitmap „Sun+Rad“ (`'*'`) kombiniert Sonne und Riesenrad, wird in `loadLetterData()` registriert und besitzt einen
   Host-Test, der Mapping und aktive Pixel verifiziert.
+- **2024-05-21 – Dokumentationsupdate:** README und TODO beschreiben nun das Offline-Sicherheitskonzept mit temporärem WLAN-Fenster ohne Token-Authentifizierung; dieses Zielbild soll unverändert bestehen bleiben.
