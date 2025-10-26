@@ -87,7 +87,29 @@ sudo editor /etc/usbstick/public_ap.env
 # Beispielinhalt
 SSID="MeinIndividuellesNetz"
 WPA_PASSPHRASE="SehrSicheresKennwort123"
+SHUTDOWN_TOKEN="SehrGeheimesToken456"
 ```
+
+Der Eintrag `SHUTDOWN_TOKEN` schützt den Poweroff-Endpunkt des lokalen Webservers vor unautorisierten Aufrufen. Der Token
+wird von `/usr/local/bin/webserver.py` akzeptiert, sobald Clients den Header `X-Setup-Token: <wert>` mitsenden. Aufrufe
+vom lokalen Host (`127.0.0.1` oder `::1`) bleiben aus Gründen der Service-Wartbarkeit weiterhin erlaubt – für alle
+anderen Clients ist der Token zwingend.
+
+### Authentifizierte Shutdown-Aufrufe testen
+
+Der Webserver lauscht standardmäßig auf Port `8080`. Mit `curl` lässt sich das Verhalten nachvollziehen:
+
+```bash
+# Erwartet HTTP 403 + JSON-Fehler, weil kein Token gesetzt ist
+curl -i -X POST http://<host>:8080/shutdown
+
+# Erwartet HTTP 200 + JSON-Bestätigung mit gültigem Token
+curl -i -X POST -H "X-Setup-Token: SehrGeheimesToken456" http://<host>:8080/shutdown
+```
+
+Fehlerhafte Token oder Anfragen von nicht autorisierten Hosts protokolliert der Webserver im Log und beantwortet sie mit
+HTTP 403 sowie einer klaren JSON-Fehlermeldung (`{"status":"❌ Zugriff verweigert", ...}`). Erfolgreiche Abschaltungen
+liefern weiterhin Status `200`.
 
 `bootlocal.sh` und `root/install_public_ap.sh` starten den Hotspot weiterhin, selbst wenn die Datei fehlt oder leer ist: Sie
 protokollieren den Grund, verweisen auf die Vorlage und greifen auf dieselben Standardwerte zurück. Sobald gültige Werte
