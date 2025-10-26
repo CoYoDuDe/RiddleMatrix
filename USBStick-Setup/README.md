@@ -140,6 +140,18 @@ protokollieren den Grund, verweisen auf die Vorlage und greifen auf dieselben St
 eingetragen wurden, nutzen die Skripte automatisch die konfigurierte SSID/Passphrase und geben im Fehlerfall eine gut
 verständliche Meldung aus.
 
+### Shutdown-Token im Frontend hinterlegen
+
+1. Das Webfrontend des Märchen-Managers stellt in der linken Seitenleiste ein Feld **„Shutdown-Token“** bereit.
+2. Tragen Sie dort das Token ein, das auch in `/etc/usbstick/public_ap.env` unter `SHUTDOWN_TOKEN` abgelegt ist, und bestätigen Sie die Eingabe (Blur oder Enter). Der Wert wird browserseitig in `localStorage` gespeichert und bleibt auch nach einem Reload erhalten.
+3. Sobald ein Token gespeichert ist, zeigt die Statuszeile unterhalb des Feldes „Token gespeichert.“ an. Ohne Token erscheint der Hinweis „Kein Token gespeichert.“
+4. Beim Auslösen des Buttons **„Herunterfahren“** sendet das Frontend automatisch den HTTP-Header `X-Setup-Token: <wert>` an `/shutdown`. Fehlt ein hinterlegtes Token, informiert ein Dialog darüber und bietet ausschließlich für lokale Tests (Zugriff direkt vom Gerät) die Option, den Shutdown ohne Header fortzusetzen.
+
+**Testempfehlung:**
+
+- **Lokal (z. B. Browser direkt auf dem Gerät):** Dialog bestätigen, um einmalig ohne Token zu testen. Der Backend-Endpunkt akzeptiert lokale Hosts auch ohne Header.
+- **Remote (anderes Gerät im Netzwerk):** Ein gültiges Token im Feld hinterlegen. Der Button verschickt den Header automatisch; ohne Token wird der Shutdown verweigert.
+
 ## Gesicherte Lease-Datei für dnsmasq
 
 `setup.sh` setzt beim Abschluss der Installation die Datei `var/lib/misc/dnsmasq.leases` auf den Eigentümer `root:dnsmasq`
