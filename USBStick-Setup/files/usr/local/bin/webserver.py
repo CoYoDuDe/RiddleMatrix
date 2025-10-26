@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask import Flask, abort, jsonify, request
+from flask import Flask, abort, jsonify, request, send_from_directory
 from bs4 import BeautifulSoup
 import math
 import os, json, subprocess, requests
@@ -825,6 +825,12 @@ def learn_box(ip, identifier):
 def index():
     with open("/usr/local/etc/index.html", "r") as f:
         return f.read()
+
+
+@app.route("/vendor/<path:filename>")
+def vendor_static(filename: str):
+    return send_from_directory("/usr/local/etc/vendor", filename)
+
 
 @app.route("/devices")
 def devices():
