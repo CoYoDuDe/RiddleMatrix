@@ -78,8 +78,10 @@ Der USB-Stick liefert mit [`files/etc/usbstick/public_ap.env.example`](files/etc
 für die WLAN-Zugangsdaten des Boot-Hotspots. Während der Installation kopiert `setup.sh` die Vorlage nach
 `/etc/usbstick/public_ap.env`, sofern dort noch keine individuelle Datei existiert. Die Datei wird mit restriktiven Rechten
 (`0640`) abgelegt. Das reine Kopieren des Payloads schließt `/etc/usbstick/public_ap.env` konsequent aus – unabhängig davon,
-ob `setup.sh` den bevorzugten `rsync`-Pfad oder den automatischen `tar`-Fallback nutzt. Das Skript protokolliert den Ausschluss
-explizit, sodass in den Logs ersichtlich bleibt, dass vorhandene Hotspot-Konfigurationen nicht überschrieben werden.
+ob `setup.sh` den bevorzugten `rsync`-Pfad oder den automatischen `tar`-Fallback nutzt. Ebenso bleiben kundenspezifische
+Erweiterungen wie `/etc/usbstick/public_ap.env.local` oder komplette Verzeichnisse unter `/etc/usbstick/public_ap.env.d/`
+unangetastet. Beide Kopierpfade protokollieren die Ausschlüsse explizit, sodass in den Logs ersichtlich bleibt, welche
+Hotspot-Konfigurationen erhalten wurden.
 
 Passen Sie unmittelbar nach der Installation SSID und WPA-Passphrase an, damit der Hotspot nicht mit den Standardwerten
 (`RiddleMatrix-Hotspot` / `BittePasswortAnpassen123!`) aktiv bleibt:
