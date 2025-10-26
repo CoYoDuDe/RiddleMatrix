@@ -639,6 +639,33 @@ def test_devices_sanitizes_invalid_ip_addresses(webserver_app):
     assert malicious_ip not in devices_response.get_data(as_text=True)
 
 
+def test_devices_handles_missing_ping_binary(webserver_app, monkeypatch, tmp_path):
+    module, client = webserver_app
+
+    module.LEASE_FILE = str(tmp_path / "dnsmasq.leases")
+    Path(module.LEASE_FILE).write_text(
+        "0 00:11:22:33:44:55 192.0.2.10 hostname * *\n",
+        encoding="utf-8",
+    )
+
+    def missing_ping(*args, **kwargs):
+        raise FileNotFoundError("ping not found")
+
+    monkeypatch.setattr(module.subprocess, "call", missing_ping)
+    monkeypatch.setattr(
+        module.requests,
+        "get",
+        lambda *args, **kwargs: pytest.fail("requests.get darf ohne ping nicht aufgerufen werden"),
+    )
+
+    response = client.get("/devices")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["connected"] == []
+    assert isinstance(payload["boxen"], dict)
+
+
 def test_devices_blocks_redirect_during_scan(webserver_app, monkeypatch, tmp_path):
     module, client = webserver_app
 
