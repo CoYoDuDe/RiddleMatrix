@@ -204,10 +204,18 @@ def _is_local_request(remote_addr: Optional[str]) -> bool:
 
 
 def _validate_shutdown_request() -> Optional[str]:
-    if _is_local_request(request.remote_addr):
+    token = _get_shutdown_token()
+    is_local_request = _is_local_request(request.remote_addr)
+
+    if is_local_request:
+        forwarded_for = request.headers.get("X-Forwarded-For", "")
+        forwarded = request.headers.get("Forwarded", "")
+        if forwarded_for.strip() or forwarded.strip():
+            is_local_request = False
+
+    if is_local_request and not token:
         return None
 
-    token = _get_shutdown_token()
     if not token:
         return "Kein SHUTDOWN_TOKEN konfiguriert"
 

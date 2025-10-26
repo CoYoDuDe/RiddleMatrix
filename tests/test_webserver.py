@@ -1379,6 +1379,35 @@ def test_shutdown_allows_remote_clients_with_valid_token(webserver_app, monkeypa
     assert calls == ["poweroff"]
 
 
+def test_shutdown_requires_token_for_loopback_when_configured(webserver_app, monkeypatch):
+    module, client = webserver_app
+    monkeypatch.setattr(
+        module.os, "system", lambda cmd: pytest.fail("poweroff darf ohne gültiges Token nicht ausgeführt werden")
+    )
+    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV_VAR, "SehrSicheresToken")
+
+    response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "127.0.0.1"})
+
+    assert response.status_code == 403
+    assert response.get_json() == {"status": "❌ Zugriff verweigert", "details": "Authentifizierungs-Token fehlt"}
+
+
+def test_shutdown_rejects_forwarded_loopback_without_token(webserver_app, monkeypatch):
+    module, client = webserver_app
+    monkeypatch.setattr(
+        module.os, "system", lambda cmd: pytest.fail("poweroff darf bei weitergeleiteten Anfragen nicht ausgeführt werden")
+    )
+
+    response = client.post(
+        "/shutdown",
+        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+        headers={"X-Forwarded-For": "203.0.113.5"},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json() == {"status": "❌ Zugriff verweigert", "details": "Kein SHUTDOWN_TOKEN konfiguriert"}
+
+
 def test_shutdown_allows_loopback_without_auth(webserver_app, monkeypatch):
     module, client = webserver_app
     monkeypatch.setattr(module.os, "system", lambda cmd: None)
