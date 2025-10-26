@@ -37,6 +37,27 @@ Individuelle Nacharbeiten lassen sich als ausführbare Shell-Skripte (Dateiendun
 werden in alphabetischer Reihenfolge mit dem Ziel-Root als einzigem Argument aufgerufen und erben die Umgebungsvariable
 `TARGET_ROOT`.
 
+## Firefox-Kiosk sicherstellen
+
+Der Dienst [`kiosk-startx.service`](files/etc/systemd/system/kiosk-startx.service) startet `startx` nun explizit mit dem
+Firefox-Wrapper [`start_firefox.sh`](files/home/kioskuser/start_firefox.sh). Zusätzlich liegt im Benutzerverzeichnis des
+Kiosk-Accounts eine [`~/.xinitrc`](files/home/kioskuser/.xinitrc), die denselben Wrapper via `exec` aufruft. Dadurch
+startet der Firefox-Kiosk zuverlässig, selbst wenn `startx` ohne Argumente ausgeführt wird.
+
+Nach einer Installation auf dem laufenden System sorgt `setup.sh` automatisch für `systemctl daemon-reload`, aktiviert die
+Units und stößt einen Neustart des Kiosk-Dienstes an. Falls die Installation jedoch mit `--skip-systemd` oder in ein
+gemountetes Root-Dateisystem erfolgt, sollten folgende Schritte manuell nachgeholt werden:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable kiosk-startx.service
+sudo systemctl restart kiosk-startx.service
+sudo systemctl status kiosk-startx.service
+```
+
+Die Statusabfrage stellt sicher, dass `startx` sauber hochfährt und Firefox im Kiosk-Modus läuft. Treten Fehler auf,
+liefern die Journal-Einträge (`journalctl -u kiosk-startx.service`) Hinweise zur Diagnose.
+
 ### Automatische Webserver-Provisionierung
 
 Der Hook [`hooks.d/10-provision-webserver.sh`](hooks.d/10-provision-webserver.sh) kümmert sich nach dem Kopieren der Dateien

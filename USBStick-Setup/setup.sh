@@ -142,7 +142,6 @@ set_permissions() {
     "usr/local/bin/bootlocal.sh"
     "usr/local/bin/webserver.py"
     "home/kioskuser/start_firefox.sh"
-    "home/kioskuser/.xinitrc"
     "etc/hostapd/ifupdown.sh"
     "root/install_public_ap.sh"
     "root/install_public_ap_setuphelper.sh"
@@ -153,6 +152,18 @@ set_permissions() {
       run_cmd chmod 0755 "$target"
     else
       warn "Missing executable $rel; skipping chmod"
+    fi
+  done
+
+  local -a config_paths=(
+    "home/kioskuser/.xinitrc"
+  )
+  for rel in "${config_paths[@]}"; do
+    local target="$TARGET_ROOT/$rel"
+    if [[ -e "$target" ]]; then
+      run_cmd chmod 0644 "$target"
+    else
+      warn "Missing config $rel; skipping chmod"
     fi
   done
 
