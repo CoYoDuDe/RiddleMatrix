@@ -104,20 +104,57 @@ validate_environment() {
 
 copy_payload() {
   log "Deploying files from $FILES_DIR to $TARGET_ROOT"
+  local -a excluded_exact_paths=("$PUBLIC_AP_ENV_FILE")
+  local -a excluded_pattern_paths=(".gitkeep")
+
+  for rel in "${excluded_exact_paths[@]}"; do
+    log "Bestehende Hotspot-Konfiguration $TARGET_ROOT/$rel bleibt unverändert (vom Kopiervorgang ausgeschlossen)"
+  done
+
   if command -v rsync >/dev/null 2>&1; then
     local -a rsync_args=(-a)
     ((DRY_RUN)) && rsync_args+=(-n -v)
-    rsync_args+=(--exclude='.gitkeep')
-    rsync_args+=(--exclude="$PUBLIC_AP_ENV_FILE")
+    for pattern in "${excluded_pattern_paths[@]}"; do
+      rsync_args+=(--exclude="$pattern")
+    done
+    for rel in "${excluded_exact_paths[@]}"; do
+      rsync_args+=(--exclude="$rel")
+    done
     rsync "${rsync_args[@]}" "$FILES_DIR"/ "$TARGET_ROOT"/
   else
     warn "rsync not available; falling back to tar for deployment"
     if ((DRY_RUN)); then
       (cd "$FILES_DIR" && find . -mindepth 1 -print | sed 's#^./##' | while read -r path; do
+        local skip=0
+        for pattern in "${excluded_pattern_paths[@]}"; do
+          if [[ "$path" == *"$pattern" ]]; then
+            skip=1
+            break
+          fi
+        done
+        if ((skip == 0)); then
+          for rel in "${excluded_exact_paths[@]}"; do
+            if [[ "$path" == "$rel" ]]; then
+              skip=1
+              break
+            fi
+          done
+        fi
+        if ((skip)); then
+          log "[dry-run] überspringe ausgeschlossene Datei $path"
+          continue
+        fi
         log "[dry-run] copy $path"
       done)
     else
-      (cd "$FILES_DIR" && tar cf - .) | (cd "$TARGET_ROOT" && tar xpf -)
+      local -a tar_args=(cf -)
+      for pattern in "${excluded_pattern_paths[@]}"; do
+        tar_args+=("--exclude=$pattern")
+      done
+      for rel in "${excluded_exact_paths[@]}"; do
+        tar_args+=("--exclude=./$rel")
+      done
+      (cd "$FILES_DIR" && tar "${tar_args[@]}" .) | (cd "$TARGET_ROOT" && tar xpf -)
     fi
   fi
 }
