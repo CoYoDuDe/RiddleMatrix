@@ -1221,7 +1221,7 @@ def test_shutdown_allows_remote_clients(webserver_app, monkeypatch):
     assert calls == ["poweroff"]
 
 
-def test_shutdown_allows_loopback_without_token(webserver_app, monkeypatch):
+def test_shutdown_allows_loopback_without_auth(webserver_app, monkeypatch):
     module, client = webserver_app
     monkeypatch.setattr(module.os, "system", lambda cmd: None)
 
