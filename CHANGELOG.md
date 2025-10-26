@@ -2,15 +2,11 @@
 
 ## [Unveröffentlicht]
 - Bereinigt `loadConfig()` nun auch WLAN-Passwort und Hostnamen, wenn EEPROM-Zellen mit `0xFF`, Leerstrings oder nicht druckbaren Zeichen gefüllt sind, und speichert die Defaults sofort zurück.
-- `/shutdown` verlangt jetzt ein gültiges `SHUTDOWN_TOKEN` (außer bei Loopback-Anfragen), protokolliert fehlgeschlagene Versuche
-  und liefert JSON-Antworten. Die Weboberfläche fragt das Token ab, bestätigt den Vorgang sichtbar und weist auf die Dauer des
-  Herunterfahrens hin.
-- Loopback-Ausnahmen akzeptieren nur noch eindeutig lokale Verbindungswege; sobald `X-Forwarded-For` oder `Forwarded`
-  nicht ausschließlich Loopback-Adressen enthalten, ist zwingend ein gültiger Administrations-Token erforderlich.
-- `/reload_all` erfordert nun dieselbe Authentifizierung wie `/shutdown` (Token oder Loopback). Die Weboberfläche blendet den
-  Button ohne gültiges Token aus, bietet einen Dialog zum Hinterlegen des Tokens, bestätigt den Vorgang zusätzlich und räumt
-  bei Fehlversuchen gespeicherte Tokens automatisch.
-- Automatisierter Flask-Test deckt sowohl den blockierten anonymen Reload als auch den erfolgreichen Token-Aufruf ab.
+- Tokenbasierte Authentifizierung im Firmware-Webserver sowie im SetupHelper entfernt; sämtliche Shutdown- und Verwaltungs-
+  Endpunkte stehen innerhalb des Setup-WLANs ohne zusätzliche Header oder Browser-Dialoge zur Verfügung. Frontend und Tests
+  spiegeln das neue Verhalten wider.
+- Automatisierter Flask-Test prüft den tokenfreien Zugriff und verifiziert weiterhin die Robustheit der Konfigurations-
+  Speicherung.
 - `setup.sh` setzt die Lease-Datei `var/lib/misc/dnsmasq.leases` nun mit Eigentümer `root:dnsmasq` auf `0640`, legt sie bei
   Bedarf idempotent an und dokumentiert die Abhängigkeit vom Dienstkonto, damit `dnsmasq` trotz restriktiver Rechte weiterhin
   startet.

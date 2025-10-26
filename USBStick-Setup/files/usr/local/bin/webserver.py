@@ -7,7 +7,7 @@ import tempfile
 import secrets
 import re
 import ipaddress
-from typing import Iterable, Optional, Tuple
+from typing import Optional
 from functools import lru_cache
 
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
@@ -36,9 +36,6 @@ _ALLOWED_LETTERS = set(_FIRMWARE_LETTERS)
 app = Flask(__name__)
 LEASE_FILE = "/var/lib/misc/dnsmasq.leases"
 CONFIG_FILE = "/mnt/persist/boxen_config/boxen_config.json"
-PUBLIC_AP_ENV_FILE = os.environ.get("PUBLIC_AP_ENV_FILE", "/etc/usbstick/public_ap.env")
-SHUTDOWN_TOKEN_ENV = "SHUTDOWN_TOKEN"
-ALLOWED_SHUTDOWN_ADDRESSES = {"127.0.0.1", "::1"}
 
 
 class RedirectResponseError(RuntimeError):
@@ -724,7 +721,6 @@ def devices():
 
 @app.route("/update_box", methods=["POST"])
 def update_box():
-    _authorize_sensitive_action("Update-Box")
 
     data = request.json or {}
     raw_hostname = data.get("hostname")
@@ -830,7 +826,6 @@ def update_box():
 
 @app.route("/remove_box", methods=["POST"])
 def remove_box():
-    _authorize_sensitive_action("Remove-Box")
 
     data = request.get_json(silent=True) or {}
     raw_hostname = data.get("hostname")
@@ -851,7 +846,6 @@ def remove_box():
 
 @app.route("/update_box_order", methods=["POST"])
 def update_box_order():
-    _authorize_sensitive_action("Update-Box-Order")
 
     data = request.json
     boxOrder = data.get("boxOrder")
@@ -876,7 +870,6 @@ def update_box_order():
 
 @app.route("/reload_all", methods=["POST"])
 def reload_all():
-    _authorize_sensitive_action("Reload-All")
 
     config = load_config()
     config["boxen"] = {}
@@ -890,7 +883,6 @@ def reload_all():
 
 @app.route("/transfer_box", methods=["POST"])
 def transfer_box():
-    _authorize_sensitive_action("Transfer-Box")
 
     payload = request.get_json(silent=True) or {}
     raw_hostname = payload.get("hostname") or request.args.get("hostname")
@@ -993,165 +985,9 @@ def transfer_box():
 
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
-    _authorize_sensitive_action("Shutdown")
     os.system("poweroff")
     return jsonify({"status": "OK"}), 200
 
-
-def _authorize_sensitive_action(label: str) -> None:
-    remote_addr = request.remote_addr or "<unbekannt>"
-    token = request.headers.get("X-Api-Key", "")
-
-    authorized, reason = _is_shutdown_authorized(request, token)
-    if not authorized:
-        app.logger.warning("%s-Anfrage verweigert (%s): %s", label, reason, remote_addr)
-        abort(403)
-
-    app.logger.info("%s-Anfrage akzeptiert (%s): %s", label, reason, remote_addr)
-
-
-def _is_shutdown_authorized(req, provided_token: str) -> Tuple[bool, str]:
-    if _is_trusted_local_request(req):
-        return True, "Vertrauenswürdige Loopback-Anfrage"
-
-    expected_token = _load_shutdown_token()
-    if not expected_token:
-        return False, "kein Token konfiguriert"
-
-    if not provided_token:
-        return False, "kein Token übermittelt"
-
-    try:
-        if secrets.compare_digest(expected_token, provided_token):
-            return True, "Token akzeptiert"
-    except Exception:
-        return False, "Token-Vergleich fehlgeschlagen"
-
-    return False, "Token ungültig"
-
-
-def _is_trusted_local_request(req) -> bool:
-    candidates = []
-
-    if req.remote_addr:
-        candidates.append(req.remote_addr)
-
-    # Flask stellt die Weiterleitungskette über access_route bereit (von vorne nach hinten)
-    candidates.extend(_iterable_or_empty(req.access_route))
-
-    forwarded_for = req.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        candidates.extend(_split_header_list(forwarded_for))
-
-    forwarded_header = req.headers.get("Forwarded")
-    if forwarded_header:
-        candidates.extend(_extract_forwarded_for(forwarded_header))
-
-    if not candidates:
-        return False
-
-    return all(_is_loopback_address(value) for value in candidates)
-
-
-def _split_header_list(raw_value: str) -> Iterable[str]:
-    return [entry.strip() for entry in raw_value.split(",") if entry.strip()]
-
-
-def _extract_forwarded_for(header_value: str) -> Iterable[str]:
-    entries = []
-    for part in header_value.split(","):
-        for element in part.split(";"):
-            key, sep, value = element.partition("=")
-            if sep and key.strip().lower() == "for":
-                entries.append(value.strip())
-    return entries
-
-
-def _iterable_or_empty(value) -> Iterable[str]:
-    if not value:
-        return []
-    return list(value)
-
-
-def _is_loopback_address(value: str) -> bool:
-    normalized = _normalize_address_candidate(value)
-    if not normalized:
-        return False
-
-    if normalized in ALLOWED_SHUTDOWN_ADDRESSES:
-        return True
-
-    try:
-        ip_obj = ipaddress.ip_address(normalized)
-    except ValueError:
-        return False
-
-    return ip_obj.is_loopback
-
-
-def _normalize_address_candidate(value: str) -> Optional[str]:
-    if not value:
-        return None
-
-    candidate = value.strip()
-    if not candidate:
-        return None
-
-    if candidate.startswith("\"") and candidate.endswith("\"") and len(candidate) >= 2:
-        candidate = candidate[1:-1].strip()
-
-    if candidate.lower().startswith("for="):
-        candidate = candidate[4:].strip()
-
-    if candidate.startswith("\"") and candidate.endswith("\"") and len(candidate) >= 2:
-        candidate = candidate[1:-1].strip()
-
-    if candidate.startswith("[") and "]" in candidate:
-        host, _, _rest = candidate[1:].partition("]")
-        candidate = host.strip()
-        # _rest may contain :port which can be ignored
-    elif candidate.count(":") == 1 and "." in candidate.split(":", 1)[0]:
-        # IPv4 mit Portangabe, IPv6 würde mehr Doppelpunkte enthalten
-        host, _, _ = candidate.partition(":")
-        candidate = host.strip()
-
-    if candidate.lower() in {"unknown", ""}:
-        return None
-
-    return candidate
-
-
-@lru_cache(maxsize=1)
-def _load_shutdown_token() -> Optional[str]:
-    token = os.environ.get(SHUTDOWN_TOKEN_ENV, "").strip()
-    if token:
-        return token
-
-    if not PUBLIC_AP_ENV_FILE:
-        return None
-
-    try:
-        with open(PUBLIC_AP_ENV_FILE, "r") as f:
-            for line in f:
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#"):
-                    continue
-                if "=" not in stripped:
-                    continue
-                key, value = stripped.split("=", 1)
-                if key.strip() == SHUTDOWN_TOKEN_ENV:
-                    cleaned = value.strip().strip('"').strip("'")
-                    return cleaned or None
-    except OSError:
-        pass
-
-    return None
-
-
-def reload_shutdown_token_cache():
-    """Hilfsfunktion für Tests, um den Token neu einzulesen."""
-
-    _load_shutdown_token.cache_clear()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
