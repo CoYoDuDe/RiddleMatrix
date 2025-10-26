@@ -194,6 +194,17 @@ bool parseUnsignedLongInRange(const String &value, unsigned long minValue, unsig
     return true;
 }
 
+bool ensureAuthenticatedAndRefresh(AsyncWebServerRequest *request,
+                                   const __FlashStringHelper *context,
+                                   const __FlashStringHelper *timerLabel) {
+    if (!ensureAuthenticated(request, context)) {
+        return false;
+    }
+
+    refreshWiFiIdleTimer(timerLabel);
+    return true;
+}
+
 void sendJsonStatus(AsyncWebServerRequest *request, uint16_t statusCode, const char *status, const String &message) {
     StaticJsonDocument<256> responseDoc;
     responseDoc["status"] = status;
@@ -847,8 +858,7 @@ void setupWebServer() {
     });
 
     server.on("/updateWiFi", HTTP_POST, [](AsyncWebServerRequest *request) {
-        refreshWiFiIdleTimer(F("POST /updateWiFi"));
-        if (!ensureAuthenticated(request, F("POST /updateWiFi"))) {
+        if (!ensureAuthenticatedAndRefresh(request, F("POST /updateWiFi"), F("POST /updateWiFi"))) {
             return;
         }
         if (request->hasParam("ssid", true) && request->hasParam("hostname", true)) {
@@ -965,8 +975,7 @@ void setupWebServer() {
     });
 
     server.on("/updateDisplaySettings", HTTP_POST, [](AsyncWebServerRequest *request) {
-        refreshWiFiIdleTimer(F("POST /updateDisplaySettings"));
-        if (!ensureAuthenticated(request, F("POST /updateDisplaySettings"))) {
+        if (!ensureAuthenticatedAndRefresh(request, F("POST /updateDisplaySettings"), F("POST /updateDisplaySettings"))) {
             return;
         }
         if (!(request->hasParam("brightness", true) &&
@@ -1028,9 +1037,12 @@ void setupWebServer() {
     });
 
     server.on("/updateAuth", HTTP_POST, [](AsyncWebServerRequest *request) {
-        refreshWiFiIdleTimer(F("POST /updateAuth"));
-        if (isAuthProtectionActive() && !ensureAuthenticated(request, F("POST /updateAuth"))) {
-            return;
+        if (isAuthProtectionActive()) {
+            if (!ensureAuthenticatedAndRefresh(request, F("POST /updateAuth"), F("POST /updateAuth"))) {
+                return;
+            }
+        } else {
+            refreshWiFiIdleTimer(F("POST /updateAuth"));
         }
 
         auto readParam = [&](const __FlashStringHelper *name) {
@@ -1117,8 +1129,7 @@ void setupWebServer() {
     });
 
     server.on("/updateTriggerDelays", HTTP_POST, [](AsyncWebServerRequest *request) {
-        refreshWiFiIdleTimer(F("POST /updateTriggerDelays"));
-        if (!ensureAuthenticated(request, F("POST /updateTriggerDelays"))) {
+        if (!ensureAuthenticatedAndRefresh(request, F("POST /updateTriggerDelays"), F("POST /updateTriggerDelays"))) {
             return;
         }
 
@@ -1205,7 +1216,6 @@ void setupWebServer() {
         "/updateAllLetters",
         HTTP_POST,
         [](AsyncWebServerRequest *request) {
-            refreshWiFiIdleTimer(F("POST /updateAllLetters"));
             UpdateAllLettersContext *context = static_cast<UpdateAllLettersContext *>(request->_tempObject);
             auto cleanup = [&]() {
                 if (context != nullptr) {
@@ -1219,6 +1229,8 @@ void setupWebServer() {
                 cleanup();
                 return;
             }
+
+            refreshWiFiIdleTimer(F("POST /updateAllLetters"));
 
             if (isJsonRequest(request)) {
                 if (context == nullptr) {
@@ -1570,8 +1582,7 @@ void setupWebServer() {
         });
 
     server.on("/displayLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
-        refreshWiFiIdleTimer(F("GET /displayLetter"));
-        if (!ensureAuthenticated(request, F("GET /displayLetter"))) {
+        if (!ensureAuthenticatedAndRefresh(request, F("GET /displayLetter"), F("GET /displayLetter"))) {
             return;
         }
         if (!request->hasParam("char")) {
@@ -1631,8 +1642,7 @@ void setupWebServer() {
     });
 
     server.on("/triggerLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
-        refreshWiFiIdleTimer(F("GET /triggerLetter"));
-        if (!ensureAuthenticated(request, F("GET /triggerLetter"))) {
+        if (!ensureAuthenticatedAndRefresh(request, F("GET /triggerLetter"), F("GET /triggerLetter"))) {
             return;
         }
         uint8_t triggerIndex = 0;
@@ -1690,8 +1700,7 @@ void setupWebServer() {
     });
 
     server.on("/setTime", HTTP_POST, [](AsyncWebServerRequest *request) {
-        refreshWiFiIdleTimer(F("POST /setTime"));
-        if (!ensureAuthenticated(request, F("POST /setTime"))) {
+        if (!ensureAuthenticatedAndRefresh(request, F("POST /setTime"), F("POST /setTime"))) {
             return;
         }
         if (request->hasParam("date", true) && request->hasParam("time", true)) {
@@ -1708,8 +1717,7 @@ void setupWebServer() {
     });
 
     server.on("/syncNTP", HTTP_GET, [](AsyncWebServerRequest *request) {
-        refreshWiFiIdleTimer(F("GET /syncNTP"));
-        if (!ensureAuthenticated(request, F("GET /syncNTP"))) {
+        if (!ensureAuthenticatedAndRefresh(request, F("GET /syncNTP"), F("GET /syncNTP"))) {
             return;
         }
         if (syncTimeWithNTP()) {
