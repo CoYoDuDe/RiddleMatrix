@@ -519,6 +519,7 @@ def extract_box_state_from_soup(soup):
             color_value = DEFAULT_COLOR
             if color_input and color_input.has_attr("value") and color_input["value"]:
                 color_value = color_input["value"]
+            color_value = _sanitize_color(color_value)
             colors[day][slot] = color_value
 
             delay_input = _find_field("input", "delay", firmware_day_index, slot, fallback_day_index=day_index)
