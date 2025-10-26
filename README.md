@@ -158,6 +158,8 @@ Der Installer kopiert standardmäßig den Inhalt von `USBStick-Setup/files/` auf
 
 > **Hinweis:** Der Provisionierungs-Hook `hooks.d/10-provision-webserver.sh` prüft automatisch, ob er auf dem Live-System arbeitet oder ein Ziel unterhalb von `--target` versorgt. Für Offline-Installationen wird das virtuelle Python-Umfeld via `chroot` mit dem Python des Zielsystems erstellt, sodass erzeugte Wheels und Binaries zur Zielarchitektur passen. Ist `PROVISION_DRY_RUN=1` gesetzt (zum Beispiel in Tests), werden alle Schritte nur protokolliert.
 
+> **Abhängigkeiten:** Damit der Webserver verbundene Geräte zuverlässig erkennen kann, muss das Paket `iputils-ping` installiert sein. Der Provisionierungs-Hook fügt es automatisch zur Paketliste hinzu, manuelle Installationen sollten es explizit berücksichtigen (`sudo apt install iputils-ping`).
+
 Legacy-Skripte wurden in [`USBStick-Setup/archive/legacy-root-scripts/`](USBStick-Setup/archive/legacy-root-scripts) abgelegt und stehen weiterhin als Referenz zur Verfügung.
 
 ### Hotspot-Zugangsdaten für den USB-Stick-Installer

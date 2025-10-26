@@ -123,6 +123,7 @@ ensure_system_packages() {
     dnsmasq
     hostapd
     rfkill
+    iputils-ping
     curl
     wget
     xserver-xorg
