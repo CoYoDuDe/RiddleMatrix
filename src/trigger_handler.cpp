@@ -344,6 +344,7 @@ void handleTrigger(char triggerType, bool isAutoMode, bool fromWeb) {
             WiFi.disconnect();
             wifiConnected = false;
             server.end();
+            webServerRunning = false;
         } else {
             Serial.print(F("ℹ️ WiFi bleibt aktiv (Quelle: "));
             if (isAutoMode) {
