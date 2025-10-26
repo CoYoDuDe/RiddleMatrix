@@ -87,6 +87,35 @@ log_dry_run_banner() {
 }
 
 ensure_system_packages() {
+  local target_arch=""
+
+  if [[ "$TARGET_ROOT" = "/" ]]; then
+    if command -v dpkg >/dev/null 2>&1; then
+      target_arch="$(dpkg --print-architecture 2>/dev/null || true)"
+    else
+      warn "dpkg nicht gefunden – Zielarchitektur kann nicht bestimmt werden"
+    fi
+  else
+    if [[ -x "$TARGET_ROOT/usr/bin/dpkg" ]]; then
+      if command -v chroot >/dev/null 2>&1; then
+        target_arch="$(chroot "$TARGET_ROOT" dpkg --print-architecture 2>/dev/null || true)"
+      else
+        warn "chroot nicht verfügbar – kann dpkg im Zielsystem nicht ausführen"
+      fi
+    else
+      warn "dpkg im Zielsystem nicht verfügbar – Zielarchitektur unbekannt"
+    fi
+  fi
+
+  if [[ -z "$target_arch" ]] && command -v dpkg >/dev/null 2>&1; then
+    warn "Verwende Host-Architektur als Fallback"
+    target_arch="$(dpkg --print-architecture 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$target_arch" ]]; then
+    warn "Zielarchitektur konnte nicht ermittelt werden"
+  fi
+
   local -a packages=(
     python3
     python3-venv
@@ -107,8 +136,11 @@ ensure_system_packages() {
     libffi-dev
     libssl-dev
     build-essential
-    linux-image-cloud-amd64
   )
+
+  if [[ "$target_arch" = "amd64" ]]; then
+    packages+=(linux-image-cloud-amd64)
+  fi
 
   local admindir="$TARGET_ROOT/var/lib/dpkg"
   local dpkg_query="dpkg-query"
