@@ -1,11 +1,11 @@
 # Änderungsprotokoll
 
 ## [Unveröffentlicht]
-- Bereinigt `loadConfig()` nun auch WLAN-Passwort und Hostnamen, wenn EEPROM-Zellen mit `0xFF`, Leerstrings oder nicht druckbaren Zeichen gefüllt sind, und speichert die Defaults sofort zurück.
-- Tokenbasierte Authentifizierung im Firmware-Webserver sowie im SetupHelper entfernt; sämtliche Shutdown- und Verwaltungs-
-  Endpunkte stehen innerhalb des Setup-WLANs ohne zusätzliche Header oder Browser-Dialoge zur Verfügung. Frontend und Tests
+- Bereinigt `loadConfig()` nun auch die drahtlosen Zugangsdaten und den Hostnamen, wenn EEPROM-Zellen mit `0xFF`, Leerstrings oder nicht druckbaren Zeichen gefüllt sind, und speichert die Defaults sofort zurück.
+- Frühere Authentifizierungsmechanismen im Firmware-Webserver sowie im SetupHelper entfernt; sämtliche Shutdown- und Verwaltungs-
+  Endpunkte stehen ohne zusätzliche Header oder Browser-Dialoge zur Verfügung. Frontend und Tests
   spiegeln das neue Verhalten wider.
-- Automatisierter Flask-Test prüft den tokenfreien Zugriff und verifiziert weiterhin die Robustheit der Konfigurations-
+- Automatisierter Flask-Test prüft den direkten Zugriff und verifiziert weiterhin die Robustheit der Konfigurations-
   Speicherung.
 - `setup.sh` setzt die Lease-Datei `var/lib/misc/dnsmasq.leases` nun mit Eigentümer `root:dnsmasq` auf `0640`, legt sie bei
   Bedarf idempotent an und dokumentiert die Abhängigkeit vom Dienstkonto, damit `dnsmasq` trotz restriktiver Rechte weiterhin
@@ -18,4 +18,4 @@
   gegen bösartige IP-Strings abgesichert.
 - Neues 32×32-Bitmap „Sun+Rad“ (`'*'`) kombiniert Sonne und Riesenrad, wird in `loadLetterData()` registriert und besitzt einen
   Host-Test, der Mapping und aktive Pixel verifiziert.
-- **2024-05-21 – Dokumentationsupdate:** README und TODO beschreiben nun das Offline-Sicherheitskonzept mit temporärem WLAN-Fenster ohne Token-Authentifizierung; dieses Zielbild soll unverändert bestehen bleiben.
+- **2024-05-21 – Dokumentationsupdate:** README und TODO beschreiben nun das Offline-Sicherheitskonzept ohne zusätzliche Authentifizierung; dieses Zielbild soll unverändert bestehen bleiben.
