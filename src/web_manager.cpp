@@ -725,8 +725,10 @@ void setupWebServer() {
             return;
         }
 
-        bool autoModeCandidate = false;
+        bool autoModeCandidate = autoDisplayMode;
+        bool autoModeProvided = false;
         if (request->hasParam("auto_mode", true)) {
+            autoModeProvided = true;
             String autoModeValue = request->getParam("auto_mode", true)->value();
             autoModeValue.trim();
             autoModeValue.toLowerCase();
@@ -748,10 +750,21 @@ void setupWebServer() {
         }
         letter_display_time = letterTimeCandidate;
         letter_auto_display_interval = autoIntervalCandidate;
-        autoDisplayMode = autoModeCandidate;
+        if (autoModeProvided) {
+            autoDisplayMode = autoModeCandidate;
+        }
 
         saveConfig();
-        request->send(200, "text/plain", "✅ Anzeigeeinstellungen gespeichert!");
+
+        String responseMessage = F("✅ Anzeigeeinstellungen gespeichert!");
+        if (autoModeProvided) {
+            responseMessage += F(" Automodus: ");
+            responseMessage += (autoDisplayMode ? F("aktiviert.") : F("deaktiviert."));
+        } else {
+            responseMessage += F(" Automodus unverändert.");
+        }
+
+        request->send(200, "text/plain", responseMessage);
     });
 
     server.on("/updateTriggerDelays", HTTP_POST, [](AsyncWebServerRequest *request) {
