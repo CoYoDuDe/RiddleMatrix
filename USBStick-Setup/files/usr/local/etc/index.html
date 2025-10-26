@@ -113,23 +113,6 @@
     .box-order {
       font-weight: bold; margin-right: 10px;
     }
-    .auth-notice {
-      margin: 10px 0;
-      padding: 8px 12px;
-      border-radius: 4px;
-      font-weight: bold;
-    }
-    .auth-notice.unauthorized {
-      background: #fff4d6;
-      color: #8a5200;
-    }
-    .auth-notice.authorized {
-      background: #e6ffed;
-      color: #0b6b3a;
-    }
-    .auth-disabled {
-      opacity: 0.5;
-    }
   </style>
 </head>
 <body onload="init()">
@@ -158,11 +141,6 @@ const colorPattern = /^#[0-9A-Fa-f]{6}$/;
 const letterLabels = {"*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
 const letterOptions = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split("");
 let currentWordTrigger = 0;
-const loopbackHosts = new Set(["localhost", "127.0.0.1", "::1"]);
-const adminTokenStorageKey = "shutdownToken";
-const sensitiveHeaderName = "X-Api-Key";
-const AUTH_REQUIRED_MESSAGE = "🔒 Administrations-Token erforderlich – Änderungen sind gesperrt.";
-
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -187,119 +165,6 @@ function escapeColor(color) {
 
 function escapeJsString(value) {
   return escapeHtml(JSON.stringify(value ?? ""));
-}
-
-function requiresAdminToken() {
-  return !loopbackHosts.has(window.location.hostname);
-}
-
-function getStoredAdminToken() {
-  return localStorage.getItem(adminTokenStorageKey) || "";
-}
-
-function requestAdminToken() {
-  const token = prompt("Bitte Administrations-Token eingeben:");
-  if (token == null) {
-    return "";
-  }
-  const trimmed = token.trim();
-  if (trimmed) {
-    localStorage.setItem(adminTokenStorageKey, trimmed);
-  }
-  return trimmed;
-}
-
-function ensureAdminToken() {
-  let token = getStoredAdminToken();
-  if (token) {
-    return token;
-  }
-  token = requestAdminToken();
-  return token;
-}
-
-function clearAdminToken() {
-  localStorage.removeItem(adminTokenStorageKey);
-  updateReloadButtonState();
-}
-
-function notifyAuthRequired(showAlert = false) {
-  if (statusArea) {
-    statusArea.innerHTML = `<div class="statusEntry status">${AUTH_REQUIRED_MESSAGE}</div>`;
-    statusArea.dataset.authState = "unauthorized";
-  }
-  if (showAlert) {
-    alert(AUTH_REQUIRED_MESSAGE);
-  }
-  updateReloadButtonState();
-}
-
-function isSessionAuthorized() {
-  if (!requiresAdminToken()) {
-    return true;
-  }
-  return !!getStoredAdminToken();
-}
-
-function updateReloadButtonState() {
-  const authorized = isSessionAuthorized();
-  const reloadButton = document.getElementById("reloadBtn");
-  if (reloadButton) {
-    reloadButton.disabled = !authorized;
-    reloadButton.title = authorized ? "" : "Authentifizierung erforderlich – Token hinterlegen";
-  }
-
-  const authNotice = document.getElementById("authNotice");
-  if (authNotice) {
-    authNotice.textContent = authorized
-      ? "🔓 Administrationsfunktionen freigeschaltet."
-      : AUTH_REQUIRED_MESSAGE;
-    authNotice.classList.toggle("authorized", authorized);
-    authNotice.classList.toggle("unauthorized", !authorized);
-  }
-
-  const requiresAuthElements = document.querySelectorAll("[data-requires-auth]");
-  requiresAuthElements.forEach(element => {
-    if ("disabled" in element) {
-      element.disabled = !authorized;
-    }
-    element.classList.toggle("auth-disabled", !authorized);
-  });
-
-  if (statusArea) {
-    if (!authorized) {
-      if (statusArea.dataset.authState !== "unauthorized") {
-        statusArea.innerHTML = `<div class="statusEntry status">${AUTH_REQUIRED_MESSAGE}</div>`;
-        statusArea.dataset.authState = "unauthorized";
-      }
-    } else if (statusArea.dataset.authState === "unauthorized") {
-      statusArea.innerHTML = "";
-      delete statusArea.dataset.authState;
-    }
-  }
-}
-
-function configureAdminToken() {
-  const token = requestAdminToken();
-  if (token) {
-    alert("Token gespeichert. Geschützte Aktionen wurden freigeschaltet.");
-  } else {
-    alert("Kein Token hinterlegt. Geschützte Aktionen bleiben gesperrt.");
-  }
-  updateReloadButtonState();
-}
-
-function buildSensitiveHeaders(options = { prompt: false }) {
-  const headers = {};
-  if (!requiresAdminToken()) {
-    return headers;
-  }
-  const token = options.prompt ? ensureAdminToken() : getStoredAdminToken();
-  if (!token) {
-    return null;
-  }
-  headers[sensitiveHeaderName] = token;
-  return headers;
 }
 
 function init() {
@@ -399,32 +264,13 @@ async function shutdown() {
     return;
   }
 
-  const headers = buildSensitiveHeaders({ prompt: true });
-  if (headers === null) {
-    alert("Herunterfahren abgebrochen – kein Token hinterlegt.");
-    return;
-  }
-  if (requiresAdminToken()) {
-    const token = headers[sensitiveHeaderName];
-    if (!token) {
-      alert("Herunterfahren abgebrochen – kein Token hinterlegt.");
-      return;
-    }
-  }
-
   const shutdownButton = document.getElementById("shutdown");
   const originalLabel = shutdownButton.textContent;
   shutdownButton.disabled = true;
   shutdownButton.textContent = "Wird heruntergefahren...";
 
   try {
-    const response = await fetch("/shutdown", { method: "POST", headers });
-    if (response.status === 401 || response.status === 403) {
-      clearAdminToken();
-      alert("Authentifizierung fehlgeschlagen. Bitte Administrations-Token prüfen.");
-      updateReloadButtonState();
-      return;
-    }
+    const response = await fetch("/shutdown", { method: "POST" });
     if (!response.ok) {
       alert("Fehler beim Abschalten: " + response.statusText);
       return;
@@ -451,15 +297,11 @@ async function shutdown() {
 function showSetup() {
   let html = '<h2>Boxen verwalten</h2>';
   const maxLength = boxOrder.length;
-  const authorized = isSessionAuthorized();
-  const authMessage = authorized ? "🔓 Administrationsfunktionen freigeschaltet." : AUTH_REQUIRED_MESSAGE;
-
-  html += `<div id="authNotice" class="auth-notice ${authorized ? "authorized" : "unauthorized"}">${authMessage}</div>`;
 
   html += '<div class="box-card"><h3>Wörter für Wochentage</h3>';
   html += '<div class="word-trigger-selector">';
   html += '<label for="wordTriggerSelect">Trigger-Spalte:</label>';
-  html += '<select id="wordTriggerSelect" onchange="changeWordTrigger(parseInt(this.value, 10))" data-requires-auth="true">';
+  html += '<select id="wordTriggerSelect" onchange="changeWordTrigger(parseInt(this.value, 10))">';
   for (let trigger = 0; trigger < triggersPerDay; trigger++) {
     const selected = trigger === currentWordTrigger ? "selected" : "";
     html += `<option value="${trigger}" ${selected}>Trigger ${trigger + 1}</option>`;
@@ -477,7 +319,6 @@ function showSetup() {
         <label>${dayNames[i]}</label>
         <input type="text" class="word-input" placeholder="Wort eingeben (max ${maxLength} Zeichen)"
           value="${currentWord}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this)"
-          data-requires-auth="true"
           onkeydown="handleKeydown(event, '${days[i]}', this.value, ${maxLength}, this)">
       </div>`;
   }
@@ -510,13 +351,13 @@ function showSetup() {
         html += `
             <div class="trigger-entry">
               <span>Trigger ${trigger + 1}</span>
-              <select onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();" data-requires-auth="true">
+              <select onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
                 ${letterOptionsHtml}
               </select>
-              <input type="color" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color')" data-requires-auth="true">
+              <input type="color" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color')">
               <div class="delay-input-wrapper">
                 <span>Verzögerung (s)</span>
-                <input type="number" class="delay-input" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this)" data-requires-auth="true">
+                <input type="number" class="delay-input" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
               </div>
             </div>`;
       }
@@ -526,16 +367,16 @@ function showSetup() {
     }
     html += `</div>
       <div class="order-buttons">
-        <button onclick="moveBoxUp(${hostnameArgument})" data-requires-auth="true">↑</button>
-        <button onclick="moveBoxDown(${hostnameArgument})" data-requires-auth="true">↓</button>
-        <button onclick="removeBox(${hostnameArgument})" data-requires-auth="true">❌ Entfernen</button>
+        <button onclick="moveBoxUp(${hostnameArgument})">↑</button>
+        <button onclick="moveBoxDown(${hostnameArgument})">↓</button>
+        <button onclick="removeBox(${hostnameArgument})">❌ Entfernen</button>
       </div></div>`;
   });
 
   html += `
   <div class="action-buttons">
-    <button onclick="transferAll()" id="transferBtn" data-requires-auth="true">✅ Übertragen</button>
-    <button onclick="reloadAll()" id="reloadBtn" data-requires-auth="true">🔄 Boxen neu lernen</button>
+    <button onclick="transferAll()" id="transferBtn">✅ Übertragen</button>
+    <button onclick="reloadAll()" id="reloadBtn">🔄 Boxen neu lernen</button>
     <button onclick="configureAdminToken()" id="authBtn">🔐 Zugang hinterlegen</button>
   </div>
   <div id="statusArea"></div>
@@ -543,7 +384,6 @@ function showSetup() {
 
   document.getElementById("content").innerHTML = html;
   statusArea = document.getElementById("statusArea");
-  updateReloadButtonState();
 }
 
 function handleKeydown(event, day, word, maxLength, inputElement) {
@@ -557,15 +397,6 @@ function updateWord(day, word, maxLength, inputElement) {
     inputElement.classList.add("pending");
   }
   const sanitizedWord = (word || "").toUpperCase().replace(/[^A-Z*#~&?]/g, '').slice(0, maxLength);
-  const headers = buildSensitiveHeaders({ prompt: true });
-  if (headers === null) {
-    if (inputElement) {
-      inputElement.classList.remove("pending");
-    }
-    notifyAuthRequired();
-    showSetup();
-    return;
-  }
   word = sanitizedWord;
   if (inputElement) {
     inputElement.value = sanitizedWord;
@@ -573,27 +404,14 @@ function updateWord(day, word, maxLength, inputElement) {
   for (let i = 0; i < boxOrder.length; i++) {
     const letter = i < word.length ? word[i] : "*";
     knownBoxes[boxOrder[i]] = knownBoxes[boxOrder[i]] || {};
-    saveField(boxOrder[i], day, currentWordTrigger, letter, 'letter', false, inputElement, headers);
+    saveField(boxOrder[i], day, currentWordTrigger, letter, 'letter', false, inputElement);
   }
   showSetup();
 }
 
-function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', updateUI = true, inputElement = null, headersOverride) {
+function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', updateUI = true, inputElement = null) {
   if (inputElement) {
     inputElement.classList.add('pending');
-  }
-
-  let headers = headersOverride;
-  if (headers === undefined) {
-    headers = buildSensitiveHeaders({ prompt: true });
-  }
-  if (headers === null) {
-    if (inputElement) {
-      inputElement.classList.remove('pending');
-    }
-    notifyAuthRequired();
-    showSetup();
-    return;
   }
 
   knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
@@ -626,7 +444,7 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
     payload.delay = value;
   }
 
-  const requestHeaders = { ...headers, "Content-Type": "application/json" };
+  const requestHeaders = { "Content-Type": "application/json" };
 
   fetch("/update_box", {
     method: "POST",
@@ -635,9 +453,6 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
   }).then(response => {
     if (!response.ok) {
       statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichen.</div>';
-      if (statusArea) {
-        delete statusArea.dataset.authState;
-      }
       if (inputElement) inputElement.classList.remove("pending");
     } else {
       if (inputElement) {
@@ -646,17 +461,11 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
         setTimeout(() => inputElement.classList.remove("saved"), 1000);
         statusArea.innerHTML = '<div class="statusEntry status">✅ Änderung gespeichert.</div>';
       }
-      if (statusArea) {
-        delete statusArea.dataset.authState;
-      }
       if (updateUI) showSetup();
     }
   }).catch(e => {
     console.error("Fehler beim Speichern:", e);
     statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern.</div>';
-    if (statusArea) {
-      delete statusArea.dataset.authState;
-    }
     if (inputElement) inputElement.classList.remove("pending");
   });
 }
@@ -689,13 +498,7 @@ function moveBoxDown(hostname) {
 }
 
 function saveBoxOrder() {
-  const headers = buildSensitiveHeaders({ prompt: true });
-  if (headers === null) {
-    notifyAuthRequired();
-    fetchDevices();
-    return;
-  }
-  const requestHeaders = { ...headers, "Content-Type": "application/json" };
+  const requestHeaders = { "Content-Type": "application/json" };
 
   fetch("/update_box_order", {
     method: "POST",
@@ -714,32 +517,13 @@ function saveBoxOrder() {
 }
 
 function removeBox(hostname) {
-  const headers = buildSensitiveHeaders({ prompt: true });
-  if (headers === null) {
-    const message = '⚠️ Entfernen abgebrochen – Administrations-Token erforderlich.';
-    if (statusArea) {
-      statusArea.innerHTML = `<div class="statusEntry status">${message}</div>`;
-    }
-    alert(message);
-    return;
-  }
-
-  headers["Content-Type"] = "application/json";
+  const headers = { "Content-Type": "application/json" };
 
   fetch("/remove_box", {
     method: "POST",
     headers,
     body: JSON.stringify({ hostname })
   }).then(response => {
-    if (response.status === 401 || response.status === 403) {
-      clearAdminToken();
-      const message = '❌ Zugriff verweigert – bitte Token prüfen.';
-      if (statusArea) {
-        statusArea.innerHTML = `<div class="statusEntry status">${message}</div>`;
-      }
-      alert(message);
-      return;
-    }
     if (!response.ok) {
       statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Entfernen.</div>';
     } else {
@@ -752,12 +536,7 @@ function removeBox(hostname) {
 }
 
 async function transferBox(hostname) {
-  const headers = buildSensitiveHeaders({ prompt: true });
-  if (headers === null) {
-    alert("Übertragung abgebrochen – kein Administrations-Token hinterlegt.");
-    return;
-  }
-  headers["Content-Type"] = "application/json";
+  const headers = { "Content-Type": "application/json" };
 
   transferQueue[hostname] = true;
   const transferBtn = document.getElementById("transferBtn");
@@ -776,10 +555,7 @@ async function transferBox(hostname) {
       body: JSON.stringify({ hostname })
     });
 
-    if (response.status === 401 || response.status === 403) {
-      clearAdminToken();
-      statusText = "❌ Zugriff verweigert";
-    } else if (!response.ok) {
+    if (!response.ok) {
       statusText = `❌ Fehler (${response.status})`;
     } else {
       const data = await response.json();
@@ -813,13 +589,6 @@ async function reloadAll() {
     return;
   }
 
-  const headers = buildSensitiveHeaders();
-  if (headers === null) {
-    alert("Vorgang abgebrochen – kein Administrations-Token hinterlegt.");
-    updateReloadButtonState();
-    return;
-  }
-
   const reloadButton = document.getElementById("reloadBtn");
   const originalLabel = reloadButton ? reloadButton.textContent : "";
   if (reloadButton) {
@@ -828,12 +597,7 @@ async function reloadAll() {
   }
 
   try {
-    const response = await fetch("/reload_all", { method: "POST", headers });
-    if (response.status === 401 || response.status === 403) {
-      clearAdminToken();
-      alert("Authentifizierung fehlgeschlagen. Bitte Administrations-Token prüfen.");
-      return;
-    }
+    const response = await fetch("/reload_all", { method: "POST" });
     if (!response.ok) {
       alert("Fehler beim Neu-Laden der Boxen: " + response.statusText);
       return;
@@ -846,9 +610,8 @@ async function reloadAll() {
   } finally {
     if (reloadButton) {
       reloadButton.textContent = originalLabel || "🔄 Boxen neu lernen";
-      reloadButton.disabled = !isSessionAuthorized();
+      reloadButton.disabled = false;
     }
-    updateReloadButtonState();
   }
 }
 </script>

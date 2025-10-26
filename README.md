@@ -162,40 +162,20 @@ Der Installer kopiert standardmäßig den Inhalt von `USBStick-Setup/files/` auf
 
 Legacy-Skripte wurden in [`USBStick-Setup/archive/legacy-root-scripts/`](USBStick-Setup/archive/legacy-root-scripts) abgelegt und stehen weiterhin als Referenz zur Verfügung.
 
-### Geschützter Shutdown-Endpunkt
+### Shutdown- und Verwaltungs-Endpunkte ohne Tokenpflicht
 
-Die Weboberfläche des USB-Stick-Setups löst das Herunterfahren des Geräts über den Endpunkt `/shutdown` aus.
-Damit nur berechtigte Clients diesen Vorgang starten können, gelten seitdem folgende Regeln:
+Die Weboberfläche des USB-Stick-Setups löst das Herunterfahren des Geräts über den Endpunkt `/shutdown` aus und kann über
+`/reload_all` sämtliche bekannten Boxen neu einlesen. Beide Aktionen sind bewusst ohne zusätzliche Token- oder Passwort-
+Abfrage implementiert, damit Installationen im geschlossenen WLAN-Netz der Boxenfamilie ohne zusätzlichen Verwaltungs-
+aufwand auskommen.
 
-- Lokale Zugriffe vom Gerät selbst (`127.0.0.1` oder `::1`) bleiben ohne weitere Maßnahmen möglich.
-- Für Zugriffe aus anderen Netzen muss ein Token `SHUTDOWN_TOKEN` hinterlegt werden – idealerweise in
-  `/etc/usbstick/public_ap.env` oder als Environment-Variable. Die Weboberfläche fragt das Token beim ersten Klick
-  auf „Herunterfahren“ ab, speichert es im Browser und übermittelt es anschließend per HTTP-Header `X-Api-Key`.
-- Ungültige oder fehlende Tokens führen zu HTTP 403. Der Browser blendet in diesem Fall einen Hinweis ein und verlangt
-  bei Bedarf die erneute Eingabe.
-- Reverse-Proxies oder HTTP-Weiterleitungen müssen künftig den gültigen Administrations-Token weiterreichen. Anfragen,
-  deren `X-Forwarded-For`- oder `Forwarded`-Header nicht ausschließlich lokale (`127.0.0.1`/`::1`) Stationen enthalten,
-  werden ohne Token konsequent mit HTTP 403 beantwortet.
+- Der Schutz erfolgt ausschließlich über das WLAN selbst: Wer Zugriff auf das Setup-WLAN besitzt, darf auch die Admin-
+  Funktionen auslösen.
+- Die Oberfläche blendet weiterhin Sicherheitsabfragen ein (z. B. Bestätigungsdialoge), damit unbeabsichtigte Klicks
+  keine sofortigen Aktionen auslösen.
+- Reverse-Proxies oder VPN-Zugriffe benötigen keine zusätzlichen Header mehr. Netzbetreibende sollten stattdessen auf
+  Netzwerkisolation, das zeitlich begrenzte Setup-WLAN sowie planmäßige Neustarts setzen.
 
-Vor jedem Abschalten erscheint zusätzlich ein Bestätigungsdialog, damit unbeabsichtigte Klicks keine sofortige
-Abschaltung mehr auslösen. Das Frontend informiert außerdem darüber, dass der Shutdown einige Minuten dauern kann.
-
-### Geschützter Reload-All-Endpunkt
-
-Auch der Verwaltungsendpunkt `/reload_all`, der alle bekannten Boxen aus der Konfigurationsdatei löscht und über
-`dnsmasq.leases` neu erlernt, ist jetzt gegen unbefugte Zugriffe gesichert. Die Regeln entsprechen dem
-Shutdown-Endpoint:
-
-- Lokale Zugriffe (`127.0.0.1` bzw. `::1`) bleiben ohne weiteres Token erlaubt.
-- Für entfernte Clients wird derselbe Header `X-Api-Key` erwartet. Der Schlüssel wird weiterhin über die Variable
-  `SHUTDOWN_TOKEN` (z. B. in `/etc/usbstick/public_ap.env`) bereitgestellt, damit keine zusätzliche Geheimnisverwaltung
-  notwendig ist.
-- Die Weboberfläche blendet den Button „🔄 Boxen neu lernen“ aus, solange kein gültiges Token hinterlegt wurde, und
-  bietet einen separaten Dialog zum Hinterlegen des Tokens an. Vor dem Neu-Laden der Boxen erscheint zusätzlich eine
-  Sicherheitsabfrage.
-- Fehlgeschlagene Versuche führen zu HTTP 403, werden serverseitig protokolliert und löschen das gespeicherte Token im
-  Browser, damit Anwender:innen sofort eine neue Eingabe erzwingen können.
-- Auch hier gilt: Proxy-Ketten mit externen Hops müssen ein gültiges `X-Api-Key`-Token beilegen. Reine Loopback-Hop-Ketten
-  bleiben ohne Token zulässig.
-
-Der Workflow bleibt damit kompatibel zur bestehenden Shutdown-Logik und nutzt dieselbe Konfiguration.
+Bitte berücksichtigen: Durch den Wegfall der Tokenlogik können externe Netze die Aktionen auslösen, sofern sie auf den
+Webserver gelangen. In produktiven Umgebungen empfiehlt sich daher, den Dienst nur temporär (z. B. während des Setups)
+freizuschalten oder das Setup-WLAN strikt zu segmentieren.
