@@ -703,9 +703,9 @@ void setupWebServer() {
             return;
         }
 
-        AsyncWebParameter *brightnessParam = request->getParam("brightness", true);
-        AsyncWebParameter *letterTimeParam = request->getParam("letter_time", true);
-        AsyncWebParameter *autoIntervalParam = request->getParam("auto_interval", true);
+        const AsyncWebParameter *brightnessParam = request->getParam("brightness", true);
+        const AsyncWebParameter *letterTimeParam = request->getParam("letter_time", true);
+        const AsyncWebParameter *autoIntervalParam = request->getParam("auto_interval", true);
 
         long brightnessCandidate = 0;
         if (!parseSignedLongInRange(brightnessParam->value(), 1L, 255L, brightnessCandidate)) {
