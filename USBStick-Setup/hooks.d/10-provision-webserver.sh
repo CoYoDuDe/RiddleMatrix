@@ -2,6 +2,9 @@
 set -euo pipefail
 
 VENV_DIR=""
+DRY_RUN="${PROVISION_DRY_RUN:-0}"
+USE_CHROOT=0
+PYTHON_STEPS_ENABLED=1
 
 log() {
   printf '[provision] %s\n' "$1"
@@ -15,6 +18,43 @@ die() {
   printf '[provision] ❌ %s\n' "$1" >&2
   exit 1
 }
+
+is_dry_run() {
+  [[ "$DRY_RUN" = "1" ]]
+}
+
+format_cmd() {
+  local out="" arg
+  for arg in "$@"; do
+    if [[ -z "$out" ]]; then
+      out="$(printf '%q' "$arg")"
+    else
+      out+=" $(printf '%q' "$arg")"
+    fi
+  done
+  printf '%s' "$out"
+}
+
+path_inside_target() {
+  local abs="$1"
+  if [[ "$TARGET_ROOT" = "/" ]]; then
+    printf '%s\n' "$abs"
+    return
+  fi
+
+  case "$abs" in
+    "$TARGET_ROOT")
+      printf '/\n'
+      ;;
+    "$TARGET_ROOT"/*)
+      printf '/%s\n' "${abs#"$TARGET_ROOT/"}"
+      ;;
+    *)
+      printf '%s\n' "$abs"
+      ;;
+  esac
+}
+
 
 resolve_target_root() {
   local arg="${1:-}" env_root="${TARGET_ROOT:-}"
@@ -37,6 +77,12 @@ resolve_target_root() {
 
   if [[ ! -d "$TARGET_ROOT" ]]; then
     die "Target root $TARGET_ROOT does not exist"
+  fi
+}
+
+log_dry_run_banner() {
+  if is_dry_run; then
+    log "Dry-run aktiviert – es werden keine Änderungen am Dateisystem vorgenommen."
   fi
 }
 
@@ -108,6 +154,10 @@ ensure_system_packages() {
   fi
 
   if [[ "$TARGET_ROOT" = "/" ]]; then
+    if is_dry_run; then
+      log "DRY-RUN: würde fehlende Pakete installieren: ${missing[*]}"
+      return
+    fi
     log "Installing missing packages: ${missing[*]}"
     "$apt_cmd" update
     "$apt_cmd" install -y "${missing[@]}"
@@ -116,6 +166,12 @@ ensure_system_packages() {
 
   if ! command -v chroot >/dev/null 2>&1; then
     warn "chroot not available; cannot install packages for target $TARGET_ROOT"
+    return
+  fi
+
+  if is_dry_run; then
+    log "DRY-RUN: würde chroot $TARGET_ROOT $(format_cmd "$apt_cmd" update)"
+    log "DRY-RUN: würde chroot $TARGET_ROOT $(format_cmd "$apt_cmd" install -y "${missing[@]}")"
     return
   fi
 
@@ -137,6 +193,20 @@ venv_python_bin() {
 }
 
 ensure_virtualenv() {
+  if is_dry_run; then
+    if [[ "$USE_CHROOT" -eq 1 ]]; then
+      log "DRY-RUN: würde virtuelle Umgebung via chroot unter $(path_inside_target "$VENV_DIR") anlegen."
+    else
+      log "DRY-RUN: würde virtuelle Umgebung auf dem Host unter $VENV_DIR anlegen."
+    fi
+    PYTHON_STEPS_ENABLED=0
+    return
+  fi
+
+  if [[ "$PYTHON_STEPS_ENABLED" -ne 1 ]]; then
+    return
+  fi
+
   local host_python
   if command -v python3 >/dev/null 2>&1; then
     host_python="$(command -v python3)"
@@ -144,12 +214,47 @@ ensure_virtualenv() {
     die "python3 binary not found on the host system"
   fi
 
+  if [[ "$USE_CHROOT" -eq 0 ]]; then
+    if [[ -d "$VENV_DIR/bin" ]]; then
+      log "Python virtual environment already present at $VENV_DIR"
+    else
+      log "Creating Python virtual environment at $VENV_DIR"
+      mkdir -p "$VENV_DIR"
+      "$host_python" -m venv "$VENV_DIR"
+    fi
+    local venv_python
+    if ! venv_python="$(venv_python_bin)"; then
+      die "Virtual environment at $VENV_DIR is incomplete"
+    fi
+    if [[ ! -x "$VENV_DIR/bin/pip" ]]; then
+      log "Ensuring pip is available inside the virtual environment"
+      "$venv_python" -m ensurepip --upgrade
+    fi
+    return
+  fi
+
+  if ! command -v chroot >/dev/null 2>&1; then
+    warn "chroot ist nicht verfügbar – überspringe Python-Provisionierung für $TARGET_ROOT"
+    PYTHON_STEPS_ENABLED=0
+    return
+  fi
+
+  local target_python="$TARGET_ROOT/usr/bin/python3"
+  if [[ ! -x "$target_python" ]]; then
+    warn "Target python3 binary missing at $target_python – überspringe Provisionierung"
+    PYTHON_STEPS_ENABLED=0
+    return
+  fi
+
+  local venv_inside
+  venv_inside="$(path_inside_target "$VENV_DIR")"
+
   if [[ -d "$VENV_DIR/bin" ]]; then
     log "Python virtual environment already present at $VENV_DIR"
   else
-    log "Creating Python virtual environment at $VENV_DIR"
+    log "Creating Python virtual environment via chroot at $venv_inside"
     mkdir -p "$VENV_DIR"
-    "$host_python" -m venv "$VENV_DIR"
+    chroot "$TARGET_ROOT" /usr/bin/python3 -m venv "$venv_inside"
   fi
 
   local venv_python
@@ -158,8 +263,8 @@ ensure_virtualenv() {
   fi
 
   if [[ ! -x "$VENV_DIR/bin/pip" ]]; then
-    log "Ensuring pip is available inside the virtual environment"
-    "$venv_python" -m ensurepip --upgrade
+    log "Ensuring pip is available inside the virtual environment via chroot"
+    chroot "$TARGET_ROOT" "$(path_inside_target "$venv_python")" -m ensurepip --upgrade
   fi
 }
 
@@ -168,8 +273,41 @@ install_python_dependencies() {
   local -a missing=()
   local venv_python
 
+  if is_dry_run; then
+    if [[ "$USE_CHROOT" -eq 1 ]]; then
+      log "DRY-RUN: würde Python-Abhängigkeiten im Zielsystem via chroot installieren"
+    else
+      log "DRY-RUN: würde Python-Abhängigkeiten im virtuellen Host-Environment installieren"
+    fi
+    return
+  fi
+
+  if [[ "$PYTHON_STEPS_ENABLED" -ne 1 ]]; then
+    warn "Skipping Python dependency installation because the virtual environment is unavailable"
+    return
+  fi
+
   if ! venv_python="$(venv_python_bin)"; then
     die "Virtual environment at $VENV_DIR is missing a python interpreter"
+  fi
+
+  if [[ "$USE_CHROOT" -eq 1 ]]; then
+    local venv_python_inside
+    venv_python_inside="$(path_inside_target "$venv_python")"
+    for dep in "${dependencies[@]}"; do
+      if ! chroot "$TARGET_ROOT" "$venv_python_inside" -m pip show "$dep" >/dev/null 2>&1; then
+        missing+=("$dep")
+      fi
+    done
+
+    if [[ ${#missing[@]} -eq 0 ]]; then
+      log "Python dependencies already installed inside virtual environment"
+      return
+    fi
+
+    log "Installing Python dependencies inside chroot $TARGET_ROOT: ${missing[*]}"
+    chroot "$TARGET_ROOT" "$venv_python_inside" -m pip install --disable-pip-version-check --no-input "${missing[@]}"
+    return
   fi
 
   for dep in "${dependencies[@]}"; do
@@ -189,6 +327,10 @@ install_python_dependencies() {
 
 main() {
   resolve_target_root "$1"
+  if [[ "$TARGET_ROOT" != "/" ]]; then
+    USE_CHROOT=1
+  fi
+  log_dry_run_banner
   VENV_DIR="$TARGET_ROOT/usr/local/venv/maerchen"
   ensure_system_packages
   ensure_virtualenv
