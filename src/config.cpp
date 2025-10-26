@@ -367,7 +367,7 @@ void loadConfig() {
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
         sanitizeColorMatrix(dailyLetterColors);
     } else if (storedVersion == EEPROM_CONFIG_VERSION_WITH_AUTH) {
-        Serial.println(F("ℹ️ Konfiguration der Vorversion (mit Token-Schutz) erkannt – übernehme Werte ohne Authentifizierung."));
+        Serial.println(F("ℹ️ Konfiguration der Vorversion erkannt – übernehme Werte unverändert."));
         loadConfigFromVersion4Layout();
         migratedLegacyLayout = true;
     } else {
