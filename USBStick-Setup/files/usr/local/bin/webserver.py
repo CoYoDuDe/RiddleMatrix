@@ -910,6 +910,8 @@ def transfer_box():
         save_config(config)
 
     ip = box.get("ip")
+    if sanitize_ipv4(ip) == SAFE_IP_PLACEHOLDER:
+        return jsonify({"status": "❌ IP unbekannt"})
     if not ip:
         return jsonify({"status": "❌ IP unbekannt"})
 

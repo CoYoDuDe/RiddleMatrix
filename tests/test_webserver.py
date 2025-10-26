@@ -230,6 +230,26 @@ def test_learn_box_sanitizes_hostnames_and_devices_output(webserver_app, monkeyp
     assert malicious_hostname not in str(payload)
 
 
+def test_transfer_box_returns_placeholder_status_without_requests_call(webserver_app, monkeypatch):
+    module, client = webserver_app
+
+    hostname = "Box Platzhalter"
+    config = module.load_config()
+    config["boxen"][hostname] = _empty_box(module, ip=module.SAFE_IP_PLACEHOLDER)
+    config["boxOrder"] = [hostname]
+    module.save_config(config)
+
+    def failing_get(*args, **kwargs):
+        raise RuntimeError("requests.get darf für Platzhalter-IP nicht aufgerufen werden")
+
+    monkeypatch.setattr(module.requests, "get", failing_get)
+
+    response = client.post("/transfer_box", json={"hostname": hostname})
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "❌ IP unbekannt"}
+
+
 def test_transfer_box_returns_json_on_get_error(webserver_app, monkeypatch):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})
