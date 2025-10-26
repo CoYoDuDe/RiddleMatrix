@@ -167,3 +167,10 @@ Legacy-Skripte wurden in [`USBStick-Setup/archive/legacy-root-scripts/`](USBStic
 - `bootlocal.sh` und `root/install_public_ap.sh` protokollieren fehlende oder unvollständige Dateien, verweisen auf die Vorlage und greifen automatisch auf dieselben Standardwerte zurück, anstatt mit einem Fehler abzubrechen.
 - Nach der Installation sollten die Werte in `/etc/usbstick/public_ap.env` direkt angepasst werden, um individuelle Hotspot-Zugangsdaten zu verwenden.
 
+### Absicherung des Shutdown-Endpunkts der Weboberfläche
+
+- Der lokale Flask-Webserver stellt den Poweroff-Endpunkt `/shutdown` ausschließlich für berechtigte Clients bereit. Loopback-Anfragen (`127.0.0.1` beziehungsweise `::1`) sind weiterhin ohne zusätzliche Angaben möglich.
+- Für entfernte Verbindungen muss der HTTP-Header `X-Setup-Token` gesetzt werden. Der gültige Token wird über die Umgebungsvariable `SHUTDOWN_TOKEN` oder die Datei `/etc/usbstick/public_ap.env` verteilt.
+- Fehlende oder ungültige Tokens führen zu HTTP-Status 403 und werden im Log des Webservers als Warnung dokumentiert. Auf diese Weise bleiben versehentliche oder unautorisierte Shutdown-Versuche nachvollziehbar.
+- Tests für diesen Pfad befinden sich in [`tests/test_webserver.py`](tests/test_webserver.py) und decken erfolgreiche sowie abgelehnte Anfragen ab.
+

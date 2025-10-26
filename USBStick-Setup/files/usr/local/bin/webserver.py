@@ -608,7 +608,7 @@ def extract_box_state_from_soup(soup):
                     first_option = select.find("option")
                     if first_option and first_option.get("value") is not None:
                         value = first_option.get("value", "")
-            letters[day][slot] = value or ""
+            letters[day][slot] = sanitize_letter(value, default="")
 
             color_input = _find_field("input", "color", firmware_day_index, slot, fallback_day_index=day_index)
 
@@ -732,7 +732,7 @@ def get_hostname_from_web(ip):
         return "Unbekannt"
     try:
         r = requests.get(
-            f"http://{ip}",
+            f"http://{ip}/",
             timeout=3,
             allow_redirects=False,
         )
@@ -1016,7 +1016,11 @@ def transfer_box():
         r = requests.get(f"http://{ip}/", timeout=3, allow_redirects=False)
     except requests.RequestException:
         return jsonify({"status": "❌ Box nicht erreichbar"})
-    if r.is_redirect or r.is_permanent_redirect or 300 <= r.status_code < 400:
+    if (
+        getattr(r, "is_redirect", False)
+        or getattr(r, "is_permanent_redirect", False)
+        or 300 <= getattr(r, "status_code", 0) < 400
+    ):
         app.logger.warning(
             "Transfer-Box für %s abgebrochen: unerwartete Weiterleitung (HTTP %s)",
             hostname,
@@ -1067,7 +1071,11 @@ def transfer_box():
         )
     except requests.RequestException:
         return jsonify({"status": "❌ Fehler bei Übertragung"})
-    if r.is_redirect or r.is_permanent_redirect or 300 <= r.status_code < 400:
+    if (
+        getattr(r, "is_redirect", False)
+        or getattr(r, "is_permanent_redirect", False)
+        or 300 <= getattr(r, "status_code", 0) < 400
+    ):
         app.logger.warning(
             "Transfer-Box für %s abgebrochen: unerwartete Weiterleitung beim Update (HTTP %s)",
             hostname,
