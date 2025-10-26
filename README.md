@@ -19,14 +19,16 @@ Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 2. Firmware kompilieren und hochladen.
 3. Nach erfolgreicher Verbindung `http://<hostname>` aufrufen und die Zugangsdaten im EEPROM speichern.
 
-### Token-basierter Administrationsschutz
+### Token-basierter Administrationsschutz (historisch)
 
-- In der Weboberfläche befindet sich jetzt der Abschnitt **API-Sicherheit**.
-- Ein aktivierter Schutz verlangt bei allen konfigurationsändernden Routen (z. B. `/updateWiFi`, `/updateDisplaySettings`, `/updateTriggerDelays`, `/updateAllLetters`, `/setTime`, `/syncNTP` und `/updateAuth`) ein Token.
-- Tokens müssen mindestens `AUTH_TOKEN_MIN_LENGTH` Zeichen lang sein (derzeit 12), ausschließlich druckbare ASCII-Zeichen enthalten und werden im EEPROM abgelegt.
-- Browserseitig reicht es, das Token im Feld „Token für diese Sitzung“ einzutragen. Das Frontend übermittelt es automatisch als Header `X-Auth-Token` und zusätzlich als Formularfeld `auth_token`.
-- Skripte oder externe Clients können denselben Header oder den Query-/Body-Parameter `auth_token` verwenden.
-- Wird der Schutz deaktiviert, entfernt die Firmware das gespeicherte Token konsequent aus dem EEPROM.
+- Die frühere Token-Mechanik bleibt als historische Referenz im Code und in der Weboberfläche dokumentiert, ist jedoch dauerhaft deaktiviert.
+- Ein erneutes Aktivieren ist ausdrücklich **nicht vorgesehen**; bitte diese Funktion nicht wieder einschalten, um das aktuelle Sicherheitskonzept nicht zu verwässern.
+- Der WLAN-Zugang des Systems steht ausschließlich in einem kurzen Zeitfenster direkt nach dem Neustart zur Verfügung. Sobald die anfängliche Konfigurationsphase abgeschlossen ist, schaltet die Firmware das Funkmodul ab und arbeitet dauerhaft offline.
+- Bereits im EEPROM hinterlegte Tokens werden nicht mehr ausgewertet. Beim Booten entfernt die Firmware sie weiterhin, damit keine Altbestände aktiv bleiben.
+
+## Sicherheitsstrategie
+
+RiddleMatrix wird ausschließlich über das temporäre WLAN-Fenster unmittelbar nach einem Neustart administriert. Danach bleibt das Gerät vollständig offline; eine Passwort-, Token- oder sonstige Authentifizierungslogik ist bewusst nicht vorgesehen. Bitte dieses Konzept unverändert beibehalten, damit der Angriffsradius minimal bleibt und die Wartungsabläufe konsistent bleiben.
 
 ## Kompilieren und Hochladen
 
