@@ -22,6 +22,23 @@ sudo ./setup.sh --dry-run     # Nur anzeigen, was passieren würde
 sudo ./setup.sh --target /mnt/venus-os   # Installation in ein gemountetes Root-Dateisystem
 ```
 
+## Nach der Installation
+
+Der Installer ruft auf Live-Systemen automatisch `systemctl daemon-reload` auf und startet die bereitgestellten Units neu. Bei
+Offline-Installationen (z. B. `--target /mnt/...`) oder wenn `--skip-systemd` verwendet wurde, sollten diese Schritte nach dem
+Kopieren manuell erfolgen:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable kiosk-startx.service
+sudo systemctl restart kiosk-startx.service
+sudo systemctl status kiosk-startx.service
+```
+
+Die Datei [`files/home/kioskuser/.xinitrc`](files/home/kioskuser/.xinitrc) sorgt dafür, dass `startx` direkt das Skript
+[`start_firefox.sh`](files/home/kioskuser/start_firefox.sh) ausführt. So wird der Firefox-Kiosk nach einem Neustart zuverlässig
+im Vollbild gestartet.
+
 ### Optionen
 
 | Option | Beschreibung |
