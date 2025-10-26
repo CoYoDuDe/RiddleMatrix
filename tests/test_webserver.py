@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import sys
 from pathlib import Path
 import copy
@@ -589,7 +590,7 @@ def test_update_box_sanitizes_letters_and_transfer(webserver_app, monkeypatch):
 
     captured = {}
 
-    def fake_post(url, json=None, timeout=3):
+    def fake_post(url, json=None, timeout=3, **kwargs):
         captured["url"] = url
         captured["json"] = json
 
@@ -814,7 +815,7 @@ def test_delay_inputs_are_clamped_to_upper_bound(webserver_app, monkeypatch):
 
     captured = {}
 
-    def fake_post(url, json=None, timeout=3):
+    def fake_post(url, json=None, timeout=3, **kwargs):
         captured["url"] = url
         captured["json"] = json
 
@@ -929,7 +930,7 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
 
     captured = {}
 
-    def fake_post(url, json=None, timeout=3):
+    def fake_post(url, json=None, timeout=3, **kwargs):
         captured["url"] = url
         captured["json"] = json
 
@@ -944,7 +945,11 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     assert response.status_code == 200
     assert response.get_json() == {"status": "✅ Übertragen"}
     assert captured["url"].endswith("/updateAllLetters")
-    assert captured["json"] == {"letters": letters, "colors": colors, "delays": delays}
+    expected_letters = {
+        day: [module.sanitize_letter(letter) for letter in letters[day]]
+        for day in module.DAYS
+    }
+    assert captured["json"] == {"letters": expected_letters, "colors": colors, "delays": delays}
 
 
 def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypatch):
@@ -978,7 +983,7 @@ def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypa
 
     captured = {}
 
-    def fake_post(url, json=None, timeout=3):
+    def fake_post(url, json=None, timeout=3, **kwargs):
         captured["url"] = url
         captured["json"] = json
 
@@ -1189,7 +1194,7 @@ def test_extract_box_state_supports_trigger_first_schema(webserver_app):
         for slot in range(module.TRIGGER_SLOTS):
             letter_value = f"L{day_index}{slot}"
             color_value = f"#{slot}{day_index}{slot}{day_index}{slot}{day_index}"
-            expected_letters[day][slot] = letter_value
+            expected_letters[day][slot] = module.sanitize_letter(letter_value)
             expected_colors[day][slot] = color_value
 
             raw_delay = f"{day_index * 10 + slot + 0.4}"
@@ -1340,7 +1345,20 @@ def test_migrate_config_adds_delay_matrix(webserver_app):
         assert all(value == module.DEFAULT_DELAY for value in migrated["boxen"]["Legacy"]["delays"][day])
 
 
-def test_shutdown_allows_remote_clients(webserver_app, monkeypatch):
+def test_shutdown_rejects_remote_clients_without_token(webserver_app, monkeypatch, caplog):
+    module, client = webserver_app
+    monkeypatch.setattr(module.os, "system", lambda cmd: pytest.fail("poweroff darf ohne Token nicht ausgeführt werden"))
+    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV_VAR, "SehrSicheresToken")
+    caplog.set_level(logging.WARNING)
+
+    response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "203.0.113.5"})
+
+    assert response.status_code == 403
+    assert response.get_json() == {"status": "❌ Zugriff verweigert", "details": "Authentifizierungs-Token fehlt"}
+    assert any("Shutdown-Anfrage abgelehnt" in record.message for record in caplog.records)
+
+
+def test_shutdown_allows_remote_clients_with_valid_token(webserver_app, monkeypatch):
     module, client = webserver_app
     calls = []
 
@@ -1348,8 +1366,14 @@ def test_shutdown_allows_remote_clients(webserver_app, monkeypatch):
         calls.append(cmd)
 
     monkeypatch.setattr(module.os, "system", fake_system)
+    monkeypatch.setenv(module.SHUTDOWN_TOKEN_ENV_VAR, "SehrSicheresToken")
 
-    response = client.post("/shutdown", environ_overrides={"REMOTE_ADDR": "203.0.113.5"})
+    response = client.post(
+        "/shutdown",
+        environ_overrides={"REMOTE_ADDR": "203.0.113.5"},
+        headers={module.SHUTDOWN_TOKEN_HEADER: "SehrSicheresToken"},
+    )
+
     assert response.status_code == 200
     assert response.get_json() == {"status": "OK"}
     assert calls == ["poweroff"]
