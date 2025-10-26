@@ -61,8 +61,12 @@ automatisiert um alle Laufzeitabhängigkeiten des Märchen-Managers:
 
 - prüft mittels `dpkg-query`, ob benötigte Debian-Pakete wie `dnsmasq`, `hostapd`, `rfkill`, `x11-xserver-utils`, `python3`
   (inkl. `python3-venv`) und optionale Firmware-Pakete installiert sind und stößt bei Bedarf ein `apt-get install` an
-- erzeugt das virtuelle Python-Umfeld unter `/usr/local/venv/maerchen` mit `python3 -m venv`, falls es noch nicht existiert
-- installiert fehlende Python-Abhängigkeiten (`flask`, `requests`, `beautifulsoup4`) idempotent via `pip`
+- erzeugt das virtuelle Python-Umfeld unter `/usr/local/venv/maerchen` mit `python3 -m venv`, falls es noch nicht existiert –
+  bei Offline-Zielen automatisch via `chroot`, sodass der Python des Zielsystems verwendet wird
+- installiert fehlende Python-Abhängigkeiten (`flask`, `requests`, `beautifulsoup4`) idempotent via `pip`; offline erfolgt die
+  Installation ebenfalls via `chroot`, damit Wheels und Binärmodule zur Zielarchitektur passen
+- unterstützt einen Dry-Run-Modus über die Umgebungsvariable `PROVISION_DRY_RUN=1`, der sämtliche Schritte lediglich protokolliert
+  und dadurch Tests ohne Root-Eingriffe ermöglicht
 
 Die Provisionierung läuft sowohl bei einer Installation ins aktive Root-Dateisystem (`TARGET_ROOT=/`) als auch bei einem
 gemounteten Ziel (sofern `chroot` verfügbar ist). Dadurch müssen Operator:innen die Abhängigkeiten nicht mehr manuell

@@ -65,7 +65,14 @@ pytest tests/test_webserver.py
 ```
 
 Die Tests lassen sich beliebig kombinieren, zum Beispiel mit `pytest` ohne
-Dateiangabe für eine vollständige Suite.
+Dateiangabe für eine vollständige Suite. Für den USB-Stick-Installer steht
+zusätzlich ein Dry-Run-Test zur Verfügung, der beide Pfade (`TARGET_ROOT=/`
+und ein gemountetes Zielsystem) abdeckt und sicherstellt, dass die Provisionierung
+ihre Arbeitsschritte sauber protokolliert, ohne Änderungen vorzunehmen:
+
+```bash
+pytest tests/test_provision_hook.py
+```
 
 ## Weitere Schritte
 
@@ -148,6 +155,8 @@ sudo ./setup.sh
 ```
 
 Der Installer kopiert standardmäßig den Inhalt von `USBStick-Setup/files/` auf das laufende System (`/`). Mit `--target` kann ein anderes Root-Verzeichnis (z. B. ein gemountetes Venus-OS-Image) angegeben werden, `--dry-run` zeigt geplante Schritte ohne Änderungen an und `--skip-systemd`/`--skip-hooks` deaktivieren optionale Aktionen. Weitere Details finden sich in der README im Unterordner [`USBStick-Setup`](USBStick-Setup).
+
+> **Hinweis:** Der Provisionierungs-Hook `hooks.d/10-provision-webserver.sh` prüft automatisch, ob er auf dem Live-System arbeitet oder ein Ziel unterhalb von `--target` versorgt. Für Offline-Installationen wird das virtuelle Python-Umfeld via `chroot` mit dem Python des Zielsystems erstellt, sodass erzeugte Wheels und Binaries zur Zielarchitektur passen. Ist `PROVISION_DRY_RUN=1` gesetzt (zum Beispiel in Tests), werden alle Schritte nur protokolliert.
 
 Legacy-Skripte wurden in [`USBStick-Setup/archive/legacy-root-scripts/`](USBStick-Setup/archive/legacy-root-scripts) abgelegt und stehen weiterhin als Referenz zur Verfügung.
 
