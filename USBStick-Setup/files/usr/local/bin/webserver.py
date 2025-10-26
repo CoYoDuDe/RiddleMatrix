@@ -706,7 +706,12 @@ def get_connected_devices():
 
                         _ensure_no_redirect(r, action="Geräte-Scan", host=ip)
 
-                        if not r.ok or "name='hostname'" not in r.text:
+                        if not r.ok:
+                            continue
+
+                        soup = BeautifulSoup(r.text, "html.parser")
+                        hostname_field = soup.find("input", {"name": "hostname"})
+                        if hostname_field is None:
                             continue
 
                         hostname = get_hostname_from_web(ip)
