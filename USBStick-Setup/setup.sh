@@ -130,7 +130,7 @@ deploy_public_ap_env() {
 
   if ((DRY_RUN)); then
     if [[ -f "$target_file" ]]; then
-      log "[dry-run] Hotspot-Umgebung $target_file bleibt unverändert"
+      log "[dry-run] Hotspot-Umgebung $target_file existiert bereits und bleibt bestehen"
     else
       log "[dry-run] install -m 0640 $template_source $target_file"
     fi
@@ -138,16 +138,13 @@ deploy_public_ap_env() {
   fi
 
   mkdir -p "$(dirname "$target_file")"
-  if [[ ! -f "$target_file" ]]; then
-    install -m 0640 "$template_source" "$target_file"
+  if [[ -f "$target_file" ]]; then
+    log "Hotspot-Umgebungsdatei $target_file existiert bereits; überspringe Kopie aus der Vorlage"
     return
   fi
 
-  if cmp -s "$template_source" "$target_file"; then
-    install -m 0640 "$template_source" "$target_file"
-  else
-    warn "Bestehende Hotspot-Umgebungsdatei $target_file bleibt unverändert"
-  fi
+  install -m 0640 "$template_source" "$target_file"
+  log "Hotspot-Umgebung aus Vorlage nach $target_file kopiert"
 }
 
 ensure_directories() {

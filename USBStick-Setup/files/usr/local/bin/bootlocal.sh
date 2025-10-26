@@ -17,12 +17,12 @@ FALLBACK_CREDENTIALS=0
 if ! public_ap_load_env; then
     case "$PUBLIC_AP_ENV_STATUS" in
         missing_file|empty_file)
-            echo "⚠️ $PUBLIC_AP_ENV_ERROR Hotspot wird mit Standardwerten gestartet." >&2
+            echo "⚠️ $PUBLIC_AP_ENV_ERROR Verwende Standardwerte (Vorlage: $PUBLIC_AP_ENV_TEMPLATE)." >&2
             public_ap_apply_defaults
             FALLBACK_CREDENTIALS=1
             ;;
         missing_ssid|missing_passphrase)
-            echo "⚠️ $PUBLIC_AP_ENV_ERROR Verwende Standardwerte aus dem Installer." >&2
+            echo "⚠️ $PUBLIC_AP_ENV_ERROR Greife auf Standardwerte zurück (Vorlage: $PUBLIC_AP_ENV_TEMPLATE)." >&2
             public_ap_apply_defaults
             FALLBACK_CREDENTIALS=1
             ;;
@@ -34,7 +34,7 @@ if ! public_ap_load_env; then
 fi
 
 if (( FALLBACK_CREDENTIALS )); then
-    echo "ℹ️ Standard-Hotspot \"$SSID\" aktiv. Bitte /etc/usbstick/public_ap.env anpassen."
+    echo "ℹ️ Standard-Hotspot \"$SSID\" aktiv. Bitte /etc/usbstick/public_ap.env anpassen (Vorlage: $PUBLIC_AP_ENV_TEMPLATE)."
 fi
 
 if [[ -d "$PERSIST_USR_LOCAL" ]]; then
