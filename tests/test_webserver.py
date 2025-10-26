@@ -855,6 +855,27 @@ def test_update_box_order_allows_remote_clients(webserver_app):
     config = module.load_config()
     assert config["boxOrder"] == ["BoxB", "BoxA"]
 
+
+def test_update_box_order_accepts_empty_list(webserver_app):
+    module, client = webserver_app
+    module.save_config(
+        {
+            "boxen": {
+                "BoxA": _empty_box(module, ip="10.0.0.1"),
+                "BoxB": _empty_box(module, ip="10.0.0.2"),
+            },
+            "boxOrder": ["BoxA", "BoxB"],
+        }
+    )
+
+    response = client.post("/update_box_order", json={"boxOrder": []})
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "success"}
+    config = module.load_config()
+    assert config["boxOrder"] == []
+
+
 def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
     module, client = webserver_app
     letters = {day: [f"{day}{idx}" for idx in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
