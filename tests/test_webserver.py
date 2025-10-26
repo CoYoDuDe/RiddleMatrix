@@ -106,6 +106,44 @@ def test_load_config_repairs_non_dict_payload(tmp_path, payload):
     assert json.loads(config_path.read_text(encoding="utf-8")) == module._default_config()
 
 
+def test_load_config_is_idempotent_on_second_call(tmp_path, monkeypatch):
+    module = _load_webserver(tmp_path)
+    config_path = Path(module.CONFIG_FILE)
+
+    initial_payload = {
+        "boxen": {
+            "Box Eins": {
+                "ip": "192.0.2.1",
+            }
+        },
+        "boxOrder": ["Box Eins"],
+    }
+    config_path.write_text(json.dumps(initial_payload), encoding="utf-8")
+
+    original_save_config = module.save_config
+    save_calls = []
+
+    def spy_save_config(data):
+        save_calls.append(json.loads(json.dumps(data)))
+        original_save_config(data)
+
+    monkeypatch.setattr(module, "save_config", spy_save_config)
+
+    first_result = module.load_config()
+    saved_after_first = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved_after_first == first_result
+    assert len(save_calls) >= 1
+
+    save_calls.clear()
+    before_second = config_path.read_text(encoding="utf-8")
+    second_result = module.load_config()
+    after_second = config_path.read_text(encoding="utf-8")
+
+    assert second_result == first_result
+    assert after_second == before_second
+    assert save_calls == []
+
+
 def test_get_hostname_from_web_supports_attribute_variants(webserver_app, monkeypatch):
     module, _client = webserver_app
 
