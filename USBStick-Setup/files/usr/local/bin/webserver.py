@@ -277,6 +277,7 @@ def _allocate_unique_hostname(base_name: str, config: dict) -> str:
         else:
             candidate = suffix_str[-MAX_HOSTNAME_LENGTH:]
 
+        candidate = sanitize_hostname(candidate)
         if candidate not in boxen:
             return candidate
 
