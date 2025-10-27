@@ -900,6 +900,60 @@ def update_box():
     changed = ensure_box_structure(box, remove_legacy=True) or renamed_existing
 
     updated = False
+    pending_letter_updates = {}
+
+    def _current_letters_snapshot(day: str):
+        if day in pending_letter_updates:
+            return list(pending_letter_updates[day])
+        existing = box["letters"].get(day)
+        if isinstance(existing, list):
+            return list(existing)
+        return ["" for _ in range(TRIGGER_SLOTS)]
+
+    def _collect_letter_update(day: str, values, source: str):
+        current_letters = _current_letters_snapshot(day)
+        new_letters = current_letters[:]
+        changed_local = False
+
+        def _assign(index: int, raw_value):
+            nonlocal changed_local
+            sanitized = sanitize_letter(raw_value)
+            if sanitized == "":
+                raw_repr = repr(raw_value)
+                return (
+                    f"Ungültiger Buchstabe für {day} (Trigger {index + 1}, Quelle: {source}) – Eingabe {raw_repr} wird abgelehnt."
+                )
+            if new_letters[index] != sanitized:
+                new_letters[index] = sanitized
+                changed_local = True
+            return None
+
+        if isinstance(values, list):
+            for idx, raw in enumerate(values):
+                if idx >= TRIGGER_SLOTS:
+                    continue
+                error_message = _assign(idx, raw)
+                if error_message:
+                    return None, error_message
+        elif isinstance(values, dict):
+            for key, raw in values.items():
+                key_str = str(key)
+                if key_str.isdigit():
+                    idx = int(key_str)
+                    if 0 <= idx < TRIGGER_SLOTS:
+                        error_message = _assign(idx, raw)
+                        if error_message:
+                            return None, error_message
+        elif isinstance(values, str) or values is not None:
+            error_message = _assign(0, values)
+            if error_message:
+                return None, error_message
+        else:
+            return None, None
+
+        if changed_local:
+            return new_letters, None
+        return None, None
 
     if "ip" in data and isinstance(data.get("ip"), str):
         sanitized_ip = sanitize_ipv4(data.get("ip"))
@@ -911,18 +965,20 @@ def update_box():
     if isinstance(letters_payload, dict):
         for day, values in letters_payload.items():
             if day in DAYS:
-                normalized = _normalize_letter_list(values)
-                if box["letters"].get(day) != normalized:
-                    box["letters"][day] = normalized
-                    updated = True
+                normalized, error = _collect_letter_update(day, values, 'JSON-Feld "letters"')
+                if error:
+                    return jsonify({"status": "error", "message": error}), 400
+                if normalized is not None:
+                    pending_letter_updates[day] = normalized
 
     for day in DAYS:
         legacy_letter_value = data.get(day)
         if isinstance(legacy_letter_value, str):
-            normalized = _normalize_letter_list([legacy_letter_value])
-            if box["letters"].get(day) != normalized:
-                box["letters"][day] = normalized
-                updated = True
+            normalized, error = _collect_letter_update(day, legacy_letter_value, f'Legacy-Feld "{day}"')
+            if error:
+                return jsonify({"status": "error", "message": error}), 400
+            if normalized is not None:
+                pending_letter_updates[day] = normalized
 
     colors_payload = data.get("colors")
     if isinstance(colors_payload, dict):
@@ -967,9 +1023,21 @@ def update_box():
     if day in DAYS and isinstance(trigger_index, int) and 0 <= trigger_index < TRIGGER_SLOTS:
         if "letter" in data and isinstance(data.get("letter"), str):
             sanitized_letter = sanitize_letter(data["letter"])
-            if box["letters"][day][trigger_index] != sanitized_letter:
-                box["letters"][day][trigger_index] = sanitized_letter
-                updated = True
+            if not sanitized_letter:
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Ungültiger Buchstabe für {day} (Trigger {trigger_index + 1}, Quelle: Feld \"letter\").",
+                        }
+                    ),
+                    400,
+                )
+            current_letters = _current_letters_snapshot(day)
+            if current_letters[trigger_index] != sanitized_letter:
+                new_letters = current_letters[:]
+                new_letters[trigger_index] = sanitized_letter
+                pending_letter_updates[day] = new_letters
         if "color" in data and isinstance(data.get("color"), str):
             color_value = _sanitize_color(data["color"])
             if box["colors"][day][trigger_index] != color_value:
@@ -979,6 +1047,12 @@ def update_box():
             delay_value = _coerce_delay_value(data.get("delay"))
             if box["delays"][day][trigger_index] != delay_value:
                 box["delays"][day][trigger_index] = delay_value
+                updated = True
+
+    if pending_letter_updates:
+        for day, new_letters in pending_letter_updates.items():
+            if box["letters"].get(day) != new_letters:
+                box["letters"][day] = new_letters
                 updated = True
 
     if changed or updated:
