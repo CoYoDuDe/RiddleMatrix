@@ -34,6 +34,8 @@ SAFE_IP_PLACEHOLDER = "0.0.0.0"
 _FIRMWARE_LETTERS = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?")
 _ALLOWED_LETTERS = set(_FIRMWARE_LETTERS)
 
+MAX_HOSTNAME_LENGTH = 64
+
 app = Flask(__name__)
 LEASE_FILE = "/var/lib/misc/dnsmasq.leases"
 CONFIG_FILE = "/mnt/persist/boxen_config/boxen_config.json"
@@ -250,7 +252,7 @@ def sanitize_hostname(hostname: Optional[str], *, fallback_prefix: str = "box") 
     if not value:
         value = f"{fallback_prefix}-{secrets.token_hex(4)}"
 
-    return value[:64]
+    return value[:MAX_HOSTNAME_LENGTH]
 
 
 def _allocate_unique_hostname(base_name: str, config: dict) -> str:
@@ -267,9 +269,17 @@ def _allocate_unique_hostname(base_name: str, config: dict) -> str:
 
     suffix = 2
     while True:
-        candidate = sanitize_hostname(f"{target}-{suffix}")
+        suffix_str = str(suffix)
+        max_base_len = MAX_HOSTNAME_LENGTH - len(suffix_str) - 1
+        if max_base_len > 0:
+            base_part = target[:max_base_len]
+            candidate = f"{base_part}-{suffix_str}"
+        else:
+            candidate = suffix_str[-MAX_HOSTNAME_LENGTH:]
+
         if candidate not in boxen:
             return candidate
+
         suffix += 1
 
 
