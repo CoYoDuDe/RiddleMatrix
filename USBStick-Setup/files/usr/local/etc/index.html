@@ -296,6 +296,36 @@ function normalizeBox(box) {
 async function fetchDevices() {
   try {
     const res = await fetch("/devices");
+    if (!res.ok) {
+      let errorMessage = `❌ Fehler beim Laden der Boxen (${res.status} ${res.statusText || ""})`;
+      try {
+        const errorData = await res.json();
+        if (errorData && typeof errorData === "object") {
+          const details = [errorData.message, errorData.error, errorData.detail]
+            .filter(part => typeof part === "string" && part.trim().length > 0)
+            .join(" – ");
+          if (details) {
+            errorMessage += `: ${details}`;
+          }
+        }
+      } catch (jsonError) {
+        try {
+          const text = await res.text();
+          if (text) {
+            errorMessage += `: ${text.trim()}`;
+          }
+        } catch (textError) {
+          console.warn("Fehlerdetails konnten nicht gelesen werden:", textError);
+        }
+      }
+      console.error("Fehlerhafte Antwort von /devices:", res.status, res.statusText);
+      if (statusArea) {
+        statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(errorMessage)}</div>`;
+        statusArea.dataset.fetchError = "true";
+      }
+      return;
+    }
+
     const data = await res.json();
     const newKnownBoxes = data.boxen || {};
     const newConnectedBoxes = data.connected || [];
@@ -316,6 +346,11 @@ async function fetchDevices() {
     connectedBoxes = newConnectedBoxes;
     boxOrder = newBoxOrder;
 
+    if (statusArea && statusArea.dataset.fetchError === "true") {
+      statusArea.innerHTML = "";
+      delete statusArea.dataset.fetchError;
+    }
+
     renderDeviceList();
     const activeElement = document.activeElement;
     const isLiveEditElement = !!(activeElement && (
@@ -329,7 +364,11 @@ async function fetchDevices() {
     }
   } catch (e) {
     console.error("Fehler beim Abrufen der Geräte:", e);
-    if (statusArea) statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Laden der Boxen.</div>';
+    if (statusArea) {
+      const message = `❌ Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
+      statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
+      statusArea.dataset.fetchError = "true";
+    }
   }
 }
 
