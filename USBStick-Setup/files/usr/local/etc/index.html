@@ -167,6 +167,10 @@ let transferQueue = {};
 let transferring = false;
 let statusArea;
 let boxOrder = [];
+let devicesPollInFlight = false;
+let devicesPollPromise = null;
+let devicesPollTimeoutId = null;
+const devicesPollIntervalMs = 1000;
 const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const triggersPerDay = 3;
@@ -205,10 +209,20 @@ function escapeJsString(value) {
   return escapeHtml(JSON.stringify(value ?? ""));
 }
 
+function scheduleNextDevicesPoll(delay = devicesPollIntervalMs) {
+  const normalizedDelay = Number.isFinite(delay) && delay >= 0 ? delay : devicesPollIntervalMs;
+  if (devicesPollTimeoutId) {
+    clearTimeout(devicesPollTimeoutId);
+  }
+  devicesPollTimeoutId = window.setTimeout(() => {
+    devicesPollTimeoutId = null;
+    fetchDevices();
+  }, normalizedDelay);
+}
+
 function init() {
   initShutdownTokenHandling();
   fetchDevices();
-  setInterval(fetchDevices, 1000); // Prüfe alle 1 Sekunde
 }
 
 function initShutdownTokenHandling() {
@@ -294,82 +308,96 @@ function normalizeBox(box) {
 }
 
 async function fetchDevices() {
-  try {
-    const res = await fetch("/devices");
-    if (!res.ok) {
-      let errorMessage = `❌ Fehler beim Laden der Boxen (${res.status} ${res.statusText || ""})`;
-      try {
-        const errorData = await res.json();
-        if (errorData && typeof errorData === "object") {
-          const details = [errorData.message, errorData.error, errorData.detail]
-            .filter(part => typeof part === "string" && part.trim().length > 0)
-            .join(" – ");
-          if (details) {
-            errorMessage += `: ${details}`;
-          }
-        }
-      } catch (jsonError) {
+  if (devicesPollInFlight) {
+    return devicesPollPromise;
+  }
+
+  devicesPollInFlight = true;
+  const pollPromise = (async () => {
+    try {
+      const res = await fetch("/devices");
+      if (!res.ok) {
+        let errorMessage = `❌ Fehler beim Laden der Boxen (${res.status} ${res.statusText || ""})`;
         try {
-          const text = await res.text();
-          if (text) {
-            errorMessage += `: ${text.trim()}`;
+          const errorData = await res.json();
+          if (errorData && typeof errorData === "object") {
+            const details = [errorData.message, errorData.error, errorData.detail]
+              .filter(part => typeof part === "string" && part.trim().length > 0)
+              .join(" – ");
+            if (details) {
+              errorMessage += `: ${details}`;
+            }
           }
-        } catch (textError) {
-          console.warn("Fehlerdetails konnten nicht gelesen werden:", textError);
+        } catch (jsonError) {
+          try {
+            const text = await res.text();
+            if (text) {
+              errorMessage += `: ${text.trim()}`;
+            }
+          } catch (textError) {
+            console.warn("Fehlerdetails konnten nicht gelesen werden:", textError);
+          }
         }
+        console.error("Fehlerhafte Antwort von /devices:", res.status, res.statusText);
+        if (statusArea) {
+          statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(errorMessage)}</div>`;
+          statusArea.dataset.fetchError = "true";
+        }
+        return;
       }
-      console.error("Fehlerhafte Antwort von /devices:", res.status, res.statusText);
+
+      const data = await res.json();
+      const newKnownBoxes = data.boxen || {};
+      const newConnectedBoxes = data.connected || [];
+      const newBoxOrder = data.boxOrder || Object.keys(newKnownBoxes);
+
+      const normalizedIncoming = {};
+      Object.entries(newKnownBoxes).forEach(([hostname, box]) => {
+        normalizedIncoming[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
+      });
+
+      // Prüfe auf Änderungen
+      const hasChanges =
+        JSON.stringify(knownBoxes) !== JSON.stringify(normalizedIncoming) ||
+        JSON.stringify(connectedBoxes) !== JSON.stringify(newConnectedBoxes) ||
+        JSON.stringify(boxOrder) !== JSON.stringify(newBoxOrder);
+
+      knownBoxes = normalizedIncoming;
+      connectedBoxes = newConnectedBoxes;
+      boxOrder = newBoxOrder;
+
+      if (statusArea && statusArea.dataset.fetchError === "true") {
+        statusArea.innerHTML = "";
+        delete statusArea.dataset.fetchError;
+      }
+
+      renderDeviceList();
+      const activeElement = document.activeElement;
+      const isLiveEditElement = !!(activeElement && (
+        (typeof activeElement.matches === "function" && activeElement.matches('[data-live-edit]')) ||
+        (activeElement.classList && (activeElement.classList.contains("word-input") || activeElement.classList.contains("delay-input"))) ||
+        activeElement.tagName === "SELECT"
+      ));
+      // Nur showSetup() aufrufen, wenn kein relevantes Eingabefeld fokussiert ist
+      if (hasChanges && statusArea && !transferring && !isLiveEditElement) {
+        showSetup();
+      }
+    } catch (e) {
+      console.error("Fehler beim Abrufen der Geräte:", e);
       if (statusArea) {
-        statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(errorMessage)}</div>`;
+        const message = `❌ Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
+        statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
         statusArea.dataset.fetchError = "true";
       }
-      return;
+    } finally {
+      devicesPollInFlight = false;
+      devicesPollPromise = null;
+      scheduleNextDevicesPoll(devicesPollIntervalMs);
     }
+  })();
 
-    const data = await res.json();
-    const newKnownBoxes = data.boxen || {};
-    const newConnectedBoxes = data.connected || [];
-    const newBoxOrder = data.boxOrder || Object.keys(newKnownBoxes);
-
-    const normalizedIncoming = {};
-    Object.entries(newKnownBoxes).forEach(([hostname, box]) => {
-      normalizedIncoming[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
-    });
-
-    // Prüfe auf Änderungen
-    const hasChanges =
-      JSON.stringify(knownBoxes) !== JSON.stringify(normalizedIncoming) ||
-      JSON.stringify(connectedBoxes) !== JSON.stringify(newConnectedBoxes) ||
-      JSON.stringify(boxOrder) !== JSON.stringify(newBoxOrder);
-
-    knownBoxes = normalizedIncoming;
-    connectedBoxes = newConnectedBoxes;
-    boxOrder = newBoxOrder;
-
-    if (statusArea && statusArea.dataset.fetchError === "true") {
-      statusArea.innerHTML = "";
-      delete statusArea.dataset.fetchError;
-    }
-
-    renderDeviceList();
-    const activeElement = document.activeElement;
-    const isLiveEditElement = !!(activeElement && (
-      (typeof activeElement.matches === "function" && activeElement.matches('[data-live-edit]')) ||
-      (activeElement.classList && (activeElement.classList.contains("word-input") || activeElement.classList.contains("delay-input"))) ||
-      activeElement.tagName === "SELECT"
-    ));
-    // Nur showSetup() aufrufen, wenn kein relevantes Eingabefeld fokussiert ist
-    if (hasChanges && statusArea && !transferring && !isLiveEditElement) {
-      showSetup();
-    }
-  } catch (e) {
-    console.error("Fehler beim Abrufen der Geräte:", e);
-    if (statusArea) {
-      const message = `❌ Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
-      statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
-      statusArea.dataset.fetchError = "true";
-    }
-  }
+  devicesPollPromise = pollPromise;
+  return pollPromise;
 }
 
 function renderDeviceList() {
