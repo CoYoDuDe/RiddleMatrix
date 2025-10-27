@@ -170,7 +170,10 @@ let boxOrder = [];
 let devicesPollInFlight = false;
 let devicesPollPromise = null;
 let devicesPollTimeoutId = null;
+let devicesPollRunCounter = 0;
+let activeDevicesPollRunId = 0;
 const devicesPollIntervalMs = 1000;
+const devicesFetchTimeoutMs = 5000;
 const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const triggersPerDay = 3;
@@ -313,9 +316,43 @@ async function fetchDevices() {
   }
 
   devicesPollInFlight = true;
+  const pollRunId = ++devicesPollRunCounter;
+  activeDevicesPollRunId = pollRunId;
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  let fetchTimedOut = false;
+  const fetchTimeoutId = window.setTimeout(() => {
+    fetchTimedOut = true;
+    if (controller) {
+      console.warn(
+        `Breche /devices-Abfrage nach ${devicesFetchTimeoutMs}ms ohne Antwort ab.`
+      );
+      try {
+        controller.abort();
+      } catch (abortError) {
+        console.warn("Abbrechen der Geräteabfrage fehlgeschlagen:", abortError);
+      }
+    } else {
+      console.warn(
+        `Geräteabfrage reagiert ${devicesFetchTimeoutMs}ms lang nicht – starte neuen Versuch.`
+      );
+      if (statusArea) {
+        statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(
+          "❌ Geräteabfrage dauert zu lange – neuer Versuch läuft..."
+        )}</div>`;
+        statusArea.dataset.fetchError = "true";
+      }
+      if (activeDevicesPollRunId === pollRunId) {
+        activeDevicesPollRunId = 0;
+        devicesPollInFlight = false;
+        devicesPollPromise = null;
+        scheduleNextDevicesPoll(devicesPollIntervalMs);
+      }
+    }
+  }, devicesFetchTimeoutMs);
+
   const pollPromise = (async () => {
     try {
-      const res = await fetch("/devices");
+      const res = await fetch("/devices", controller ? { signal: controller.signal } : undefined);
       if (!res.ok) {
         let errorMessage = `❌ Fehler beim Laden der Boxen (${res.status} ${res.statusText || ""})`;
         try {
@@ -383,16 +420,29 @@ async function fetchDevices() {
         showSetup();
       }
     } catch (e) {
-      console.error("Fehler beim Abrufen der Geräte:", e);
+      if (e && e.name === "AbortError") {
+        console.warn("Geräteabfrage wurde wegen Zeitüberschreitung abgebrochen.");
+      } else {
+        console.error("Fehler beim Abrufen der Geräte:", e);
+      }
       if (statusArea) {
-        const message = `❌ Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
+        const message =
+          (e && e.name === "AbortError") || fetchTimedOut
+            ? "❌ Geräteabfrage dauert zu lange – neuer Versuch läuft..."
+            : `❌ Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
         statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
         statusArea.dataset.fetchError = "true";
       }
     } finally {
-      devicesPollInFlight = false;
-      devicesPollPromise = null;
-      scheduleNextDevicesPoll(devicesPollIntervalMs);
+      if (fetchTimeoutId) {
+        clearTimeout(fetchTimeoutId);
+      }
+      if (activeDevicesPollRunId === pollRunId) {
+        activeDevicesPollRunId = 0;
+        devicesPollInFlight = false;
+        devicesPollPromise = null;
+        scheduleNextDevicesPoll(devicesPollIntervalMs);
+      }
     }
   })();
 
