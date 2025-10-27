@@ -177,8 +177,9 @@ const triggersPerDay = 3;
 const defaultColor = "#ffffff";
 const defaultDelay = 0;
 const colorPattern = /^#[0-9A-Fa-f]{6}$/;
-const letterLabels = {"*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
-const letterOptions = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split("");
+const letterLabels = {"": "Leer", "*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
+const letterOptions = [""];
+letterOptions.push(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split(""));
 let currentWordTrigger = 0;
 const SHUTDOWN_TOKEN_KEY = "setupShutdownToken";
 let shutdownTokenInput;
@@ -528,8 +529,13 @@ function showSetup() {
           ? Math.min(999, Math.round(parsedDelay))
           : defaultDelay;
         const delayDisplay = delayValue.toString();
-        const letterOptionsHtml = letterOptions.map(c =>
-          `<option value="${c}" ${c === letter ? "selected" : ""}>${letterLabels[c] || c}</option>`).join("");
+        const letterOptionsHtml = letterOptions.map(optionValue => {
+          const isSelected = letter === "" ? optionValue === "" : optionValue === letter;
+          const label = Object.prototype.hasOwnProperty.call(letterLabels, optionValue)
+            ? letterLabels[optionValue]
+            : optionValue;
+          return `<option value="${optionValue}" ${isSelected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+        }).join("");
         html += `
             <div class="trigger-entry">
               <span>Trigger ${trigger + 1}</span>
@@ -583,7 +589,7 @@ function updateWord(day, word, maxLength, inputElement) {
     inputElement.value = sanitizedWord;
   }
   for (let i = 0; i < boxOrder.length; i++) {
-    const letter = i < word.length ? word[i] : "*";
+    const letter = i < word.length ? word[i] : "";
     knownBoxes[boxOrder[i]] = knownBoxes[boxOrder[i]] || {};
     saveField(boxOrder[i], day, currentWordTrigger, letter, 'letter', false, inputElement);
   }
@@ -598,7 +604,9 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
   knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
   const slotIndex = Number(triggerIndex);
   if (fieldType === 'letter') {
-    knownBoxes[hostname].letters[day][slotIndex] = value;
+    const normalizedLetter = value == null ? "" : String(value);
+    knownBoxes[hostname].letters[day][slotIndex] = normalizedLetter;
+    value = normalizedLetter;
   } else if (fieldType === 'color') {
     const colorValue = sanitizeColor(value);
     knownBoxes[hostname].colors[day][slotIndex] = colorValue;
