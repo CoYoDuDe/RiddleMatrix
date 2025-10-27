@@ -8,6 +8,8 @@ import secrets
 import re
 import ipaddress
 import hmac
+import copy
+import shutil
 from typing import Optional
 from functools import lru_cache
 
@@ -1029,15 +1031,61 @@ def update_box_order():
 
 @app.route("/reload_all", methods=["POST"])
 def reload_all():
+    global CONFIG_FILE
 
-    config = load_config()
-    config["boxen"] = {}
-    config["boxOrder"] = []
-    save_config(config)
+    original_config_path = CONFIG_FILE
+    original_config = load_config()
+    backup_config = copy.deepcopy(original_config)
+
+    temp_dir = tempfile.mkdtemp(prefix="reload_all-")
+    temp_config_path = os.path.join(temp_dir, "config.json")
+
+    working_config = copy.deepcopy(backup_config)
+    working_config["boxen"] = {}
+    working_config["boxOrder"] = []
+
     try:
-        get_connected_devices()
-    except RedirectResponseError as exc:
-        return _redirect_error_response(exc)
+        CONFIG_FILE = temp_config_path
+        save_config(working_config)
+
+        try:
+            devices = get_connected_devices()
+        except RedirectResponseError as exc:
+            CONFIG_FILE = original_config_path
+            save_config(backup_config)
+            return _redirect_error_response(exc)
+        except Exception as exc:
+            app.logger.exception("Fehler beim vollständigen Scan")
+            CONFIG_FILE = original_config_path
+            save_config(backup_config)
+            return (
+                jsonify(
+                    {
+                        "status": "❌ Scan fehlgeschlagen",
+                        "details": str(exc),
+                    }
+                ),
+                500,
+            )
+
+        if not devices:
+            CONFIG_FILE = original_config_path
+            save_config(backup_config)
+            return (
+                jsonify({"status": "❌ Keine Geräte gefunden"}),
+                503,
+            )
+
+        final_config = load_config()
+        CONFIG_FILE = original_config_path
+        save_config(final_config)
+    finally:
+        CONFIG_FILE = original_config_path
+        try:
+            shutil.rmtree(temp_dir)
+        except OSError:
+            pass
+
     return jsonify({"status": "reloaded"})
 
 @app.route("/transfer_box", methods=["POST"])
