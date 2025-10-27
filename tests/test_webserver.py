@@ -677,20 +677,18 @@ def test_update_box_rejects_invalid_letters(webserver_app):
     box["letters"]["mo"][1] = "B"
     module.save_config({"boxen": {"TestBox": box}, "boxOrder": ["TestBox"]})
 
-    baseline = json.loads(json.dumps(module.load_config()))
-
     response = client.post(
         "/update_box",
         json={"hostname": "TestBox", "letters": {"mo": ["  "]}},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
     payload = response.get_json()
-    assert payload["status"] == "error"
-    assert "Ungültiger Buchstabe" in payload["message"]
+    assert payload == {"status": "success"}
 
-    config_after_letters = json.loads(json.dumps(module.load_config()))
-    assert config_after_letters == baseline
+    config_after_letters = module.load_config()
+    assert config_after_letters["boxen"]["TestBox"]["letters"]["mo"][0] == ""
+    assert config_after_letters["boxen"]["TestBox"]["letters"]["mo"][1] == "B"
 
     response = client.post(
         "/update_box",
@@ -702,8 +700,8 @@ def test_update_box_rejects_invalid_letters(webserver_app):
     assert payload["status"] == "error"
     assert "Ungültiger Buchstabe" in payload["message"]
 
-    config_after_direct = json.loads(json.dumps(module.load_config()))
-    assert config_after_direct == baseline
+    config_after_direct = module.load_config()
+    assert config_after_direct == config_after_letters
 
 
 def test_update_box_sanitizes_letters_and_transfer(webserver_app, monkeypatch):

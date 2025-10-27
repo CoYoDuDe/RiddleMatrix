@@ -306,9 +306,9 @@ def sanitize_ipv4(value: Optional[str], *, placeholder: str = SAFE_IP_PLACEHOLDE
     return str(address)
 
 
-def sanitize_letter(value, *, default: str = "") -> str:
+def sanitize_letter(value, *, default: Optional[str] = "", allow_empty: bool = False) -> Optional[str]:
     if value is None:
-        return default
+        return "" if allow_empty else default
 
     if isinstance(value, bytes):
         try:
@@ -320,7 +320,7 @@ def sanitize_letter(value, *, default: str = "") -> str:
 
     candidate = value.strip()
     if not candidate:
-        return default
+        return "" if allow_empty else default
 
     first_char = candidate[0]
     if "a" <= first_char <= "z":
@@ -917,8 +917,8 @@ def update_box():
 
         def _assign(index: int, raw_value):
             nonlocal changed_local
-            sanitized = sanitize_letter(raw_value)
-            if sanitized == "":
+            sanitized = sanitize_letter(raw_value, default=None, allow_empty=True)
+            if sanitized is None:
                 raw_repr = repr(raw_value)
                 return (
                     f"Ungültiger Buchstabe für {day} (Trigger {index + 1}, Quelle: {source}) – Eingabe {raw_repr} wird abgelehnt."
@@ -1021,9 +1021,9 @@ def update_box():
         trigger_index = None
 
     if day in DAYS and isinstance(trigger_index, int) and 0 <= trigger_index < TRIGGER_SLOTS:
-        if "letter" in data and isinstance(data.get("letter"), str):
-            sanitized_letter = sanitize_letter(data["letter"])
-            if not sanitized_letter:
+        if "letter" in data:
+            sanitized_letter = sanitize_letter(data.get("letter"), default=None, allow_empty=True)
+            if sanitized_letter is None:
                 return (
                     jsonify(
                         {
