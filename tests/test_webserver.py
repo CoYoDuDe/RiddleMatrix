@@ -670,6 +670,42 @@ def test_update_box_rejects_malicious_color_payload(webserver_app):
     assert malicious_color not in devices_response.get_data(as_text=True)
 
 
+def test_update_box_rejects_invalid_letters(webserver_app):
+    module, client = webserver_app
+    box = _empty_box(module)
+    box["letters"]["mo"][0] = "A"
+    box["letters"]["mo"][1] = "B"
+    module.save_config({"boxen": {"TestBox": box}, "boxOrder": ["TestBox"]})
+
+    baseline = json.loads(json.dumps(module.load_config()))
+
+    response = client.post(
+        "/update_box",
+        json={"hostname": "TestBox", "letters": {"mo": ["  "]}},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert "Ungültiger Buchstabe" in payload["message"]
+
+    config_after_letters = json.loads(json.dumps(module.load_config()))
+    assert config_after_letters == baseline
+
+    response = client.post(
+        "/update_box",
+        json={"hostname": "TestBox", "day": "mo", "triggerIndex": 1, "letter": " € "},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert "Ungültiger Buchstabe" in payload["message"]
+
+    config_after_direct = json.loads(json.dumps(module.load_config()))
+    assert config_after_direct == baseline
+
+
 def test_update_box_sanitizes_letters_and_transfer(webserver_app, monkeypatch):
     module, client = webserver_app
     box = _empty_box(module, ip="1.2.3.4")
@@ -680,7 +716,7 @@ def test_update_box_sanitizes_letters_and_transfer(webserver_app, monkeypatch):
         json={
             "hostname": "TestBox",
             "letters": {
-                "mo": ["  a ", "€", None],
+                "mo": ["  a ", "*", " & "],
                 "di": {"0": "b#", "1": "~", "2": "??"},
             },
         },
@@ -692,8 +728,8 @@ def test_update_box_sanitizes_letters_and_transfer(webserver_app, monkeypatch):
     config = module.load_config()
     letters = config["boxen"]["TestBox"]["letters"]
     assert letters["mo"][0] == "A"
-    assert letters["mo"][1] == ""
-    assert letters["mo"][2] == ""
+    assert letters["mo"][1] == "*"
+    assert letters["mo"][2] == "&"
     assert letters["di"][0] == "B"
     assert letters["di"][1] == "~"
     assert letters["di"][2] == "?"
@@ -714,11 +750,12 @@ def test_update_box_sanitizes_letters_and_transfer(webserver_app, monkeypatch):
         json={"hostname": "TestBox", "day": "mo", "triggerIndex": 2, "letter": "€uro"},
     )
 
-    assert response.status_code == 200
-    assert response.get_json() == {"status": "success"}
+    assert response.status_code == 400
+    assert response.get_json()["status"] == "error"
+    assert "Ungültiger Buchstabe" in response.get_json()["message"]
 
     config = module.load_config()
-    assert config["boxen"]["TestBox"]["letters"]["mo"][2] == ""
+    assert config["boxen"]["TestBox"]["letters"]["mo"][2] == "C"
 
     remote_letters = {day: ["" for _ in range(module.TRIGGER_SLOTS)] for day in module.DAYS}
     remote_letters["mo"][0] = "Z"
@@ -768,8 +805,8 @@ def test_update_box_sanitizes_letters_and_transfer(webserver_app, monkeypatch):
     assert captured["url"] == "http://1.2.3.4/updateAllLetters"
     payload = captured["json"]
     assert payload["letters"]["mo"][0] == "A"
-    assert payload["letters"]["mo"][1] == ""
-    assert payload["letters"]["mo"][2] == ""
+    assert payload["letters"]["mo"][1] == "*"
+    assert payload["letters"]["mo"][2] == "C"
     assert payload["letters"]["di"][0] == "B"
     assert payload["letters"]["di"][1] == "~"
     assert payload["letters"]["di"][2] == "?"

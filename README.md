@@ -99,6 +99,10 @@ Die Tagesbuchstaben werden jetzt dreidimensional abgelegt:
 
 Trigger-Index `0` entspricht RS485-Trigger 1, Index `1` Trigger 2 usw. Die Weboberfläche unter `/` zeigt die Werte als Matrix an und erlaubt das gleichzeitige Aktualisieren über `/updateAllLetters`.
 
+> **API-Hinweis:** Die Route `/update_box` verweigert Leerzeichen oder nicht unterstützte Zeichen jetzt mit HTTP 400. Die
+> Konfiguration bleibt dabei unverändert, sodass Clients ausschließlich gültige Zeichen aus dem zugelassenen Zeichensatz senden
+> müssen.
+
 | Wochentag   | Trigger 1 (`#RRGGBB`) | Trigger 2 (`#RRGGBB`) | Trigger 3 (`#RRGGBB`) |
 |-------------|-----------------------|-----------------------|-----------------------|
 | Sonntag     | A (`#FF0000`)         | H (`#FFFFFF`)         | O (`#FFA07A`)         |
