@@ -1203,7 +1203,11 @@ def test_reload_all_allows_remote_clients(webserver_app, monkeypatch):
 
     def fake_get_connected_devices():
         called["count"] += 1
-        return []
+        config = module.load_config()
+        config["boxen"] = {"NeuBox": _empty_box(module, ip="203.0.113.5")}
+        config["boxOrder"] = ["NeuBox"]
+        module.save_config(config)
+        return [{"ip": "203.0.113.5", "hostname": "NeuBox"}]
 
     monkeypatch.setattr(module, "get_connected_devices", fake_get_connected_devices)
 
@@ -1217,8 +1221,47 @@ def test_reload_all_allows_remote_clients(webserver_app, monkeypatch):
     assert called["count"] == 1
 
     config = module.load_config()
-    assert config["boxen"] == {}
-    assert config["boxOrder"] == []
+    assert config["boxen"] == {"NeuBox": _empty_box(module, ip="203.0.113.5")}
+    assert config["boxOrder"] == ["NeuBox"]
+
+
+def test_reload_all_restores_config_on_redirect_error(webserver_app, monkeypatch):
+    module, client = webserver_app
+    original_config = {"boxen": {"AltBox": _empty_box(module)}, "boxOrder": ["AltBox"]}
+    module.save_config(copy.deepcopy(original_config))
+
+    def fake_get_connected_devices():
+        raise module.RedirectResponseError("Scan", "192.0.2.1", 302)
+
+    monkeypatch.setattr(module, "get_connected_devices", fake_get_connected_devices)
+
+    response = client.post("/reload_all")
+
+    assert response.status_code == 502
+    payload = response.get_json()
+    assert payload["status"].startswith("❌")
+
+    config_after = module.load_config()
+    assert config_after == original_config
+
+
+def test_reload_all_restores_config_on_empty_scan_result(webserver_app, monkeypatch):
+    module, client = webserver_app
+    original_config = {"boxen": {"AltBox": _empty_box(module)}, "boxOrder": ["AltBox"]}
+    module.save_config(copy.deepcopy(original_config))
+
+    def fake_get_connected_devices():
+        return []
+
+    monkeypatch.setattr(module, "get_connected_devices", fake_get_connected_devices)
+
+    response = client.post("/reload_all")
+
+    assert response.status_code == 503
+    assert response.get_json() == {"status": "❌ Keine Geräte gefunden"}
+
+    config_after = module.load_config()
+    assert config_after == original_config
 
 
 def test_transfer_box_matches_firmware_day_index_mapping(webserver_app, monkeypatch):
