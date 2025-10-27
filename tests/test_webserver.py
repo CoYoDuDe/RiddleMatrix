@@ -316,6 +316,26 @@ def test_get_connected_devices_assigns_unique_names_for_collisions(
     assert persisted["boxen"]["Box-2"]["ip"] == "192.0.2.21"
 
 
+def test_allocate_unique_hostname_handles_max_length_suffix(webserver_app):
+    module, _client = webserver_app
+
+    base_name = "A" * module.MAX_HOSTNAME_LENGTH
+    sanitized = module.sanitize_hostname(base_name)
+
+    assert len(sanitized) == module.MAX_HOSTNAME_LENGTH
+
+    config = {"boxen": {sanitized: _empty_box(module)}, "boxOrder": [sanitized]}
+
+    result = module._allocate_unique_hostname(base_name, config)
+
+    suffix = "-2"
+    expected_prefix_length = module.MAX_HOSTNAME_LENGTH - len(suffix)
+
+    assert result not in config["boxen"]
+    assert len(result) == module.MAX_HOSTNAME_LENGTH
+    assert result == f"{sanitized[:expected_prefix_length]}{suffix}"
+
+
 def test_learn_box_sanitizes_hostnames_and_devices_output(webserver_app, monkeypatch):
     module, client = webserver_app
 
