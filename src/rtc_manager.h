@@ -9,6 +9,7 @@ bool updateCachedWeekday(bool waitForIdle = false);
 bool isWeekdayCacheValid();
 int getCachedWeekday();
 void invalidateWeekdayCache();
+bool getRTCMinutesOfDay(uint16_t &minutesOfDay);
 String getRTCTime();
 int getRTCWeekday();
 bool setRTCFromWeb(const String &date, const String &time);

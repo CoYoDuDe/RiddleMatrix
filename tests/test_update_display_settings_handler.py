@@ -20,5 +20,11 @@ def test_update_display_settings_preserves_auto_mode_without_param() -> None:
 
     assert "bool autoModeCandidate = autoDisplayMode;" in handler
     assert "bool autoModeProvided = false;" in handler
+    assert 'request->hasParam("active_start", true)' in handler
+    assert 'request->hasParam("active_end", true)' in handler
+    assert "parseTimeOfDayValue(activeStartParam->value(), activeStartCandidate)" in handler
+    assert "parseTimeOfDayValue(activeEndParam->value(), activeEndCandidate)" in handler
+    assert "standalone_active_start_minutes = activeStartCandidate;" in handler
+    assert "standalone_active_end_minutes = activeEndCandidate;" in handler
     assert "if (autoModeProvided) {\n            autoDisplayMode = autoModeCandidate;\n        }" in handler
     assert "Automodus unverändert." in handler

@@ -24,3 +24,9 @@ build/
 # PlatformIO
 .pio/
 .vscode/
+
+# Local test environment
+.venv/
+.pytest_cache/
+__pycache__/
+tests/__pycache__/

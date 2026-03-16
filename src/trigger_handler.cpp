@@ -4,6 +4,7 @@
 
 DisplayLetterError lastDisplayLetterError = DisplayLetterError::None;
 bool pendingTriggerActive = false;
+bool activeDisplayManagedBySchedule = false;
 
 namespace {
 
@@ -78,6 +79,20 @@ int resolveWeekdayForTriggerHandling() {
     return getCachedWeekday();
 }
 
+bool isWithinStandaloneWindow(uint16_t minutesOfDay) {
+    if (standalone_active_start_minutes == standalone_active_end_minutes) {
+        return true;
+    }
+
+    if (standalone_active_start_minutes < standalone_active_end_minutes) {
+        return minutesOfDay >= standalone_active_start_minutes &&
+               minutesOfDay <= standalone_active_end_minutes;
+    }
+
+    return minutesOfDay >= standalone_active_start_minutes ||
+           minutesOfDay <= standalone_active_end_minutes;
+}
+
 } // namespace
 
 void clearDisplay() {
@@ -94,6 +109,7 @@ void clearDisplay() {
     alreadyCleared = true;
     triggerActive = false;
     wifiSymbolVisible = false;
+    activeDisplayManagedBySchedule = false;
 
     if (wifiConnected && !wifiDisabled) {
         drawWiFiSymbol();
@@ -387,7 +403,9 @@ void handleTrigger(char triggerType, bool isAutoMode, bool fromWeb) {
 
         if (displayed) {
             alreadyCleared = false;
+            activeDisplayManagedBySchedule = isAutoMode;
         } else {
+            activeDisplayManagedBySchedule = false;
             Serial.print(F("❌ Anzeige fehlgeschlagen: "));
             switch (lastDisplayLetterError) {
                 case DisplayLetterError::TriggerAlreadyActive:
@@ -433,7 +451,19 @@ void checkTrigger() {
 void checkAutoDisplay() {
     static unsigned long lastDisplayTime = 0;
 
-    if (autoDisplayMode && (millis() - lastDisplayTime > ((unsigned long)letter_auto_display_interval * 1000UL))) {
+    if (!autoDisplayMode) {
+        return;
+    }
+
+    if (!isWithinStandaloneActiveWindow()) {
+        if (triggerActive && activeDisplayManagedBySchedule) {
+            Serial.println(F("🌙 Standalone-Aktivzeit beendet – automatische Anzeige wird gelöscht."));
+            clearDisplay();
+        }
+        return;
+    }
+
+    if (millis() - lastDisplayTime > ((unsigned long)letter_auto_display_interval * 1000UL)) {
         lastDisplayTime = millis();
         Serial.println(F("🕒 Automodus aktiv: Zeige heutigen Buchstaben automatisch!"));
 
@@ -441,3 +471,12 @@ void checkAutoDisplay() {
     }
 }
 
+bool isWithinStandaloneActiveWindow() {
+    uint16_t minutesOfDay = 0;
+    if (!getRTCMinutesOfDay(minutesOfDay)) {
+        Serial.println(F("⚠️ RTC-Zeit für Aktivfenster nicht verfügbar – Standalone-Anzeige bleibt aktiv."));
+        return true;
+    }
+
+    return isWithinStandaloneWindow(minutesOfDay);
+}

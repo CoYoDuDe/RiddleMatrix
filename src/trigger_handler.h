@@ -13,6 +13,7 @@ struct PendingTrigger {
 };
 
 extern bool pendingTriggerActive;
+extern bool activeDisplayManagedBySchedule;
 
 void clearDisplay();
 
@@ -39,5 +40,6 @@ void processPendingTriggers();
 void checkTrigger();
 
 void checkAutoDisplay();
+bool isWithinStandaloneActiveWindow();
 
 #endif

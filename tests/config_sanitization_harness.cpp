@@ -16,6 +16,7 @@ AsyncWebServer server(80);
 namespace {
 
 constexpr uint16_t LEGACY_VERSION_OFFSET = 400; // Siehe migrateLegacyLayout()
+constexpr uint16_t VERSION5_CONFIG_OFFSET = EEPROM_OFFSET_CONFIG_VERSION;
 
 bool verify_default_color_sanitizing() {
     EEPROM.begin(EEPROM_SIZE);
@@ -210,6 +211,61 @@ bool verify_open_network_password_preserved() {
     return true;
 }
 
+bool verify_activity_window_defaults_and_migration() {
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.fill(0xFF);
+
+    loadConfig();
+
+    if (standalone_active_start_minutes != 0U || standalone_active_end_minutes != 1439U) {
+        std::cerr << "Default activity window mismatch: got "
+                  << standalone_active_start_minutes << " to "
+                  << standalone_active_end_minutes << std::endl;
+        return false;
+    }
+
+    EEPROM.begin(EEPROM_SIZE);
+    std::uint8_t *raw = EEPROM.raw();
+    std::memset(raw, 0, EEPROM_SIZE);
+
+    char ssid[sizeof(wifi_ssid)] = {};
+    std::strncpy(ssid, "LegacyV5", sizeof(ssid));
+    std::memcpy(raw + EEPROM_OFFSET_WIFI_SSID, ssid, sizeof(ssid));
+
+    char host[sizeof(hostname)] = {};
+    std::strncpy(host, "legacy-v5", sizeof(host));
+    std::memcpy(raw + EEPROM_OFFSET_HOSTNAME, host, sizeof(host));
+
+    std::uint16_t version5 = 5;
+    std::memcpy(raw + VERSION5_CONFIG_OFFSET, &version5, sizeof(version5));
+
+    int brightness = 120;
+    std::memcpy(raw + EEPROM_OFFSET_DISPLAY_BRIGHTNESS, &brightness, sizeof(brightness));
+
+    std::uint32_t displayTime = 9;
+    std::memcpy(raw + EEPROM_OFFSET_LETTER_DISPLAY_TIME, &displayTime, sizeof(displayTime));
+
+    std::uint32_t autoInterval = 180;
+    std::memcpy(raw + EEPROM_OFFSET_AUTO_INTERVAL, &autoInterval, sizeof(autoInterval));
+
+    std::uint8_t autoMode = 1U;
+    std::memcpy(raw + EEPROM_OFFSET_AUTO_MODE, &autoMode, sizeof(autoMode));
+
+    int timeout = 45;
+    std::memcpy(raw + EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
+
+    loadConfig();
+
+    if (standalone_active_start_minutes != 0U || standalone_active_end_minutes != 1439U) {
+        std::cerr << "Version 5 migration did not restore full-day activity window: got "
+                  << standalone_active_start_minutes << " to "
+                  << standalone_active_end_minutes << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -226,6 +282,10 @@ int main() {
     }
 
     if (!verify_open_network_password_preserved()) {
+        return 1;
+    }
+
+    if (!verify_activity_window_defaults_and_migration()) {
         return 1;
     }
 

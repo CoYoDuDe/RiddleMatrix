@@ -194,6 +194,34 @@ bool parseUnsignedLongInRange(const String &value, unsigned long minValue, unsig
     return true;
 }
 
+bool parseTimeOfDayValue(const String &value, uint16_t &parsedMinutes) {
+    String sanitized = value;
+    sanitized.trim();
+
+    int hour = 0;
+    int minute = 0;
+    if (sscanf(sanitized.c_str(), "%d:%d", &hour, &minute) != 2) {
+        return false;
+    }
+
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        return false;
+    }
+
+    parsedMinutes = static_cast<uint16_t>((hour * 60) + minute);
+    return true;
+}
+
+String formatMinutesAsTime(uint16_t minutesOfDay) {
+    if (minutesOfDay > 1439U) {
+        minutesOfDay = 0;
+    }
+
+    char buffer[6];
+    snprintf(buffer, sizeof(buffer), "%02u:%02u", minutesOfDay / 60U, minutesOfDay % 60U);
+    return String(buffer);
+}
+
 void sendJsonStatus(AsyncWebServerRequest *request, uint16_t statusCode, const char *status, const String &message) {
     StaticJsonDocument<256> responseDoc;
     responseDoc["status"] = status;
@@ -481,8 +509,10 @@ void setupWebServer() {
         html += "Helligkeit (1–255): <input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'><br>";
         html += "Buchstaben-Anzeigezeit (Sekunden, 1–60): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
         html += "Automodus-Intervall (Sekunden, 30–600): <input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'><br>";
+        html += "Standalone aktiv von: <input type='time' name='active_start' value='" + escapeHtml(formatMinutesAsTime(standalone_active_start_minutes)) + "'><br>";
+        html += "Standalone aktiv bis: <input type='time' name='active_end' value='" + escapeHtml(formatMinutesAsTime(standalone_active_end_minutes)) + "'><br>";
         html += "<label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> Automodus aktivieren</label>";
-        html += "<p style='margin-top:4px;'>Zulässige Werte: Helligkeit 1–255, Anzeigezeit 1–60&nbsp;s, Automodus-Intervall 30–600&nbsp;s.</p>";
+        html += "<p style='margin-top:4px;'>Zulässige Werte: Helligkeit 1–255, Anzeigezeit 1–60&nbsp;s, Automodus-Intervall 30–600&nbsp;s. Aktivzeiten im Format HH:MM; gleicher Start- und Endwert bedeutet 24-Stunden-Betrieb.</p>";
         html += "<br><button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
         html += "</form>";
 
@@ -698,14 +728,18 @@ void setupWebServer() {
         refreshWiFiIdleTimer(F("POST /updateDisplaySettings"));
         if (!(request->hasParam("brightness", true) &&
               request->hasParam("letter_time", true) &&
-              request->hasParam("auto_interval", true))) {
-            request->send(400, "text/plain", "❌ Fehler: Alle Parameter (brightness, letter_time, auto_interval) sind erforderlich.");
+              request->hasParam("auto_interval", true) &&
+              request->hasParam("active_start", true) &&
+              request->hasParam("active_end", true))) {
+            request->send(400, "text/plain", "❌ Fehler: Alle Parameter (brightness, letter_time, auto_interval, active_start, active_end) sind erforderlich.");
             return;
         }
 
         const AsyncWebParameter *brightnessParam = request->getParam("brightness", true);
         const AsyncWebParameter *letterTimeParam = request->getParam("letter_time", true);
         const AsyncWebParameter *autoIntervalParam = request->getParam("auto_interval", true);
+        const AsyncWebParameter *activeStartParam = request->getParam("active_start", true);
+        const AsyncWebParameter *activeEndParam = request->getParam("active_end", true);
 
         long brightnessCandidate = 0;
         if (!parseSignedLongInRange(brightnessParam->value(), 1L, 255L, brightnessCandidate)) {
@@ -722,6 +756,18 @@ void setupWebServer() {
         unsigned long autoIntervalCandidate = 0;
         if (!parseUnsignedLongInRange(autoIntervalParam->value(), 30UL, 600UL, autoIntervalCandidate)) {
             request->send(400, "text/plain", "❌ Fehler: Das Automodus-Intervall muss zwischen 30 und 600 Sekunden liegen.");
+            return;
+        }
+
+        uint16_t activeStartCandidate = 0;
+        if (!parseTimeOfDayValue(activeStartParam->value(), activeStartCandidate)) {
+            request->send(400, "text/plain", "❌ Fehler: active_start muss im Format HH:MM zwischen 00:00 und 23:59 liegen.");
+            return;
+        }
+
+        uint16_t activeEndCandidate = 0;
+        if (!parseTimeOfDayValue(activeEndParam->value(), activeEndCandidate)) {
+            request->send(400, "text/plain", "❌ Fehler: active_end muss im Format HH:MM zwischen 00:00 und 23:59 liegen.");
             return;
         }
 
@@ -750,6 +796,8 @@ void setupWebServer() {
         }
         letter_display_time = letterTimeCandidate;
         letter_auto_display_interval = autoIntervalCandidate;
+        standalone_active_start_minutes = activeStartCandidate;
+        standalone_active_end_minutes = activeEndCandidate;
         if (autoModeProvided) {
             autoDisplayMode = autoModeCandidate;
         }
@@ -763,6 +811,11 @@ void setupWebServer() {
         } else {
             responseMessage += F(" Automodus unverändert.");
         }
+        responseMessage += F(" Aktivzeit ");
+        responseMessage += formatMinutesAsTime(standalone_active_start_minutes);
+        responseMessage += F(" bis ");
+        responseMessage += formatMinutesAsTime(standalone_active_end_minutes);
+        responseMessage += F(".");
 
         request->send(200, "text/plain", responseMessage);
     });

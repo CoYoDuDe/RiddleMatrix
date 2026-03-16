@@ -58,7 +58,9 @@ static constexpr uint16_t EEPROM_OFFSET_AUTO_INTERVAL = EEPROM_OFFSET_TRIGGER_DE
 static constexpr uint16_t EEPROM_OFFSET_AUTO_MODE = EEPROM_OFFSET_AUTO_INTERVAL + EEPROM_SIZEOF_UNSIGNED_LONG;
 static constexpr uint16_t EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT = EEPROM_OFFSET_AUTO_MODE + sizeof(uint8_t);
 static constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION = EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT + sizeof(int);
-static constexpr uint16_t EEPROM_CONFIG_VERSION = 5;
+static constexpr uint16_t EEPROM_OFFSET_ACTIVE_START_MINUTES = EEPROM_OFFSET_CONFIG_VERSION + sizeof(uint16_t);
+static constexpr uint16_t EEPROM_OFFSET_ACTIVE_END_MINUTES = EEPROM_OFFSET_ACTIVE_START_MINUTES + sizeof(uint16_t);
+static constexpr uint16_t EEPROM_CONFIG_VERSION = 6;
 
 static_assert(EEPROM_OFFSET_DAILY_LETTERS + (NUM_TRIGGERS * NUM_DAYS) <= EEPROM_OFFSET_DAILY_LETTER_COLORS,
               "Letter-Block überschneidet sich mit Farb-Block");
@@ -66,8 +68,8 @@ static_assert(EEPROM_OFFSET_DAILY_LETTER_COLORS + (NUM_TRIGGERS * NUM_DAYS * COL
               "Farb-Block überschneidet sich mit Anzeigeparametern");
 static_assert(EEPROM_OFFSET_CONFIG_VERSION >= EEPROM_OFFSET_TRIGGER_DELAY_MATRIX + EEPROM_TRIGGER_DELAY_MATRIX_SIZE,
               "Config version offset overlaps trigger delay matrix");
-static_assert(EEPROM_OFFSET_CONFIG_VERSION + sizeof(uint16_t) <= EEPROM_SIZE,
-              "Config version exceeds allocated EEPROM size");
+static_assert(EEPROM_OFFSET_ACTIVE_END_MINUTES + sizeof(uint16_t) <= EEPROM_SIZE,
+              "Activity window exceeds allocated EEPROM size");
 
 // **Standard-WiFi-Daten (werden bei Erststart gesetzt)**
 extern char wifi_ssid[50];
@@ -98,6 +100,8 @@ extern int display_brightness;           // Standard: 100
 extern unsigned long letter_display_time;           // Standard: 10 Sekunden
 extern unsigned long letter_trigger_delays[NUM_TRIGGERS][NUM_DAYS];
 extern unsigned long letter_auto_display_interval; // Standard: 5 Minuten
+extern uint16_t standalone_active_start_minutes;   // Minuten seit Mitternacht
+extern uint16_t standalone_active_end_minutes;     // Minuten seit Mitternacht
 
 // **Modus für Buchstabenanzeige (Auto/Trigger)**
 extern bool autoDisplayMode;

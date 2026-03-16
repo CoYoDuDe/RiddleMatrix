@@ -35,6 +35,8 @@ int display_brightness;
 unsigned long letter_display_time;
 unsigned long letter_auto_display_interval;
 bool autoDisplayMode;
+uint16_t standalone_active_start_minutes;
+uint16_t standalone_active_end_minutes;
 
 RTC_DS1307 rtc;
 bool rtc_ok = false;
@@ -52,6 +54,9 @@ namespace {
 constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION_LEGACY = 400;
 constexpr uint16_t EEPROM_VERSION_INVALID = 0xFFFF;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_AUTH = 4;
+constexpr uint16_t EEPROM_CONFIG_VERSION_WITHOUT_ACTIVITY_WINDOW = 5;
+constexpr uint16_t DEFAULT_ACTIVE_START_MINUTES = 0;
+constexpr uint16_t DEFAULT_ACTIVE_END_MINUTES = 1439;
 
 constexpr size_t LEGACY_AUTH_TOKEN_MAX_LENGTH = 64;
 
@@ -121,6 +126,10 @@ void resetTriggerDelaysToDefaults() {
 
 bool isValidDelayValue(unsigned long value) {
     return value <= 999UL;
+}
+
+bool isValidActiveMinuteValue(uint16_t value) {
+    return value <= 1439U;
 }
 
 size_t strnLength(const char *value, size_t maxLength) {
@@ -265,6 +274,24 @@ void loadConfigFromVersion4Layout() {
     EEPROM.get(LEGACY_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
     EEPROM.get(LEGACY_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
     EEPROM.get(LEGACY_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
+    standalone_active_start_minutes = DEFAULT_ACTIVE_START_MINUTES;
+    standalone_active_end_minutes = DEFAULT_ACTIVE_END_MINUTES;
+}
+
+void loadConfigFromVersion5Layout() {
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
+    sanitizeColorMatrix(dailyLetterColors);
+    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, letter_trigger_delays);
+    EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
+    uint8_t autoModeByte = 0;
+    EEPROM.get(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
+    autoDisplayMode = (autoModeByte == 1);
+    EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
+    EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
+    EEPROM.get(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
+    standalone_active_start_minutes = DEFAULT_ACTIVE_START_MINUTES;
+    standalone_active_end_minutes = DEFAULT_ACTIVE_END_MINUTES;
 }
 
 } // namespace
@@ -288,6 +315,8 @@ void saveConfig() {
     EEPROM.put(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
     uint16_t version = EEPROM_CONFIG_VERSION;
     EEPROM.put(EEPROM_OFFSET_CONFIG_VERSION, version);
+    EEPROM.put(EEPROM_OFFSET_ACTIVE_START_MINUTES, standalone_active_start_minutes);
+    EEPROM.put(EEPROM_OFFSET_ACTIVE_END_MINUTES, standalone_active_end_minutes);
     EEPROM.commit();
 
     Serial.println(F("✅ Einstellungen erfolgreich gespeichert!"));
@@ -298,6 +327,8 @@ void loadConfig() {
 
     resetLettersToDefaults();
     resetTriggerDelaysToDefaults();
+    standalone_active_start_minutes = DEFAULT_ACTIVE_START_MINUTES;
+    standalone_active_end_minutes = DEFAULT_ACTIVE_END_MINUTES;
 
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.get(EEPROM_OFFSET_WIFI_SSID, wifi_ssid);
@@ -366,6 +397,12 @@ void loadConfig() {
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
         sanitizeColorMatrix(dailyLetterColors);
+        EEPROM.get(EEPROM_OFFSET_ACTIVE_START_MINUTES, standalone_active_start_minutes);
+        EEPROM.get(EEPROM_OFFSET_ACTIVE_END_MINUTES, standalone_active_end_minutes);
+    } else if (storedVersion == EEPROM_CONFIG_VERSION_WITHOUT_ACTIVITY_WINDOW) {
+        Serial.println(F("ℹ️ Konfiguration ohne Aktivzeitfenster erkannt – setze ganztägige Aktivität."));
+        loadConfigFromVersion5Layout();
+        migratedLegacyLayout = true;
     } else if (storedVersion == EEPROM_CONFIG_VERSION_WITH_AUTH) {
         Serial.println(F("ℹ️ Konfiguration der Vorversion erkannt – übernehme Werte unverändert."));
         loadConfigFromVersion4Layout();
@@ -529,6 +566,18 @@ void loadConfig() {
         eepromUpdated = true;
     }
 
+    if (!isValidActiveMinuteValue(standalone_active_start_minutes)) {
+        Serial.println(F("⚠️ Ungültige Startzeit für Standalone-Aktivität! Setze 00:00."));
+        standalone_active_start_minutes = DEFAULT_ACTIVE_START_MINUTES;
+        eepromUpdated = true;
+    }
+
+    if (!isValidActiveMinuteValue(standalone_active_end_minutes)) {
+        Serial.println(F("⚠️ Ungültige Endzeit für Standalone-Aktivität! Setze 23:59."));
+        standalone_active_end_minutes = DEFAULT_ACTIVE_END_MINUTES;
+        eepromUpdated = true;
+    }
+
     if (autoModeValueRead && autoModeRaw > 1) {
         Serial.println(F("⚠️ Ungültiger Wert für autoDisplayMode! Setze Standard auf false."));
         autoDisplayMode = false;
@@ -559,4 +608,3 @@ void checkMemoryUsage() {
     Serial.print(F("📝 Freier Speicher: "));
     Serial.println(ESP.getFreeHeap());
 }
-

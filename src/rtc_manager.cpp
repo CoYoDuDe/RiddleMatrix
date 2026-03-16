@@ -87,6 +87,20 @@ bool updateCachedWeekday(bool waitForIdle) {
   return cachedWeekdayValid;
 }
 
+bool getRTCMinutesOfDay(uint16_t &minutesOfDay) {
+  if (!rtc_ok) {
+    return false;
+  }
+
+  enableRTC();
+  DateTime now = rtc.now();
+  enableRS485();
+
+  storeWeekdayInCache(now.dayOfTheWeek());
+  minutesOfDay = static_cast<uint16_t>((now.hour() * 60) + now.minute());
+  return true;
+}
+
 String getRTCTime() {
     enableRTC();
     DateTime now = rtc.now();
