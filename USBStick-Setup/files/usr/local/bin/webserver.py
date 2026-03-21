@@ -26,6 +26,8 @@ DAY_TO_FIRMWARE_INDEX = {
 TRIGGER_SLOTS = 3
 DEFAULT_COLOR = "#ffffff"
 DEFAULT_DELAY = 0
+DEFAULT_COLOR_MODE = "fixed"
+DEFAULT_COLOR_PALETTE_MASK = 0xFF
 
 _HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
@@ -35,6 +37,7 @@ SAFE_IP_PLACEHOLDER = "0.0.0.0"
 
 _FIRMWARE_LETTERS = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?")
 _ALLOWED_LETTERS = set(_FIRMWARE_LETTERS)
+_ALLOWED_COLOR_MODES = {"fixed", "random_selected", "random_all"}
 
 MAX_HOSTNAME_LENGTH = 64
 
@@ -383,6 +386,61 @@ def _normalize_color_list(values, legacy_value=None):
     return normalized
 
 
+def _sanitize_color_mode(value) -> str:
+    if isinstance(value, str):
+        candidate = value.strip().lower()
+        if candidate in _ALLOWED_COLOR_MODES:
+            return candidate
+    return DEFAULT_COLOR_MODE
+
+
+def _normalize_color_mode_list(values):
+    normalized = [DEFAULT_COLOR_MODE for _ in range(TRIGGER_SLOTS)]
+    if isinstance(values, list):
+        for idx in range(min(TRIGGER_SLOTS, len(values))):
+            normalized[idx] = _sanitize_color_mode(values[idx])
+    elif isinstance(values, dict):
+        for key, val in values.items():
+            if str(key).isdigit():
+                idx = int(str(key))
+                if 0 <= idx < TRIGGER_SLOTS:
+                    normalized[idx] = _sanitize_color_mode(val)
+    elif isinstance(values, str):
+        normalized[0] = _sanitize_color_mode(values)
+    return normalized
+
+
+def _sanitize_color_palette_mask(value) -> int:
+    try:
+        if isinstance(value, str):
+            candidate = int(value.strip(), 10)
+        else:
+            candidate = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_COLOR_PALETTE_MASK
+
+    if candidate < 0:
+        return DEFAULT_COLOR_PALETTE_MASK
+
+    return candidate & DEFAULT_COLOR_PALETTE_MASK
+
+
+def _normalize_color_palette_mask_list(values):
+    normalized = [DEFAULT_COLOR_PALETTE_MASK for _ in range(TRIGGER_SLOTS)]
+    if isinstance(values, list):
+        for idx in range(min(TRIGGER_SLOTS, len(values))):
+            normalized[idx] = _sanitize_color_palette_mask(values[idx])
+    elif isinstance(values, dict):
+        for key, val in values.items():
+            if str(key).isdigit():
+                idx = int(str(key))
+                if 0 <= idx < TRIGGER_SLOTS:
+                    normalized[idx] = _sanitize_color_palette_mask(val)
+    elif values is not None:
+        normalized[0] = _sanitize_color_palette_mask(values)
+    return normalized
+
+
 def _coerce_delay_value(value):
     if isinstance(value, (int, float)):
         numeric = float(value)
@@ -442,6 +500,30 @@ def _default_delay_matrix():
     return {day: [DEFAULT_DELAY for _ in range(TRIGGER_SLOTS)] for day in DAYS}
 
 
+def _default_color_mode_matrix():
+    return {day: [DEFAULT_COLOR_MODE for _ in range(TRIGGER_SLOTS)] for day in DAYS}
+
+
+def _default_color_palette_mask_matrix():
+    return {day: [DEFAULT_COLOR_PALETTE_MASK for _ in range(TRIGGER_SLOTS)] for day in DAYS}
+
+
+def _box_color_modes(box):
+    matrix = _default_color_mode_matrix()
+    if isinstance(box, dict) and isinstance(box.get("colorModes"), dict):
+        for day in DAYS:
+            matrix[day] = _normalize_color_mode_list(box["colorModes"].get(day))
+    return matrix
+
+
+def _box_color_palette_masks(box):
+    matrix = _default_color_palette_mask_matrix()
+    if isinstance(box, dict) and isinstance(box.get("colorPaletteMasks"), dict):
+        for day in DAYS:
+            matrix[day] = _normalize_color_palette_mask_list(box["colorPaletteMasks"].get(day))
+    return matrix
+
+
 def ensure_box_structure(box, remove_legacy=False):
     changed = False
     if not isinstance(box, dict):
@@ -455,6 +537,12 @@ def ensure_box_structure(box, remove_legacy=False):
         changed = True
     if "delays" not in box or not isinstance(box["delays"], dict):
         box["delays"] = {}
+        changed = True
+    if "colorModes" in box and not isinstance(box["colorModes"], dict):
+        box["colorModes"] = {}
+        changed = True
+    if "colorPaletteMasks" in box and not isinstance(box["colorPaletteMasks"], dict):
+        box["colorPaletteMasks"] = {}
         changed = True
 
     for day_index, day in enumerate(DAYS):
@@ -478,6 +566,18 @@ def ensure_box_structure(box, remove_legacy=False):
         if box["delays"].get(day) != normalized_delays:
             box["delays"][day] = normalized_delays
             changed = True
+
+        if isinstance(box.get("colorModes"), dict):
+            normalized_color_modes = _normalize_color_mode_list(box["colorModes"].get(day))
+            if box["colorModes"].get(day) != normalized_color_modes:
+                box["colorModes"][day] = normalized_color_modes
+                changed = True
+
+        if isinstance(box.get("colorPaletteMasks"), dict):
+            normalized_palette_masks = _normalize_color_palette_mask_list(box["colorPaletteMasks"].get(day))
+            if box["colorPaletteMasks"].get(day) != normalized_palette_masks:
+                box["colorPaletteMasks"][day] = normalized_palette_masks
+                changed = True
 
         if remove_legacy:
             if day in box:
@@ -661,6 +761,53 @@ def extract_box_state_from_soup(soup):
 
     return letters, colors, delays
 
+
+def extract_box_color_settings_from_soup(soup):
+    color_modes = _default_color_mode_matrix()
+    color_palette_masks = _default_color_palette_mask_matrix()
+
+    for day_index, day in enumerate(DAYS):
+        firmware_day_index = DAY_TO_FIRMWARE_INDEX.get(day, day_index)
+        for slot in range(TRIGGER_SLOTS):
+            mode_names = [
+                f"color_mode_{slot}_{firmware_day_index}",
+                f"color_mode_{slot}_{day_index}",
+            ]
+            mode_field = None
+            for candidate in mode_names:
+                mode_field = soup.find("select", {"name": candidate})
+                if mode_field is not None:
+                    break
+
+            mode_value = DEFAULT_COLOR_MODE
+            if mode_field is not None:
+                selected = mode_field.find("option", selected=True)
+                if selected and selected.get("value") is not None:
+                    mode_value = selected.get("value", "")
+                else:
+                    first_option = mode_field.find("option")
+                    if first_option and first_option.get("value") is not None:
+                        mode_value = first_option.get("value", "")
+            color_modes[day][slot] = _sanitize_color_mode(mode_value)
+
+            palette_mask = 0
+            for palette_index in range(8):
+                checkbox_names = [
+                    f"palette_{slot}_{firmware_day_index}_{palette_index}",
+                    f"palette_{slot}_{day_index}_{palette_index}",
+                ]
+                for candidate in checkbox_names:
+                    checkbox = soup.find("input", {"name": candidate})
+                    if checkbox is None:
+                        continue
+                    if checkbox.has_attr("checked"):
+                        palette_mask |= 1 << palette_index
+                    break
+
+            color_palette_masks[day][slot] = palette_mask if palette_mask else DEFAULT_COLOR_PALETTE_MASK
+
+    return color_modes, color_palette_masks
+
 def fetch_trigger_delays(ip):
     ip = sanitize_ipv4(ip)
     if ip == SAFE_IP_PLACEHOLDER:
@@ -837,6 +984,7 @@ def learn_box(ip, identifier):
 
     soup = BeautifulSoup(r.text, "html.parser")
     letters, colors, html_delays = extract_box_state_from_soup(soup)
+    color_modes, color_palette_masks = extract_box_color_settings_from_soup(soup)
 
     try:
         delays = fetch_trigger_delays(ip)
@@ -854,6 +1002,10 @@ def learn_box(ip, identifier):
         "colors": colors,
         "delays": delays if delays is not None else _default_delay_matrix(),
     }
+    if color_modes != _default_color_mode_matrix():
+        box["colorModes"] = color_modes
+    if color_palette_masks != _default_color_palette_mask_matrix():
+        box["colorPaletteMasks"] = color_palette_masks
     ensure_box_structure(box, remove_legacy=True)
     config["boxen"][identifier] = box
     if identifier not in config["boxOrder"]:
@@ -898,6 +1050,8 @@ def update_box():
 
     box = config["boxen"].setdefault(hostname, {"ip": SAFE_IP_PLACEHOLDER})
     changed = ensure_box_structure(box, remove_legacy=True) or renamed_existing
+    color_modes_matrix = _box_color_modes(box)
+    color_palette_masks_matrix = _box_color_palette_masks(box)
 
     updated = False
     pending_letter_updates = {}
@@ -1006,6 +1160,26 @@ def update_box():
                     box["delays"][day] = normalized
                     updated = True
 
+    color_modes_payload = data.get("colorModes")
+    if isinstance(color_modes_payload, dict):
+        for day, values in color_modes_payload.items():
+            if day in DAYS:
+                normalized = _normalize_color_mode_list(values)
+                if color_modes_matrix.get(day) != normalized:
+                    color_modes_matrix[day] = normalized
+                    box["colorModes"] = color_modes_matrix
+                    updated = True
+
+    color_palette_masks_payload = data.get("colorPaletteMasks")
+    if isinstance(color_palette_masks_payload, dict):
+        for day, values in color_palette_masks_payload.items():
+            if day in DAYS:
+                normalized = _normalize_color_palette_mask_list(values)
+                if color_palette_masks_matrix.get(day) != normalized:
+                    color_palette_masks_matrix[day] = normalized
+                    box["colorPaletteMasks"] = color_palette_masks_matrix
+                    updated = True
+
     for day in DAYS:
         if f"delay_{day}" in data:
             normalized = _normalize_delay_list([data.get(f"delay_{day}")])
@@ -1015,12 +1189,14 @@ def update_box():
 
     day = data.get("day")
     trigger_index = data.get("triggerIndex")
+    apply_all_triggers = bool(data.get("applyAllTriggers"))
     try:
         trigger_index = int(trigger_index)
     except (TypeError, ValueError):
         trigger_index = None
 
     if day in DAYS and isinstance(trigger_index, int) and 0 <= trigger_index < TRIGGER_SLOTS:
+        target_indices = range(TRIGGER_SLOTS) if apply_all_triggers else [trigger_index]
         if "letter" in data and isinstance(data.get("letter"), str):
             sanitized_letter = sanitize_letter(data["letter"])
             if not sanitized_letter:
@@ -1034,19 +1210,37 @@ def update_box():
                     400,
                 )
             current_letters = _current_letters_snapshot(day)
-            if current_letters[trigger_index] != sanitized_letter:
+            new_letters = current_letters[:]
+            if any(new_letters[index] != sanitized_letter for index in target_indices):
                 new_letters = current_letters[:]
-                new_letters[trigger_index] = sanitized_letter
+                for index in target_indices:
+                    new_letters[index] = sanitized_letter
                 pending_letter_updates[day] = new_letters
         if "color" in data and isinstance(data.get("color"), str):
             color_value = _sanitize_color(data["color"])
-            if box["colors"][day][trigger_index] != color_value:
-                box["colors"][day][trigger_index] = color_value
+            if any(box["colors"][day][index] != color_value for index in target_indices):
+                for index in target_indices:
+                    box["colors"][day][index] = color_value
                 updated = True
         if "delay" in data:
             delay_value = _coerce_delay_value(data.get("delay"))
-            if box["delays"][day][trigger_index] != delay_value:
-                box["delays"][day][trigger_index] = delay_value
+            if any(box["delays"][day][index] != delay_value for index in target_indices):
+                for index in target_indices:
+                    box["delays"][day][index] = delay_value
+                updated = True
+        if "colorMode" in data:
+            color_mode_value = _sanitize_color_mode(data.get("colorMode"))
+            if any(color_modes_matrix[day][index] != color_mode_value for index in target_indices):
+                for index in target_indices:
+                    color_modes_matrix[day][index] = color_mode_value
+                box["colorModes"] = color_modes_matrix
+                updated = True
+        if "colorPaletteMask" in data:
+            palette_mask_value = _sanitize_color_palette_mask(data.get("colorPaletteMask"))
+            if any(color_palette_masks_matrix[day][index] != palette_mask_value for index in target_indices):
+                for index in target_indices:
+                    color_palette_masks_matrix[day][index] = palette_mask_value
+                box["colorPaletteMasks"] = color_palette_masks_matrix
                 updated = True
 
     if pending_letter_updates:
@@ -1219,6 +1413,7 @@ def transfer_box():
 
     soup = BeautifulSoup(r.text, "html.parser")
     remote_letters, remote_colors, _ = extract_box_state_from_soup(soup)
+    remote_color_modes, remote_color_palette_masks = extract_box_color_settings_from_soup(soup)
     try:
         remote_delays = fetch_trigger_delays(ip)
     except RedirectResponseError as exc:
@@ -1227,10 +1422,18 @@ def transfer_box():
     stored_letters = {day: list(box["letters"][day]) for day in DAYS}
     stored_colors = {day: list(box["colors"][day]) for day in DAYS}
     stored_delays = {day: [_coerce_delay_value(value) for value in box["delays"][day]] for day in DAYS}
+    stored_color_modes = _box_color_modes(box)
+    stored_color_palette_masks = _box_color_palette_masks(box)
+    uses_custom_color_modes = (
+        stored_color_modes != _default_color_mode_matrix()
+        or stored_color_palette_masks != _default_color_palette_mask_matrix()
+    )
 
     if (
         remote_letters == stored_letters
         and remote_colors == stored_colors
+        and remote_color_modes == stored_color_modes
+        and remote_color_palette_masks == stored_color_palette_masks
         and (remote_delays is not None and remote_delays == stored_delays)
     ):
         return jsonify({"status": "⏭️ Bereits aktuell"})
@@ -1240,6 +1443,9 @@ def transfer_box():
         "colors": stored_colors,
         "delays": stored_delays,
     }
+    if uses_custom_color_modes:
+        payload["color_modes"] = stored_color_modes
+        payload["color_palette_masks"] = stored_color_palette_masks
 
     try:
         r = requests.post(

@@ -132,6 +132,19 @@
     .word-trigger-selector {
       display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
     }
+    .toggle-row {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .palette-grid {
+      display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;
+    }
+    .palette-chip {
+      display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+      background: #eee; padding: 2px 6px; border-radius: 12px;
+    }
+    .palette-swatch {
+      width: 10px; height: 10px; border: 1px solid #333; display: inline-block;
+    }
     .action-buttons button {
       padding: 10px; margin-right: 10px; font-size: 14px;
     }
@@ -176,11 +189,25 @@ const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const triggersPerDay = 3;
 const defaultColor = "#ffffff";
 const defaultDelay = 0;
+const defaultColorMode = "fixed";
+const defaultColorPaletteMask = 0xFF;
+const randomPalette = [
+  { color: "#ff0000", label: "Rot" },
+  { color: "#00ff00", label: "Gruen" },
+  { color: "#0000ff", label: "Blau" },
+  { color: "#ffff00", label: "Gelb" },
+  { color: "#ff00ff", label: "Magenta" },
+  { color: "#00ffff", label: "Cyan" },
+  { color: "#ffa500", label: "Orange" },
+  { color: "#ffffff", label: "Weiss" }
+];
 const colorPattern = /^#[0-9A-Fa-f]{6}$/;
 const letterLabels = {"": "Leer", "*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
 const letterOptions = [""];
 letterOptions.push(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split(""));
 let currentWordTrigger = 0;
+let separateWordTriggers = false;
+let separateBoxTriggers = false;
 const SHUTDOWN_TOKEN_KEY = "setupShutdownToken";
 let shutdownTokenInput;
 let shutdownTokenStatus;
@@ -285,6 +312,8 @@ function normalizeBox(box) {
   box.letters = box.letters || {};
   box.colors = box.colors || {};
   box.delays = box.delays || {};
+  box.colorModes = box.colorModes || {};
+  box.colorPaletteMasks = box.colorPaletteMasks || {};
   days.forEach(day => {
     const letters = Array.isArray(box.letters[day]) ? box.letters[day].slice(0, triggersPerDay) : [];
     while (letters.length < triggersPerDay) letters.push("");
@@ -303,6 +332,23 @@ function normalizeBox(box) {
         return defaultDelay;
       }
       return Math.min(999, Math.round(numeric));
+    });
+
+    const colorModes = Array.isArray(box.colorModes[day]) ? box.colorModes[day].slice(0, triggersPerDay) : [];
+    while (colorModes.length < triggersPerDay) colorModes.push(defaultColorMode);
+    box.colorModes[day] = colorModes.map(value => {
+      const normalized = typeof value === "string" ? value.trim().toLowerCase() : defaultColorMode;
+      return ["fixed", "random_selected", "random_all"].includes(normalized) ? normalized : defaultColorMode;
+    });
+
+    const colorPaletteMasks = Array.isArray(box.colorPaletteMasks[day]) ? box.colorPaletteMasks[day].slice(0, triggersPerDay) : [];
+    while (colorPaletteMasks.length < triggersPerDay) colorPaletteMasks.push(defaultColorPaletteMask);
+    box.colorPaletteMasks[day] = colorPaletteMasks.map(value => {
+      const numeric = typeof value === "number" ? value : parseInt(String(value), 10);
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        return defaultColorPaletteMask;
+      }
+      return numeric & defaultColorPaletteMask;
     });
   });
   return box;
@@ -482,28 +528,43 @@ function showSetup() {
   const maxLength = boxOrder.length;
 
   html += '<div class="box-card"><h3>Wörter für Wochentage</h3>';
-  html += '<div class="word-trigger-selector">';
-  html += '<label for="wordTriggerSelect">Trigger-Spalte:</label>';
-  html += '<select id="wordTriggerSelect" data-live-edit="true" onchange="changeWordTrigger(parseInt(this.value, 10))">';
-  for (let trigger = 0; trigger < triggersPerDay; trigger++) {
-    const selected = trigger === currentWordTrigger ? "selected" : "";
-    html += `<option value="${trigger}" ${selected}>Trigger ${trigger + 1}</option>`;
+  html += '<div class="toggle-row">';
+  html += `<label><input type="checkbox" data-live-edit="true" ${separateWordTriggers ? "checked" : ""} onchange="setSeparateWordTriggers(this.checked)"> Eigene Wörter pro Trigger</label>`;
+  if (separateWordTriggers) {
+    html += '<span>Jeder Trigger bekommt sein eigenes Wort pro Tag.</span>';
+  } else {
+    html += '<span>Ein Wort pro Tag wird auf alle Trigger kopiert.</span>';
   }
-  html += '</select></div>';
+  html += '</div>';
 
   html += '<div class="weekday-row">';
   for (let i = 0; i < days.length; i++) {
-    const currentWord = boxOrder.map(hostname => {
-      const letters = knownBoxes[hostname]?.letters?.[days[i]] || [];
-      return letters[currentWordTrigger] || "";
-    }).join("");
-    html += `
-      <div class="weekday-col">
-        <label>${dayNames[i]}</label>
-        <input type="text" class="word-input" data-live-edit="true" placeholder="Wort eingeben (max ${maxLength} Zeichen)"
-          value="${currentWord}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this)"
-          onkeydown="handleKeydown(event, '${days[i]}', this.value, ${maxLength}, this)">
-      </div>`;
+    html += `<div class="weekday-col"><label>${dayNames[i]}</label>`;
+    const triggerRange = separateWordTriggers ? [...Array(triggersPerDay).keys()] : [0];
+    triggerRange.forEach(trigger => {
+      const currentWord = boxOrder.map(hostname => {
+        const letters = knownBoxes[hostname]?.letters?.[days[i]] || [];
+        return letters[trigger] || "";
+      }).join("");
+      const label = separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger";
+      html += `
+        <div class="trigger-entry">
+          <span>${label}</span>
+          <input type="text" class="word-input" data-live-edit="true" placeholder="Wort eingeben (max ${maxLength} Zeichen)"
+            value="${currentWord}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this, ${trigger}, ${!separateWordTriggers})"
+            onkeydown="handleKeydown(event, '${days[i]}', this.value, ${maxLength}, this, ${trigger}, ${!separateWordTriggers})">
+        </div>`;
+    });
+    html += '</div>';
+  }
+  html += '</div></div>';
+
+  html += '<div class="box-card"><div class="toggle-row">';
+  html += `<label><input type="checkbox" data-live-edit="true" ${separateBoxTriggers ? "checked" : ""} onchange="setSeparateBoxTriggers(this.checked)"> Trigger in den Boxkarten getrennt bearbeiten</label>`;
+  if (separateBoxTriggers) {
+    html += '<span>Alle drei Trigger werden einzeln angezeigt.</span>';
+  } else {
+    html += '<span>Änderungen gelten pro Tag für alle drei Trigger.</span>';
   }
   html += '</div></div>';
 
@@ -520,10 +581,13 @@ function showSetup() {
         <div class="weekday-col">
           <label>${dayNames[i]}</label>
           <div class="trigger-container">`;
-      for (let trigger = 0; trigger < triggersPerDay; trigger++) {
+      const triggerRange = separateBoxTriggers ? [...Array(triggersPerDay).keys()] : [0];
+      for (const trigger of triggerRange) {
         const letter = letters[trigger] || "";
         const color = sanitizeColor(colors[trigger] || defaultColor);
         const rawDelay = delays[trigger];
+        const colorMode = (box.colorModes?.[days[i]] || [defaultColorMode])[trigger] || defaultColorMode;
+        const colorPaletteMask = (box.colorPaletteMasks?.[days[i]] || [defaultColorPaletteMask])[trigger] || defaultColorPaletteMask;
         const parsedDelay = typeof rawDelay === "number" ? rawDelay : parseFloat(String(rawDelay).replace(",", "."));
         const delayValue = Number.isFinite(parsedDelay) && parsedDelay >= 0
           ? Math.min(999, Math.round(parsedDelay))
@@ -538,14 +602,31 @@ function showSetup() {
         }).join("");
         html += `
             <div class="trigger-entry">
-              <span>Trigger ${trigger + 1}</span>
-              <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter')" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
+              <span>${separateBoxTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</span>
+              <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter', true, null, ${!separateBoxTriggers})" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
                 ${letterOptionsHtml}
               </select>
-              <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color')">
+              <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateBoxTriggers})">
+              <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateBoxTriggers})">
+                <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Fest</option>
+                <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewählt)</option>
+                <option value="random_all" ${colorMode === "random_all" ? "selected" : ""}>Zufall (alle)</option>
+              </select>
+              <div class="palette-grid">
+                ${randomPalette.map((entry, paletteIndex) => `
+                  <label class="palette-chip">
+                    <input type="checkbox" data-live-edit="true" ${((colorPaletteMask & (1 << paletteIndex)) !== 0) ? "checked" : ""}
+                      onchange="savePalette(${hostnameArgument}, '${days[i]}', ${trigger}, ${!separateBoxTriggers})"
+                      data-palette-hostname="${escapeHtml(hostname)}"
+                      data-palette-day="${days[i]}"
+                      data-palette-trigger="${trigger}"
+                      data-palette-index="${paletteIndex}">
+                    <span class="palette-swatch" style="background:${escapeColor(entry.color)}"></span>${escapeHtml(entry.label)}
+                  </label>`).join("")}
+              </div>
               <div class="delay-input-wrapper">
                 <span>Verzögerung (s)</span>
-                <input type="number" class="delay-input" data-live-edit="true" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this)">
+                <input type="number" class="delay-input" data-live-edit="true" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this, ${!separateBoxTriggers})">
               </div>
             </div>`;
       }
@@ -573,13 +654,13 @@ function showSetup() {
   statusArea = document.getElementById("statusArea");
 }
 
-function handleKeydown(event, day, word, maxLength, inputElement) {
+function handleKeydown(event, day, word, maxLength, inputElement, triggerIndex = 0, applyAllTriggers = false) {
   if (event.key === "Enter") {
-    updateWord(day, word, maxLength, inputElement);
+    updateWord(day, word, maxLength, inputElement, triggerIndex, applyAllTriggers);
   }
 }
 
-function updateWord(day, word, maxLength, inputElement) {
+function updateWord(day, word, maxLength, inputElement, triggerIndex = 0, applyAllTriggers = false) {
   if (inputElement) {
     inputElement.classList.add("pending");
   }
@@ -591,25 +672,30 @@ function updateWord(day, word, maxLength, inputElement) {
   for (let i = 0; i < boxOrder.length; i++) {
     const letter = i < word.length ? word[i] : "";
     knownBoxes[boxOrder[i]] = knownBoxes[boxOrder[i]] || {};
-    saveField(boxOrder[i], day, currentWordTrigger, letter, 'letter', false, inputElement);
+    saveField(boxOrder[i], day, triggerIndex, letter, 'letter', false, inputElement, applyAllTriggers);
   }
   showSetup();
 }
 
-function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', updateUI = true, inputElement = null) {
+function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', updateUI = true, inputElement = null, applyAllTriggers = false) {
   if (inputElement) {
     inputElement.classList.add('pending');
   }
 
   knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
   const slotIndex = Number(triggerIndex);
+  const targetIndices = applyAllTriggers ? [...Array(triggersPerDay).keys()] : [slotIndex];
   if (fieldType === 'letter') {
     const normalizedLetter = value == null ? "" : String(value);
-    knownBoxes[hostname].letters[day][slotIndex] = normalizedLetter;
+    targetIndices.forEach(index => {
+      knownBoxes[hostname].letters[day][index] = normalizedLetter;
+    });
     value = normalizedLetter;
   } else if (fieldType === 'color') {
     const colorValue = sanitizeColor(value);
-    knownBoxes[hostname].colors[day][slotIndex] = colorValue;
+    targetIndices.forEach(index => {
+      knownBoxes[hostname].colors[day][index] = colorValue;
+    });
     value = colorValue;
   } else if (fieldType === 'delay') {
     let numericValue = typeof value === 'number' ? value : parseFloat(String(value).replace(",", "."));
@@ -617,20 +703,31 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
       numericValue = defaultDelay;
     }
     numericValue = Math.min(999, Math.max(0, Math.round(numericValue)));
-    knownBoxes[hostname].delays[day][slotIndex] = numericValue;
+    targetIndices.forEach(index => {
+      knownBoxes[hostname].delays[day][index] = numericValue;
+    });
     value = numericValue;
     if (inputElement) {
       inputElement.value = numericValue.toString();
     }
+  } else if (fieldType === 'colorMode') {
+    const normalizedMode = typeof value === "string" ? value.trim().toLowerCase() : defaultColorMode;
+    targetIndices.forEach(index => {
+      knownBoxes[hostname].colorModes[day][index] =
+        ["fixed", "random_selected", "random_all"].includes(normalizedMode) ? normalizedMode : defaultColorMode;
+    });
+    value = normalizedMode;
   }
 
-  const payload = { hostname, day, triggerIndex: slotIndex };
+  const payload = { hostname, day, triggerIndex: slotIndex, applyAllTriggers };
   if (fieldType === 'letter') {
     payload.letter = value;
   } else if (fieldType === 'color') {
     payload.color = sanitizeColor(value);
   } else if (fieldType === 'delay') {
     payload.delay = value;
+  } else if (fieldType === 'colorMode') {
+    payload.colorMode = value;
   }
 
   const requestHeaders = { "Content-Type": "application/json" };
@@ -650,13 +747,62 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
         setTimeout(() => inputElement.classList.remove("saved"), 1000);
         statusArea.innerHTML = '<div class="statusEntry status">✅ Änderung gespeichert.</div>';
       }
-      if (updateUI) showSetup();
+    if (updateUI) showSetup();
     }
   }).catch(e => {
     console.error("Fehler beim Speichern:", e);
     statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern.</div>';
     if (inputElement) inputElement.classList.remove("pending");
   });
+}
+
+function savePalette(hostname, day, triggerIndex, applyAllTriggers = false) {
+  const selector = `input[data-palette-hostname="${hostname}"][data-palette-day="${day}"][data-palette-trigger="${triggerIndex}"]`;
+  const inputs = Array.from(document.querySelectorAll(selector));
+  let mask = 0;
+  inputs.forEach(input => {
+    if (input.checked) {
+      const paletteIndex = parseInt(input.getAttribute("data-palette-index"), 10);
+      if (Number.isInteger(paletteIndex) && paletteIndex >= 0) {
+        mask |= 1 << paletteIndex;
+      }
+    }
+  });
+  if (mask === 0) {
+    mask = defaultColorPaletteMask;
+  }
+
+  knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
+  const targetIndices = applyAllTriggers ? [...Array(triggersPerDay).keys()] : [Number(triggerIndex)];
+  targetIndices.forEach(index => {
+    knownBoxes[hostname].colorPaletteMasks[day][index] = mask;
+  });
+
+  fetch("/update_box", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hostname, day, triggerIndex: Number(triggerIndex), colorPaletteMask: mask, applyAllTriggers })
+  }).then(response => {
+    if (!response.ok) {
+      statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern der Zufallspalette.</div>';
+    } else {
+      statusArea.innerHTML = '<div class="statusEntry status">✅ Zufallspalette gespeichert.</div>';
+      showSetup();
+    }
+  }).catch(error => {
+    console.error("Fehler beim Speichern der Zufallspalette:", error);
+    statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern der Zufallspalette.</div>';
+  });
+}
+
+function setSeparateWordTriggers(enabled) {
+  separateWordTriggers = !!enabled;
+  showSetup();
+}
+
+function setSeparateBoxTriggers(enabled) {
+  separateBoxTriggers = !!enabled;
+  showSetup();
 }
 
 function changeWordTrigger(newTrigger) {

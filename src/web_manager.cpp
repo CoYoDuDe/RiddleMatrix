@@ -462,6 +462,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     // 💾 Trigger-Verzögerungen speichern
     function saveTriggerDelays() {
+        syncSharedTriggerFormFields();
         let form = new FormData(document.getElementById('delaysForm'));
         fetch('/updateTriggerDelays', { method: 'POST', body: form })
             .then(response => response.text())
@@ -471,11 +472,65 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     // 💾 Alle Buchstaben & Farben speichern
     function saveAllLetters() {
+        syncSharedTriggerFormFields();
         let formData = new FormData(document.getElementById('lettersForm'));
         fetch('/updateAllLetters', { method: 'POST', body: formData })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
+    }
+
+    function isSeparateTriggerEditingEnabled() {
+        const checkbox = document.getElementById('separate_trigger_editing');
+        return checkbox ? checkbox.checked : true;
+    }
+
+    function applyTriggerEditMode() {
+        const separate = isSeparateTriggerEditingEnabled();
+        document.querySelectorAll('.advanced-trigger-column').forEach(element => {
+            element.style.display = separate ? '' : 'none';
+        });
+    }
+
+    function syncSharedTriggerFormFields() {
+        if (isSeparateTriggerEditingEnabled()) {
+            return;
+        }
+
+        for (let day = 0; day < 7; day++) {
+            const sourceLetter = document.getElementById('letter_0_' + day);
+            const sourceColor = document.getElementById('color_0_' + day);
+            const sourceColorMode = document.getElementById('color_mode_0_' + day);
+            const sourceDelay = document.querySelector('input[name="delay_0_' + day + '"]');
+
+            for (let trigger = 1; trigger < 3; trigger++) {
+                const targetLetter = document.getElementById('letter_' + trigger + '_' + day);
+                const targetColor = document.getElementById('color_' + trigger + '_' + day);
+                const targetColorMode = document.getElementById('color_mode_' + trigger + '_' + day);
+                const targetDelay = document.querySelector('input[name="delay_' + trigger + '_' + day + '"]');
+
+                if (sourceLetter && targetLetter) {
+                    targetLetter.value = sourceLetter.value;
+                }
+                if (sourceColor && targetColor) {
+                    targetColor.value = sourceColor.value;
+                }
+                if (sourceColorMode && targetColorMode) {
+                    targetColorMode.value = sourceColorMode.value;
+                }
+                if (sourceDelay && targetDelay) {
+                    targetDelay.value = sourceDelay.value;
+                }
+
+                for (let paletteIndex = 0; paletteIndex < 8; paletteIndex++) {
+                    const sourcePalette = document.querySelector('input[name="palette_0_' + day + '_' + paletteIndex + '"]');
+                    const targetPalette = document.querySelector('input[name="palette_' + trigger + '_' + day + '_' + paletteIndex + '"]');
+                    if (sourcePalette && targetPalette) {
+                        targetPalette.checked = sourcePalette.checked;
+                    }
+                }
+            }
+        }
     }
 
     // 🚀 Automatische Aktualisierung der Uhrzeit
@@ -512,6 +567,8 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     } else {
         console.warn('⚠️ Uhrzeiteingabe nicht gefunden, automatische Aktualisierung bleibt aktiv.');
     }
+
+    applyTriggerEditMode();
 )rawliteral";
 
 void setupWebServer() {
@@ -549,11 +606,14 @@ void setupWebServer() {
         html += "</form>";
 
         html += "<h2>Trigger-Verzögerungen pro Wochentag</h2>";
+        html += "<label><input type='checkbox' id='separate_trigger_editing' onchange='applyTriggerEditMode()'> Trigger 2 und 3 separat bearbeiten</label>";
+        html += "<p style='margin-top:4px;'>Ohne Haken werden die Werte von Trigger 1 beim Speichern auf alle Trigger kopiert.</p>";
         html += "<form id='delaysForm'>";
         html += "<table border='1' style='width:100%; text-align:center;'>";
         html += "<tr><th>Wochentag</th>";
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-            html += "<th>Trigger " + String(trigger + 1) + " (Sekunden)</th>";
+            String classAttribute = trigger == 0 ? "" : " class='advanced-trigger-column'";
+            html += "<th" + classAttribute + ">Trigger " + String(trigger + 1) + " (Sekunden)</th>";
         }
         html += "</tr>";
 
@@ -563,7 +623,8 @@ void setupWebServer() {
 
             for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
                 String fieldName = "delay_" + String(trigger) + "_" + String(day);
-                html += "<td><input type='number' min='0' max='999' step='1' name='" + fieldName + "' value='" + escapeHtml(String(letter_trigger_delays[trigger][day])) + "'></td>";
+                String classAttribute = trigger == 0 ? "" : " class='advanced-trigger-column'";
+                html += "<td" + classAttribute + "><input type='number' min='0' max='999' step='1' name='" + fieldName + "' value='" + escapeHtml(String(letter_trigger_delays[trigger][day])) + "'></td>";
             }
 
             html += "</tr>";
@@ -590,7 +651,8 @@ void setupWebServer() {
         html += "<table border='1' style='width:100%; text-align:center;'>";
         html += "<tr><th>Wochentag</th>";
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-            html += "<th>Trigger " + String(trigger + 1) + "</th>";
+            String classAttribute = trigger == 0 ? "" : " class='advanced-trigger-column'";
+            html += "<th" + classAttribute + ">Trigger " + String(trigger + 1) + "</th>";
         }
         html += "</tr>";
 
@@ -602,7 +664,8 @@ void setupWebServer() {
                 String selectId = "letter_" + String(trigger) + "_" + String(day);
                 String colorId = "color_" + String(trigger) + "_" + String(day);
                 String colorModeId = "color_mode_" + String(trigger) + "_" + String(day);
-                html += "<td>";
+                String classAttribute = trigger == 0 ? "" : " class='advanced-trigger-column'";
+                html += "<td" + classAttribute + ">";
                 html += "<select id='" + selectId + "' name='" + selectId + "'>";
                 for (size_t idx = 0; idx < sizeof(availableLetters); ++idx) {
                     char optionChar = availableLetters[idx];
