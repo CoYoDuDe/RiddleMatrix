@@ -22,6 +22,14 @@ static const char DEFAULT_DAILY_COLORS[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENG
     {"#FFFFFF", "#FFD700", "#ADFF2F", "#00CED1", "#9400D3", "#FF69B4", "#1E90FF"},
     {"#FFA07A", "#20B2AA", "#87CEFA", "#FFE4B5", "#DA70D6", "#90EE90", "#FFDAB9"}};
 
+const char *const randomColorPalette[RANDOM_COLOR_PALETTE_SIZE] = {
+    "#FF0000", "#00FF00", "#0000FF", "#FFFF00",
+    "#FF00FF", "#00FFFF", "#FFA500", "#FFFFFF"};
+
+const char *const randomColorPaletteLabels[RANDOM_COLOR_PALETTE_SIZE] = {
+    "Rot", "Gruen", "Blau", "Gelb",
+    "Magenta", "Cyan", "Orange", "Weiss"};
+
 static const unsigned long DEFAULT_TRIGGER_DELAYS[NUM_TRIGGERS][NUM_DAYS] = {
     {0, 0, 0, 0, 0, 0, 0},
     {0, 0, 0, 0, 0, 0, 0},
@@ -29,6 +37,8 @@ static const unsigned long DEFAULT_TRIGGER_DELAYS[NUM_TRIGGERS][NUM_DAYS] = {
 
 char dailyLetters[NUM_TRIGGERS][NUM_DAYS] = {};
 char dailyLetterColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH] = {};
+uint8_t dailyLetterColorModes[NUM_TRIGGERS][NUM_DAYS] = {};
+uint16_t dailyLetterRandomPaletteMasks[NUM_TRIGGERS][NUM_DAYS] = {};
 unsigned long letter_trigger_delays[NUM_TRIGGERS][NUM_DAYS] = {};
 
 int display_brightness;
@@ -55,10 +65,19 @@ constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION_LEGACY = 400;
 constexpr uint16_t EEPROM_VERSION_INVALID = 0xFFFF;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_AUTH = 4;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITHOUT_ACTIVITY_WINDOW = 5;
+constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_ACTIVITY_WINDOW = 6;
 constexpr uint16_t DEFAULT_ACTIVE_START_MINUTES = 0;
 constexpr uint16_t DEFAULT_ACTIVE_END_MINUTES = 1439;
 
 constexpr size_t LEGACY_AUTH_TOKEN_MAX_LENGTH = 64;
+
+uint16_t getFullRandomPaletteMask() {
+    uint16_t mask = 0;
+    for (size_t index = 0; index < RANDOM_COLOR_PALETTE_SIZE; ++index) {
+        mask |= static_cast<uint16_t>(1U << index);
+    }
+    return mask;
+}
 
 bool isValidHexColor(const char *value) {
     if (value == nullptr) {
@@ -118,6 +137,13 @@ void resetLettersToDefaults() {
     memcpy(dailyLetters, DEFAULT_DAILY_LETTERS, sizeof(dailyLetters));
     memcpy(dailyLetterColors, DEFAULT_DAILY_COLORS, sizeof(dailyLetterColors));
     sanitizeColorMatrix(dailyLetterColors);
+
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            dailyLetterColorModes[trigger][day] = static_cast<uint8_t>(LetterColorMode::Fixed);
+            dailyLetterRandomPaletteMasks[trigger][day] = getFullRandomPaletteMask();
+        }
+    }
 }
 
 void resetTriggerDelaysToDefaults() {
@@ -130,6 +156,14 @@ bool isValidDelayValue(unsigned long value) {
 
 bool isValidActiveMinuteValue(uint16_t value) {
     return value <= 1439U;
+}
+
+bool isValidColorModeValue(uint8_t value) {
+    return value <= static_cast<uint8_t>(LetterColorMode::RandomAll);
+}
+
+bool hasSelectedRandomPaletteColor(uint16_t mask) {
+    return (mask & getFullRandomPaletteMask()) != 0U;
 }
 
 size_t strnLength(const char *value, size_t maxLength) {
@@ -294,6 +328,22 @@ void loadConfigFromVersion5Layout() {
     standalone_active_end_minutes = DEFAULT_ACTIVE_END_MINUTES;
 }
 
+void loadConfigFromVersion6Layout() {
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
+    sanitizeColorMatrix(dailyLetterColors);
+    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, letter_trigger_delays);
+    EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
+    uint8_t autoModeByte = 0;
+    EEPROM.get(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
+    autoDisplayMode = (autoModeByte == 1);
+    EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
+    EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
+    EEPROM.get(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
+    EEPROM.get(EEPROM_OFFSET_ACTIVE_START_MINUTES, standalone_active_start_minutes);
+    EEPROM.get(EEPROM_OFFSET_ACTIVE_END_MINUTES, standalone_active_end_minutes);
+}
+
 } // namespace
 
 void saveConfig() {
@@ -317,6 +367,8 @@ void saveConfig() {
     EEPROM.put(EEPROM_OFFSET_CONFIG_VERSION, version);
     EEPROM.put(EEPROM_OFFSET_ACTIVE_START_MINUTES, standalone_active_start_minutes);
     EEPROM.put(EEPROM_OFFSET_ACTIVE_END_MINUTES, standalone_active_end_minutes);
+    EEPROM.put(EEPROM_OFFSET_COLOR_MODE_MATRIX, dailyLetterColorModes);
+    EEPROM.put(EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX, dailyLetterRandomPaletteMasks);
     EEPROM.commit();
 
     Serial.println(F("✅ Einstellungen erfolgreich gespeichert!"));
@@ -399,6 +451,12 @@ void loadConfig() {
         sanitizeColorMatrix(dailyLetterColors);
         EEPROM.get(EEPROM_OFFSET_ACTIVE_START_MINUTES, standalone_active_start_minutes);
         EEPROM.get(EEPROM_OFFSET_ACTIVE_END_MINUTES, standalone_active_end_minutes);
+        EEPROM.get(EEPROM_OFFSET_COLOR_MODE_MATRIX, dailyLetterColorModes);
+        EEPROM.get(EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX, dailyLetterRandomPaletteMasks);
+    } else if (storedVersion == EEPROM_CONFIG_VERSION_WITH_ACTIVITY_WINDOW) {
+        Serial.println(F("ℹ️ Konfiguration ohne Farbmodi erkannt – feste Farben werden übernommen."));
+        loadConfigFromVersion6Layout();
+        migratedLegacyLayout = true;
     } else if (storedVersion == EEPROM_CONFIG_VERSION_WITHOUT_ACTIVITY_WINDOW) {
         Serial.println(F("ℹ️ Konfiguration ohne Aktivzeitfenster erkannt – setze ganztägige Aktivität."));
         loadConfigFromVersion5Layout();
@@ -509,6 +567,21 @@ void loadConfig() {
                 Serial.println(F("🛑 Ungültige Farbe! Setze Standardwert..."));
                 strncpy(dailyLetterColors[trigger][day], DEFAULT_DAILY_COLORS[trigger][day], COLOR_STRING_LENGTH);
                 dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+                eepromUpdated = true;
+            }
+
+            if (!isValidColorModeValue(dailyLetterColorModes[trigger][day])) {
+                Serial.println(F("⚠️ Ungültiger Farbmodus entdeckt! Setze feste Farbe."));
+                dailyLetterColorModes[trigger][day] = static_cast<uint8_t>(LetterColorMode::Fixed);
+                eepromUpdated = true;
+            }
+
+            dailyLetterRandomPaletteMasks[trigger][day] &= getFullRandomPaletteMask();
+            if (dailyLetterColorModes[trigger][day] == static_cast<uint8_t>(LetterColorMode::RandomSelected) &&
+                !hasSelectedRandomPaletteColor(dailyLetterRandomPaletteMasks[trigger][day])) {
+                Serial.println(F("⚠️ Zufallspalette ohne Auswahl entdeckt! Setze feste Farbe."));
+                dailyLetterColorModes[trigger][day] = static_cast<uint8_t>(LetterColorMode::Fixed);
+                dailyLetterRandomPaletteMasks[trigger][day] = getFullRandomPaletteMask();
                 eepromUpdated = true;
             }
         }

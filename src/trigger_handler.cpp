@@ -93,6 +93,99 @@ bool isWithinStandaloneWindow(uint16_t minutesOfDay) {
            minutesOfDay <= standalone_active_end_minutes;
 }
 
+uint16_t color565FromHex(const String &hexColor) {
+    uint32_t colorHex = strtol(hexColor.c_str() + 1, NULL, 16);
+    uint8_t r = (colorHex >> 16) & 0xFF;
+    uint8_t g = (colorHex >> 8) & 0xFF;
+    uint8_t b = colorHex & 0xFF;
+    return display.color565(r, g, b);
+}
+
+String buildRainbowRandomColor() {
+    const uint16_t hue = static_cast<uint16_t>(random(1536));
+    const uint8_t segment = static_cast<uint8_t>(hue / 256U);
+    const uint8_t offset = static_cast<uint8_t>(hue % 256U);
+
+    uint8_t r = 0;
+    uint8_t g = 0;
+    uint8_t b = 0;
+
+    switch (segment) {
+        case 0:
+            r = 255;
+            g = offset;
+            break;
+        case 1:
+            r = static_cast<uint8_t>(255 - offset);
+            g = 255;
+            break;
+        case 2:
+            g = 255;
+            b = offset;
+            break;
+        case 3:
+            g = static_cast<uint8_t>(255 - offset);
+            b = 255;
+            break;
+        case 4:
+            r = offset;
+            b = 255;
+            break;
+        default:
+            r = 255;
+            b = static_cast<uint8_t>(255 - offset);
+            break;
+    }
+
+    char buffer[8];
+    snprintf(buffer, sizeof(buffer), "#%02X%02X%02X", r, g, b);
+    return String(buffer);
+}
+
+String resolveDisplayColor(uint8_t triggerIndex, size_t dayIndex) {
+    String fixedColor(dailyLetterColors[triggerIndex][dayIndex]);
+    if (fixedColor.length() != 7 || fixedColor[0] != '#') {
+        fixedColor = "#FFFFFF";
+    }
+
+    const uint8_t colorModeValue = dailyLetterColorModes[triggerIndex][dayIndex];
+    const LetterColorMode colorMode = static_cast<LetterColorMode>(colorModeValue);
+
+    if (colorMode == LetterColorMode::Fixed) {
+        return fixedColor;
+    }
+
+    if (colorMode == LetterColorMode::RandomAll) {
+        return buildRainbowRandomColor();
+    }
+
+    uint16_t paletteMask = dailyLetterRandomPaletteMasks[triggerIndex][dayIndex];
+    size_t selectedCount = 0;
+    for (size_t index = 0; index < RANDOM_COLOR_PALETTE_SIZE; ++index) {
+        if ((paletteMask & static_cast<uint16_t>(1U << index)) != 0U) {
+            ++selectedCount;
+        }
+    }
+
+    if (selectedCount == 0) {
+        return fixedColor;
+    }
+
+    size_t selectedOffset = static_cast<size_t>(random(static_cast<long>(selectedCount)));
+    for (size_t index = 0; index < RANDOM_COLOR_PALETTE_SIZE; ++index) {
+        if ((paletteMask & static_cast<uint16_t>(1U << index)) == 0U) {
+            continue;
+        }
+
+        if (selectedOffset == 0) {
+            return String(randomColorPalette[index]);
+        }
+        --selectedOffset;
+    }
+
+    return fixedColor;
+}
+
 } // namespace
 
 void clearDisplay() {
@@ -281,7 +374,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         return false;
     }
 
-    String selectedColor(dailyLetterColors[triggerIndex][today]);
+    String selectedColor = resolveDisplayColor(triggerIndex, static_cast<size_t>(today));
 
     Serial.print(F("🎨 Geladene Farbe für heute: "));
     Serial.println(selectedColor);
@@ -291,19 +384,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         selectedColor = "#FFFFFF";
     }
 
-    uint32_t colorHex = strtol(selectedColor.c_str() + 1, NULL, 16);
-    uint8_t r = (colorHex >> 16) & 0xFF;
-    uint8_t g = (colorHex >> 8) & 0xFF;
-    uint8_t b = colorHex & 0xFF;
-
-    uint16_t letterColor = display.color565(r, g, b);
-
-    Serial.print(F("🎨 Konvertierte RGB-Werte: R="));
-    Serial.print(r);
-    Serial.print(F(", G="));
-    Serial.print(g);
-    Serial.print(F(", B="));
-    Serial.println(b);
+    uint16_t letterColor = color565FromHex(selectedColor);
 
     if (letterData.find(letter) == letterData.end()) {
         Serial.println(F("⚠️ Fehler: Buchstabe nicht gefunden!"));

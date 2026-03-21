@@ -54,13 +54,21 @@ def test_eeprom_usage_fits_into_memory() -> None:
     wifi_connect_end = constants["EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT"] + 4  # sizeof(int)
     version_end = constants["EEPROM_OFFSET_CONFIG_VERSION"] + 2  # uint16_t
     active_end = constants["EEPROM_OFFSET_ACTIVE_END_MINUTES"] + 2  # uint16_t
+    color_mode_end = constants["EEPROM_OFFSET_COLOR_MODE_MATRIX"] + constants["EEPROM_COLOR_MODE_MATRIX_SIZE"]
+    color_palette_end = (
+        constants["EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX"] + constants["EEPROM_COLOR_PALETTE_MASK_MATRIX_SIZE"]
+    )
     matrix_end = constants["EEPROM_OFFSET_TRIGGER_DELAY_MATRIX"] + constants["EEPROM_TRIGGER_DELAY_MATRIX_SIZE"]
 
     assert wifi_connect_end <= eeprom_size
     assert version_end <= eeprom_size
     assert active_end <= eeprom_size
+    assert color_mode_end <= eeprom_size
+    assert color_palette_end <= eeprom_size
     assert constants["EEPROM_OFFSET_CONFIG_VERSION"] >= wifi_connect_end
     assert constants["EEPROM_OFFSET_ACTIVE_START_MINUTES"] >= version_end
     assert constants["EEPROM_OFFSET_ACTIVE_END_MINUTES"] >= constants["EEPROM_OFFSET_ACTIVE_START_MINUTES"] + 2
+    assert constants["EEPROM_OFFSET_COLOR_MODE_MATRIX"] >= active_end
+    assert constants["EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX"] >= color_mode_end
     assert constants["EEPROM_OFFSET_CONFIG_VERSION"] >= matrix_end
-    assert constants["EEPROM_CONFIG_VERSION"] >= 6
+    assert constants["EEPROM_CONFIG_VERSION"] >= 7

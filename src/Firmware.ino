@@ -22,6 +22,7 @@ void setup() {
   Serial.begin(19200);
   delay(500);
   Serial.println(F("🚀 Systemstart..."));
+  randomSeed(static_cast<unsigned long>(ESP.getChipId()) ^ micros());
   // clearDisplay();
 
   webServerRunning = false;

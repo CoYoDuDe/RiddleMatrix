@@ -38,6 +38,7 @@
 static constexpr size_t NUM_TRIGGERS = 3;
 static constexpr size_t NUM_DAYS = 7;
 static constexpr size_t COLOR_STRING_LENGTH = 8; // "#RRGGBB" + Terminator
+static constexpr size_t RANDOM_COLOR_PALETTE_SIZE = 8;
 
 #if defined(RIDDLEMATRIX_HOST_TEST)
 static constexpr size_t EEPROM_SIZEOF_UNSIGNED_LONG = 4;
@@ -60,7 +61,11 @@ static constexpr uint16_t EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT = EEPROM_OFFSET_AUT
 static constexpr uint16_t EEPROM_OFFSET_CONFIG_VERSION = EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT + sizeof(int);
 static constexpr uint16_t EEPROM_OFFSET_ACTIVE_START_MINUTES = EEPROM_OFFSET_CONFIG_VERSION + sizeof(uint16_t);
 static constexpr uint16_t EEPROM_OFFSET_ACTIVE_END_MINUTES = EEPROM_OFFSET_ACTIVE_START_MINUTES + sizeof(uint16_t);
-static constexpr uint16_t EEPROM_CONFIG_VERSION = 6;
+static constexpr uint16_t EEPROM_OFFSET_COLOR_MODE_MATRIX = EEPROM_OFFSET_ACTIVE_END_MINUTES + sizeof(uint16_t);
+static constexpr size_t EEPROM_COLOR_MODE_MATRIX_SIZE = NUM_TRIGGERS * NUM_DAYS * sizeof(uint8_t);
+static constexpr uint16_t EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX = EEPROM_OFFSET_COLOR_MODE_MATRIX + EEPROM_COLOR_MODE_MATRIX_SIZE;
+static constexpr size_t EEPROM_COLOR_PALETTE_MASK_MATRIX_SIZE = NUM_TRIGGERS * NUM_DAYS * sizeof(uint16_t);
+static constexpr uint16_t EEPROM_CONFIG_VERSION = 7;
 
 static_assert(EEPROM_OFFSET_DAILY_LETTERS + (NUM_TRIGGERS * NUM_DAYS) <= EEPROM_OFFSET_DAILY_LETTER_COLORS,
               "Letter-Block überschneidet sich mit Farb-Block");
@@ -68,7 +73,7 @@ static_assert(EEPROM_OFFSET_DAILY_LETTER_COLORS + (NUM_TRIGGERS * NUM_DAYS * COL
               "Farb-Block überschneidet sich mit Anzeigeparametern");
 static_assert(EEPROM_OFFSET_CONFIG_VERSION >= EEPROM_OFFSET_TRIGGER_DELAY_MATRIX + EEPROM_TRIGGER_DELAY_MATRIX_SIZE,
               "Config version offset overlaps trigger delay matrix");
-static_assert(EEPROM_OFFSET_ACTIVE_END_MINUTES + sizeof(uint16_t) <= EEPROM_SIZE,
+static_assert(EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX + EEPROM_COLOR_PALETTE_MASK_MATRIX_SIZE <= EEPROM_SIZE,
               "Activity window exceeds allocated EEPROM size");
 
 // **Standard-WiFi-Daten (werden bei Erststart gesetzt)**
@@ -89,6 +94,17 @@ extern char dailyLetters[NUM_TRIGGERS][NUM_DAYS];
 
 // **Buchstabenfarben für die Wochentage (Standard: Weiß)**
 extern char dailyLetterColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH];
+extern uint8_t dailyLetterColorModes[NUM_TRIGGERS][NUM_DAYS];
+extern uint16_t dailyLetterRandomPaletteMasks[NUM_TRIGGERS][NUM_DAYS];
+
+enum class LetterColorMode : uint8_t {
+    Fixed = 0,
+    RandomSelected = 1,
+    RandomAll = 2,
+};
+
+extern const char *const randomColorPalette[RANDOM_COLOR_PALETTE_SIZE];
+extern const char *const randomColorPaletteLabels[RANDOM_COLOR_PALETTE_SIZE];
 
 // **Alle auswählbaren Buchstaben (A-Z & `*`)**
 const char availableLetters[] = {

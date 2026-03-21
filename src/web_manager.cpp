@@ -85,6 +85,26 @@ bool isValidHexColorString(const String &value) {
     return true;
 }
 
+bool parseLetterColorModeValue(String value, uint8_t &mode) {
+    value.trim();
+    value.toLowerCase();
+
+    if (value == "fixed") {
+        mode = static_cast<uint8_t>(LetterColorMode::Fixed);
+        return true;
+    }
+    if (value == "random_selected") {
+        mode = static_cast<uint8_t>(LetterColorMode::RandomSelected);
+        return true;
+    }
+    if (value == "random_all") {
+        mode = static_cast<uint8_t>(LetterColorMode::RandomAll);
+        return true;
+    }
+
+    return false;
+}
+
 bool parseDelayStringValue(String value, unsigned long &parsed) {
     value.trim();
     if (value.isEmpty()) {
@@ -279,6 +299,18 @@ String getLetterOptionLabel(char letter) {
             return F("Riddler");
         default:
             return String(letter);
+    }
+}
+
+String getColorModeOptionLabel(uint8_t mode) {
+    switch (static_cast<LetterColorMode>(mode)) {
+        case LetterColorMode::RandomSelected:
+            return F("Zufall (ausgewaehlt)");
+        case LetterColorMode::RandomAll:
+            return F("Zufall (alle)");
+        case LetterColorMode::Fixed:
+        default:
+            return F("Fest");
     }
 }
 
@@ -569,6 +601,7 @@ void setupWebServer() {
             for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
                 String selectId = "letter_" + String(trigger) + "_" + String(day);
                 String colorId = "color_" + String(trigger) + "_" + String(day);
+                String colorModeId = "color_mode_" + String(trigger) + "_" + String(day);
                 html += "<td>";
                 html += "<select id='" + selectId + "' name='" + selectId + "'>";
                 for (size_t idx = 0; idx < sizeof(availableLetters); ++idx) {
@@ -581,6 +614,43 @@ void setupWebServer() {
                 }
                 html += "</select>";
                 html += "<br><input type='color' id='" + colorId + "' name='" + colorId + "' value='" + escapeHtml(String(dailyLetterColors[trigger][day])) + "'>";
+                html += "<br><select id='" + colorModeId + "' name='" + colorModeId + "'>";
+                for (uint8_t modeValue = static_cast<uint8_t>(LetterColorMode::Fixed);
+                     modeValue <= static_cast<uint8_t>(LetterColorMode::RandomAll);
+                     ++modeValue) {
+                    html += "<option value='";
+                    if (modeValue == static_cast<uint8_t>(LetterColorMode::Fixed)) {
+                        html += "fixed";
+                    } else if (modeValue == static_cast<uint8_t>(LetterColorMode::RandomSelected)) {
+                        html += "random_selected";
+                    } else {
+                        html += "random_all";
+                    }
+                    html += "' ";
+                    if (dailyLetterColorModes[trigger][day] == modeValue) {
+                        html += "selected";
+                    }
+                    html += ">" + escapeHtml(getColorModeOptionLabel(modeValue)) + "</option>";
+                }
+                html += "</select>";
+                html += "<details style='margin-top:4px;'><summary>Zufallspalette</summary>";
+                for (size_t paletteIndex = 0; paletteIndex < RANDOM_COLOR_PALETTE_SIZE; ++paletteIndex) {
+                    String paletteField = "palette_" + String(trigger) + "_" + String(day) + "_" + String(paletteIndex);
+                    const bool paletteSelected =
+                        (dailyLetterRandomPaletteMasks[trigger][day] & static_cast<uint16_t>(1U << paletteIndex)) != 0U;
+                    html += "<label style='display:inline-block; margin:2px 6px 2px 0;'>";
+                    html += "<input type='checkbox' name='" + paletteField + "' value='1' ";
+                    if (paletteSelected) {
+                        html += "checked";
+                    }
+                    html += ">";
+                    html += "<span style='display:inline-block; width:10px; height:10px; border:1px solid #333; background:";
+                    html += escapeHtml(String(randomColorPalette[paletteIndex]));
+                    html += "; margin:0 4px;'></span>";
+                    html += escapeHtml(String(randomColorPaletteLabels[paletteIndex]));
+                    html += "</label>";
+                }
+                html += "</details>";
                 html += "<br><button type='button' onclick='displayLetter(" + String(trigger) + ", document.getElementById(\"" + selectId + "\").value)'>Anzeigen</button>";
                 html += "<br><button type='button' onclick='triggerLetter(" + String(trigger) + ")'>Triggern</button>";
                 html += "</td>";
@@ -963,7 +1033,20 @@ void setupWebServer() {
 
                 char parsedLetters[NUM_TRIGGERS][NUM_DAYS];
                 char parsedColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH];
+                uint8_t parsedColorModes[NUM_TRIGGERS][NUM_DAYS];
+                uint16_t parsedPaletteMasks[NUM_TRIGGERS][NUM_DAYS];
                 unsigned long parsedDelays[NUM_TRIGGERS][NUM_DAYS];
+
+                for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                    for (size_t day = 0; day < NUM_DAYS; ++day) {
+                        parsedColorModes[trigger][day] = static_cast<uint8_t>(LetterColorMode::Fixed);
+                        uint16_t fullMask = 0;
+                        for (size_t paletteIndex = 0; paletteIndex < RANDOM_COLOR_PALETTE_SIZE; ++paletteIndex) {
+                            fullMask |= static_cast<uint16_t>(1U << paletteIndex);
+                        }
+                        parsedPaletteMasks[trigger][day] = fullMask;
+                    }
+                }
 
                 bool validationFailed = false;
                 String validationMessage;
@@ -1099,6 +1182,79 @@ void setupWebServer() {
                     }
                 }
 
+                JsonObjectConst colorModesObject = payload["color_modes"].as<JsonObjectConst>();
+                if (!validationFailed && !colorModesObject.isNull()) {
+                    for (size_t day = 0; day < NUM_DAYS && !validationFailed; ++day) {
+                        JsonArrayConst dayModes = colorModesObject[DAY_KEYS[day]].as<JsonArrayConst>();
+                        if (dayModes.isNull() || dayModes.size() != NUM_TRIGGERS) {
+                            validationFailed = true;
+                            validationMessage = F("Ungültige Farbmodus-Liste für Tag ");
+                            validationMessage += DAY_KEYS[day];
+                            break;
+                        }
+
+                        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                            const char *modeRaw = dayModes[trigger].as<const char *>();
+                            if (modeRaw == nullptr ||
+                                !parseLetterColorModeValue(String(modeRaw), parsedColorModes[trigger][day])) {
+                                validationFailed = true;
+                                validationMessage = F("Ungültiger Farbmodus für Trigger ");
+                                validationMessage += String(trigger + 1);
+                                validationMessage += F(" am Tag ");
+                                validationMessage += DAY_KEYS[day];
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                JsonObjectConst paletteMasksObject = payload["color_palette_masks"].as<JsonObjectConst>();
+                if (!validationFailed && !paletteMasksObject.isNull()) {
+                    for (size_t day = 0; day < NUM_DAYS && !validationFailed; ++day) {
+                        JsonArrayConst dayMasks = paletteMasksObject[DAY_KEYS[day]].as<JsonArrayConst>();
+                        if (dayMasks.isNull() || dayMasks.size() != NUM_TRIGGERS) {
+                            validationFailed = true;
+                            validationMessage = F("Ungültige Zufallspalette für Tag ");
+                            validationMessage += DAY_KEYS[day];
+                            break;
+                        }
+
+                        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                            JsonVariantConst maskVariant = dayMasks[trigger];
+                            if (!(maskVariant.is<unsigned int>() || maskVariant.is<int>() || maskVariant.is<long>() || maskVariant.is<unsigned long>())) {
+                                validationFailed = true;
+                                validationMessage = F("Ungültige Zufallspalette für Trigger ");
+                                validationMessage += String(trigger + 1);
+                                validationMessage += F(" am Tag ");
+                                validationMessage += DAY_KEYS[day];
+                                break;
+                            }
+
+                            unsigned long maskValue = maskVariant.as<unsigned long>();
+                            if (maskValue > 0xFFFFUL) {
+                                validationFailed = true;
+                                validationMessage = F("Zufallspalette außerhalb des gueltigen Bereichs.");
+                                break;
+                            }
+
+                            parsedPaletteMasks[trigger][day] = static_cast<uint16_t>(maskValue);
+                        }
+                    }
+                }
+
+                if (!validationFailed) {
+                    for (size_t trigger = 0; trigger < NUM_TRIGGERS && !validationFailed; ++trigger) {
+                        for (size_t day = 0; day < NUM_DAYS; ++day) {
+                            if (parsedColorModes[trigger][day] == static_cast<uint8_t>(LetterColorMode::RandomSelected) &&
+                                parsedPaletteMasks[trigger][day] == 0U) {
+                                validationFailed = true;
+                                validationMessage = F("Zufall (ausgewaehlt) benoetigt mindestens eine Farbe.");
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 if (validationFailed) {
                     Serial.print(F("❌ JSON-Validierung fehlgeschlagen: "));
                     Serial.println(validationMessage);
@@ -1112,22 +1268,37 @@ void setupWebServer() {
                         dailyLetters[trigger][day] = parsedLetters[trigger][day];
                         strncpy(dailyLetterColors[trigger][day], parsedColors[trigger][day], COLOR_STRING_LENGTH);
                         dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+                        dailyLetterColorModes[trigger][day] = parsedColorModes[trigger][day];
+                        dailyLetterRandomPaletteMasks[trigger][day] = parsedPaletteMasks[trigger][day];
                         letter_trigger_delays[trigger][day] = parsedDelays[trigger][day];
                     }
                 }
 
                 saveConfig();
                 refreshWiFiIdleTimer(F("POST /updateAllLetters JSON"));
-                Serial.println(F("✅ JSON-Update: Buchstaben, Farben & Verzögerungen übernommen."));
+                Serial.println(F("✅ JSON-Update: Buchstaben, Farben, Farbmodi & Verzögerungen übernommen."));
                 cleanup();
-                sendJsonStatus(request, 200, "ok", F("Buchstaben, Farben & Verzögerungen gespeichert."));
+                sendJsonStatus(request, 200, "ok", F("Buchstaben, Farben, Farbmodi & Verzögerungen gespeichert."));
                 return;
             }
 
             char parsedLetters[NUM_TRIGGERS][NUM_DAYS];
             char parsedColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH];
+            uint8_t parsedColorModes[NUM_TRIGGERS][NUM_DAYS];
+            uint16_t parsedPaletteMasks[NUM_TRIGGERS][NUM_DAYS];
             unsigned long parsedDelays[NUM_TRIGGERS][NUM_DAYS];
             memcpy(parsedDelays, letter_trigger_delays, sizeof(parsedDelays));
+
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                for (size_t day = 0; day < NUM_DAYS; ++day) {
+                    parsedColorModes[trigger][day] = static_cast<uint8_t>(LetterColorMode::Fixed);
+                    uint16_t fullMask = 0;
+                    for (size_t paletteIndex = 0; paletteIndex < RANDOM_COLOR_PALETTE_SIZE; ++paletteIndex) {
+                        fullMask |= static_cast<uint16_t>(1U << paletteIndex);
+                    }
+                    parsedPaletteMasks[trigger][day] = fullMask;
+                }
+            }
 
             bool success = true;
             String errorMessage;
@@ -1136,10 +1307,13 @@ void setupWebServer() {
                 for (size_t day = 0; day < NUM_DAYS; ++day) {
                     String letterParam = "letter_" + String(trigger) + "_" + String(day);
                     String colorParam = "color_" + String(trigger) + "_" + String(day);
+                    String colorModeParam = "color_mode_" + String(trigger) + "_" + String(day);
 
-                    if (!request->hasParam(letterParam, true) || !request->hasParam(colorParam, true)) {
+                    if (!request->hasParam(letterParam, true) ||
+                        !request->hasParam(colorParam, true) ||
+                        !request->hasParam(colorModeParam, true)) {
                         success = false;
-                        errorMessage = F("Nicht alle Buchstaben- oder Farbfelder wurden übermittelt.");
+                        errorMessage = F("Nicht alle Buchstaben-, Farb- oder Farbmodus-Felder wurden uebermittelt.");
                         break;
                     }
 
@@ -1171,6 +1345,33 @@ void setupWebServer() {
                     colorValue.toUpperCase();
                     strncpy(parsedColors[trigger][day], colorValue.c_str(), COLOR_STRING_LENGTH);
                     parsedColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+
+                    uint8_t parsedMode = 0;
+                    if (!parseLetterColorModeValue(request->getParam(colorModeParam, true)->value(), parsedMode)) {
+                        success = false;
+                        errorMessage = F("Ungueltiger Farbmodus im Formular.");
+                        break;
+                    }
+
+                    parsedColorModes[trigger][day] = parsedMode;
+                    if (parsedMode == static_cast<uint8_t>(LetterColorMode::RandomSelected)) {
+                        uint16_t paletteMask = 0;
+                        for (size_t paletteIndex = 0; paletteIndex < RANDOM_COLOR_PALETTE_SIZE; ++paletteIndex) {
+                            String paletteField =
+                                "palette_" + String(trigger) + "_" + String(day) + "_" + String(paletteIndex);
+                            if (request->hasParam(paletteField, true)) {
+                                paletteMask |= static_cast<uint16_t>(1U << paletteIndex);
+                            }
+                        }
+
+                        if (paletteMask == 0U) {
+                            success = false;
+                            errorMessage = F("Zufall (ausgewaehlt) benoetigt mindestens eine Farbe.");
+                            break;
+                        }
+
+                        parsedPaletteMasks[trigger][day] = paletteMask;
+                    }
                 }
             }
 
@@ -1213,6 +1414,8 @@ void setupWebServer() {
                     dailyLetters[trigger][day] = parsedLetters[trigger][day];
                     strncpy(dailyLetterColors[trigger][day], parsedColors[trigger][day], COLOR_STRING_LENGTH);
                     dailyLetterColors[trigger][day][COLOR_STRING_LENGTH - 1] = '\0';
+                    dailyLetterColorModes[trigger][day] = parsedColorModes[trigger][day];
+                    dailyLetterRandomPaletteMasks[trigger][day] = parsedPaletteMasks[trigger][day];
                     letter_trigger_delays[trigger][day] = parsedDelays[trigger][day];
                 }
             }
@@ -1220,14 +1423,14 @@ void setupWebServer() {
             saveConfig();
             refreshWiFiIdleTimer(F("POST /updateAllLetters Formular"));
             if (expectDelays) {
-                Serial.println(F("✅ Formular-Update: Buchstaben, Farben & Verzögerungen gespeichert."));
+                Serial.println(F("✅ Formular-Update: Buchstaben, Farben, Farbmodi & Verzögerungen gespeichert."));
             } else {
-                Serial.println(F("✅ Formular-Update: Buchstaben & Farben gespeichert."));
+                Serial.println(F("✅ Formular-Update: Buchstaben, Farben & Farbmodi gespeichert."));
             }
             cleanup();
 
-            String confirmation = expectDelays ? String(F("✅ Buchstaben, Farben & Verzögerungen gespeichert!"))
-                                               : String(F("✅ Buchstaben & Farben gespeichert!"));
+            String confirmation = expectDelays ? String(F("✅ Buchstaben, Farben, Farbmodi & Verzoegerungen gespeichert!"))
+                                               : String(F("✅ Buchstaben, Farben & Farbmodi gespeichert!"));
             request->send(200, "text/plain", confirmation);
         },
         nullptr,

@@ -16,7 +16,7 @@ AsyncWebServer server(80);
 namespace {
 
 constexpr uint16_t LEGACY_VERSION_OFFSET = 400; // Siehe migrateLegacyLayout()
-constexpr uint16_t VERSION5_CONFIG_OFFSET = EEPROM_OFFSET_CONFIG_VERSION;
+constexpr uint16_t LEGACY_CONFIG_OFFSET = EEPROM_OFFSET_CONFIG_VERSION;
 
 bool verify_default_color_sanitizing() {
     EEPROM.begin(EEPROM_SIZE);
@@ -237,7 +237,7 @@ bool verify_activity_window_defaults_and_migration() {
     std::memcpy(raw + EEPROM_OFFSET_HOSTNAME, host, sizeof(host));
 
     std::uint16_t version5 = 5;
-    std::memcpy(raw + VERSION5_CONFIG_OFFSET, &version5, sizeof(version5));
+    std::memcpy(raw + LEGACY_CONFIG_OFFSET, &version5, sizeof(version5));
 
     int brightness = 120;
     std::memcpy(raw + EEPROM_OFFSET_DISPLAY_BRIGHTNESS, &brightness, sizeof(brightness));
@@ -266,6 +266,66 @@ bool verify_activity_window_defaults_and_migration() {
     return true;
 }
 
+bool verify_color_mode_defaults_and_version6_migration() {
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.fill(0xFF);
+
+    loadConfig();
+
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            if (dailyLetterColorModes[trigger][day] != static_cast<uint8_t>(LetterColorMode::Fixed)) {
+                std::cerr << "Default color mode mismatch at trigger " << trigger
+                          << ", day " << day << std::endl;
+                return false;
+            }
+            if (dailyLetterRandomPaletteMasks[trigger][day] == 0U) {
+                std::cerr << "Default random palette mask missing at trigger " << trigger
+                          << ", day " << day << std::endl;
+                return false;
+            }
+        }
+    }
+
+    EEPROM.begin(EEPROM_SIZE);
+    std::uint8_t *raw = EEPROM.raw();
+    std::memset(raw, 0, EEPROM_SIZE);
+
+    char ssid[sizeof(wifi_ssid)] = {};
+    std::strncpy(ssid, "LegacyV6", sizeof(ssid));
+    std::memcpy(raw + EEPROM_OFFSET_WIFI_SSID, ssid, sizeof(ssid));
+
+    char host[sizeof(hostname)] = {};
+    std::strncpy(host, "legacy-v6", sizeof(host));
+    std::memcpy(raw + EEPROM_OFFSET_HOSTNAME, host, sizeof(host));
+
+    std::uint16_t version6 = 6;
+    std::memcpy(raw + LEGACY_CONFIG_OFFSET, &version6, sizeof(version6));
+
+    std::uint16_t activeStart = 480U;
+    std::uint16_t activeEnd = 1320U;
+    std::memcpy(raw + EEPROM_OFFSET_ACTIVE_START_MINUTES, &activeStart, sizeof(activeStart));
+    std::memcpy(raw + EEPROM_OFFSET_ACTIVE_END_MINUTES, &activeEnd, sizeof(activeEnd));
+
+    loadConfig();
+
+    if (standalone_active_start_minutes != activeStart || standalone_active_end_minutes != activeEnd) {
+        std::cerr << "Version 6 migration did not preserve activity window" << std::endl;
+        return false;
+    }
+
+    for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            if (dailyLetterColorModes[trigger][day] != static_cast<uint8_t>(LetterColorMode::Fixed)) {
+                std::cerr << "Version 6 migration did not default to fixed colors" << std::endl;
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -286,6 +346,10 @@ int main() {
     }
 
     if (!verify_activity_window_defaults_and_migration()) {
+        return 1;
+    }
+
+    if (!verify_color_mode_defaults_and_version6_migration()) {
         return 1;
     }
 
