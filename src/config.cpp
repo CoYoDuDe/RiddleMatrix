@@ -7,8 +7,10 @@
 char wifi_ssid[50] = "";
 char wifi_password[50] = "";
 char hostname[50] = "";
-constexpr char DEFAULT_WIFI_SSID[] = "YOUR_WIFI_SSID";
-constexpr char DEFAULT_WIFI_PASSWORD[] = "YOUR_WIFI_PASSWORD";
+// Default AP credentials for freshly flashed boxes. These must match the
+// RiddleMatrix manager/hotspot defaults so unconfigured boxes can join.
+constexpr char DEFAULT_WIFI_SSID[] = "RiddleMatrix_AP";
+constexpr char DEFAULT_WIFI_PASSWORD[] = "RiddleMatrix-Setup!";
 constexpr char DEFAULT_HOSTNAME[] = "your-device-hostname";
 int wifi_connect_timeout = 30;
 

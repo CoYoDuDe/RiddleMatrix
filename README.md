@@ -15,9 +15,16 @@ Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
 ## Konfigurationsoberfläche
 
-1. In `config.h` die Variablen `wifi_ssid`, `wifi_password`, `hostname` und optional `wifi_connect_timeout` anpassen.
-2. Firmware kompilieren und hochladen.
-3. Nach erfolgreicher Verbindung `http://<hostname>` aufrufen und die Zugangsdaten im EEPROM speichern.
+Frisch geflashte Boxen nutzen beim ersten Start diese Standard-WLAN-Daten:
+
+- SSID: `RiddleMatrix_AP`
+- Passwort: `RiddleMatrix-Setup!`
+
+Diese Werte sind in `src/config.cpp` als `DEFAULT_WIFI_SSID` und `DEFAULT_WIFI_PASSWORD` hinterlegt. Sie werden verwendet, wenn im EEPROM der Box noch keine gültigen WLAN-Daten gespeichert sind.
+
+1. Firmware kompilieren und hochladen.
+2. Box mit dem RiddleMatrix-Hotspot verbinden lassen.
+3. Nach erfolgreicher Verbindung `http://<hostname>` aufrufen und bei Bedarf neue Zugangsdaten im EEPROM speichern.
 
 ## Kompilieren und Hochladen
 
