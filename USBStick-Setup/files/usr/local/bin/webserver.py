@@ -8,11 +8,10 @@ import tempfile
 import secrets
 import re
 import ipaddress
-import hmac
 import copy
 import shutil
-from typing import Optional
 from functools import lru_cache
+from typing import Optional
 
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
 DAY_TO_FIRMWARE_INDEX = {
@@ -51,13 +50,8 @@ SCAN_SUBNET = os.environ.get("RIDDLEMATRIX_SCAN_SUBNET", "192.168.137")
 ENABLE_ARP_SCAN = os.environ.get("RIDDLEMATRIX_ENABLE_ARP_SCAN", "").strip().lower() in {"1", "true", "yes", "on"}
 SERVER_HOST = os.environ.get("RIDDLEMATRIX_SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.environ.get("RIDDLEMATRIX_SERVER_PORT", "8080"))
-SHUTDOWN_TOKEN_ENV_VAR = "SHUTDOWN_TOKEN"
-SHUTDOWN_TOKEN_HEADER = "X-Setup-Token"
-PUBLIC_AP_ENV_FILE = os.environ.get("PUBLIC_AP_ENV_FILE", "/etc/usbstick/public_ap.env")
 SHUTDOWN_COMMAND_ENV_VAR = "SHUTDOWN_COMMAND"
-_LOCALHOST_ADDRESSES = {"127.0.0.1", "::1"}
-
-_public_ap_env_cache = {"path": None, "mtime": None, "data": {}}
+HIDE_SHUTDOWN = os.environ.get("RIDDLEMATRIX_HIDE_SHUTDOWN", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 class RedirectResponseError(RuntimeError):
@@ -153,86 +147,6 @@ def save_config(data):
 if not os.path.exists(CONFIG_FILE):
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     save_config(_default_config())
-
-
-def _parse_env_value(raw_value: str) -> str:
-    value = raw_value.strip()
-    if len(value) >= 2 and ((value[0] == value[-1] == '"') or (value[0] == value[-1] == "'")):
-        value = value[1:-1]
-    return value
-
-
-def _load_public_ap_env() -> dict:
-    global _public_ap_env_cache
-    path = PUBLIC_AP_ENV_FILE
-    try:
-        stat = os.stat(path)
-        mtime = stat.st_mtime_ns
-    except FileNotFoundError:
-        _public_ap_env_cache = {"path": path, "mtime": None, "data": {}}
-        return {}
-
-    if (
-        _public_ap_env_cache["path"] == path
-        and _public_ap_env_cache["mtime"] == mtime
-    ):
-        return _public_ap_env_cache["data"]
-
-    data = {}
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            for line in handle:
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#"):
-                    continue
-                if "=" not in stripped:
-                    continue
-                key, raw_value = stripped.split("=", 1)
-                key = key.strip()
-                if not key:
-                    continue
-                data[key] = _parse_env_value(raw_value)
-    except OSError:
-        data = {}
-
-    _public_ap_env_cache = {"path": path, "mtime": mtime, "data": data}
-    return data
-
-
-def _get_shutdown_token() -> Optional[str]:
-    token = os.environ.get(SHUTDOWN_TOKEN_ENV_VAR)
-    if isinstance(token, str) and token.strip():
-        return token.strip()
-
-    env_data = _load_public_ap_env()
-    value = env_data.get(SHUTDOWN_TOKEN_ENV_VAR)
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
-def _is_local_request(remote_addr: Optional[str]) -> bool:
-    if not remote_addr:
-        return False
-    return remote_addr in _LOCALHOST_ADDRESSES
-
-
-def _validate_shutdown_request() -> Optional[str]:
-    if _is_local_request(request.remote_addr):
-        return None
-
-    token = _get_shutdown_token()
-    if not token:
-        return "Kein SHUTDOWN_TOKEN konfiguriert"
-
-    provided = request.headers.get(SHUTDOWN_TOKEN_HEADER, "")
-    if not provided:
-        return "Authentifizierungs-Token fehlt"
-
-    if not hmac.compare_digest(provided.strip(), token):
-        return "Authentifizierungs-Token ungültig"
-
-    return None
 
 
 def _execute_poweroff() -> None:
@@ -1122,7 +1036,10 @@ def learn_box(ip, identifier):
 @app.route("/")
 def index():
     with open(INDEX_FILE, "r", encoding="utf-8") as f:
-        return f.read()
+        html = f.read()
+    if HIDE_SHUTDOWN:
+        html = html.replace('<button id="shutdown" onclick="shutdown()">Herunterfahren</button>', '')
+    return html
 
 
 @app.route("/vendor/<path:filename>")
@@ -1589,19 +1506,6 @@ def transfer_box():
 
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
-    denial_reason = _validate_shutdown_request()
-    if denial_reason:
-        remote_addr = request.remote_addr or "unbekannt"
-        app.logger.warning(
-            "Shutdown-Anfrage abgelehnt: %s (Remote: %s)",
-            denial_reason,
-            remote_addr,
-        )
-        return (
-            jsonify({"status": "❌ Zugriff verweigert", "details": denial_reason}),
-            403,
-        )
-
     _execute_poweroff()
     return jsonify({"status": "OK"}), 200
 

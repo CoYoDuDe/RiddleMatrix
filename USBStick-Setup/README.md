@@ -111,46 +111,26 @@ sudo editor /etc/usbstick/public_ap.env
 # Beispielinhalt
 SSID="MeinIndividuellesNetz"
 WPA_PASSPHRASE="SehrSicheresKennwort123"
-SHUTDOWN_TOKEN="SehrGeheimesToken456"
 ```
 
-Der Eintrag `SHUTDOWN_TOKEN` schützt den Poweroff-Endpunkt des lokalen Webservers vor unautorisierten Aufrufen. Der Token
-wird von `/usr/local/bin/webserver.py` akzeptiert, sobald Clients den Header `X-Setup-Token: <wert>` mitsenden. Aufrufe
-vom lokalen Host (`127.0.0.1` oder `::1`) bleiben aus Gründen der Service-Wartbarkeit weiterhin erlaubt – für alle
-anderen Clients ist der Token zwingend.
+Der Poweroff-Endpunkt des lokalen Webservers benötigt keine zusätzliche Authentifizierung mehr. Der USB-Stick wird für die RiddleMatrix-Boxen in
+einem isolierten Hotspot betrieben, daher bleibt der Shutdown-Button ohne zusätzliche Eingabe direkt nutzbar.
 
-### Authentifizierte Shutdown-Aufrufe testen
+### Shutdown-Aufruf testen
 
 Der Webserver lauscht standardmäßig auf Port `8080`. Mit `curl` lässt sich das Verhalten nachvollziehen:
 
 ```bash
-# Erwartet HTTP 403 + JSON-Fehler, weil kein Token gesetzt ist
+# Erwartet HTTP 200 + JSON-Bestätigung
 curl -i -X POST http://<host>:8080/shutdown
-
-# Erwartet HTTP 200 + JSON-Bestätigung mit gültigem Token
-curl -i -X POST -H "X-Setup-Token: SehrGeheimesToken456" http://<host>:8080/shutdown
 ```
 
-Fehlerhafte Token oder Anfragen von nicht autorisierten Hosts protokolliert der Webserver im Log und beantwortet sie mit
-HTTP 403 sowie einer klaren JSON-Fehlermeldung (`{"status":"❌ Zugriff verweigert", ...}`). Erfolgreiche Abschaltungen
-liefern weiterhin Status `200`.
+Erfolgreiche Abschaltungen liefern Status `200` und lösen den konfigurierten Poweroff-Befehl aus.
 
 `bootlocal.sh` und `root/install_public_ap.sh` starten den Hotspot weiterhin, selbst wenn die Datei fehlt oder leer ist: Sie
 protokollieren den Grund, verweisen auf die Vorlage und greifen auf dieselben Standardwerte zurück. Sobald gültige Werte
 eingetragen wurden, nutzen die Skripte automatisch die konfigurierte SSID/Passphrase und geben im Fehlerfall eine gut
 verständliche Meldung aus.
-
-### Shutdown-Token im Frontend hinterlegen
-
-1. Das Webfrontend des Märchen-Managers stellt in der linken Seitenleiste ein Feld **„Shutdown-Token“** bereit.
-2. Tragen Sie dort das Token ein, das auch in `/etc/usbstick/public_ap.env` unter `SHUTDOWN_TOKEN` abgelegt ist, und bestätigen Sie die Eingabe (Blur oder Enter). Der Wert wird browserseitig in `localStorage` gespeichert und bleibt auch nach einem Reload erhalten.
-3. Sobald ein Token gespeichert ist, zeigt die Statuszeile unterhalb des Feldes „Token gespeichert.“ an. Ohne Token erscheint der Hinweis „Kein Token gespeichert.“
-4. Beim Auslösen des Buttons **„Herunterfahren“** sendet das Frontend automatisch den HTTP-Header `X-Setup-Token: <wert>` an `/shutdown`. Fehlt ein hinterlegtes Token, informiert ein Dialog darüber und bietet ausschließlich für lokale Tests (Zugriff direkt vom Gerät) die Option, den Shutdown ohne Header fortzusetzen.
-
-**Testempfehlung:**
-
-- **Lokal (z. B. Browser direkt auf dem Gerät):** Dialog bestätigen, um einmalig ohne Token zu testen. Der Backend-Endpunkt akzeptiert lokale Hosts auch ohne Header.
-- **Remote (anderes Gerät im Netzwerk):** Ein gültiges Token im Feld hinterlegen. Der Button verschickt den Header automatisch; ohne Token wird der Shutdown verweigert.
 
 ## Gesicherte Lease-Datei für dnsmasq
 

@@ -58,35 +58,6 @@
     }
     #shutdown { background: red; color: white; }
     #setupBtn { background: #555; color: white; width: 100%; }
-    .token-settings {
-      margin-top: 15px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .token-settings label {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-    .token-settings input {
-      padding: 8px;
-      border-radius: 4px;
-      border: 1px solid #777;
-      font-size: 14px;
-      background: #222;
-      color: #fff;
-    }
-    .token-status {
-      font-size: 12px;
-      min-height: 16px;
-    }
-    .token-status.saved {
-      color: #9be89b;
-    }
-    .token-status.missing {
-      color: #ffb3b3;
-    }
     #content {
       flex-grow: 1; background: #f4f4f4; padding: 0; overflow-y: auto; position: relative;
     }
@@ -156,6 +127,9 @@
     .box-order {
       font-weight: bold; margin-right: 10px;
     }
+    .transfer-badge {
+      color: green; font-weight: bold; margin-left: 8px;
+    }
   </style>
 </head>
 <body onload="init()">
@@ -165,18 +139,16 @@
     <button id="setupBtn" onclick="showSetup()">Boxen verwalten</button>
     <div id="deviceList">Lade...</div>
   </div>
-  <div class="token-settings">
-    <label for="shutdownTokenInput">Shutdown-Token</label>
-    <input id="shutdownTokenInput" type="text" autocomplete="off" placeholder="Token eintragen" />
-    <div id="shutdownTokenStatus" class="token-status"></div>
-  </div>
   <button id="shutdown" onclick="shutdown()">Herunterfahren</button>
 </div>
 <div id="content"><p>Willkommen im Märchen-Manager</p></div>
 <script>
 let knownBoxes = {};
 let connectedBoxes = [];
-let transferQueue = {};
+let transferPending = {};
+let transferCompleted = {};
+let transferCancelled = false;
+let transferStatusLines = [];
 let transferring = false;
 let statusArea;
 let boxOrder = [];
@@ -208,9 +180,6 @@ letterOptions.push(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split(""));
 let currentWordTrigger = 0;
 let separateWordTriggers = false;
 let separateBoxTriggers = false;
-const SHUTDOWN_TOKEN_KEY = "setupShutdownToken";
-let shutdownTokenInput;
-let shutdownTokenStatus;
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -249,62 +218,7 @@ function scheduleNextDevicesPoll(delay = devicesPollIntervalMs) {
 }
 
 function init() {
-  initShutdownTokenHandling();
   fetchDevices();
-}
-
-function initShutdownTokenHandling() {
-  shutdownTokenInput = document.getElementById("shutdownTokenInput");
-  shutdownTokenStatus = document.getElementById("shutdownTokenStatus");
-  if (!shutdownTokenInput) {
-    return;
-  }
-
-  const storedValue = localStorage.getItem(SHUTDOWN_TOKEN_KEY) || "";
-  shutdownTokenInput.value = storedValue;
-  updateShutdownTokenStatus(storedValue);
-
-  shutdownTokenInput.addEventListener("change", persistShutdownToken);
-  shutdownTokenInput.addEventListener("blur", persistShutdownToken);
-  shutdownTokenInput.addEventListener("input", () => {
-    updateShutdownTokenStatus(shutdownTokenInput.value);
-  });
-}
-
-function persistShutdownToken() {
-  if (!shutdownTokenInput) {
-    return;
-  }
-
-  const trimmedValue = shutdownTokenInput.value.trim();
-  if (trimmedValue) {
-    localStorage.setItem(SHUTDOWN_TOKEN_KEY, trimmedValue);
-    shutdownTokenInput.value = trimmedValue;
-  } else {
-    localStorage.removeItem(SHUTDOWN_TOKEN_KEY);
-  }
-  updateShutdownTokenStatus(trimmedValue);
-}
-
-function getShutdownToken() {
-  const value = localStorage.getItem(SHUTDOWN_TOKEN_KEY) || "";
-  return value.trim();
-}
-
-function updateShutdownTokenStatus(currentValue) {
-  if (!shutdownTokenStatus) {
-    return;
-  }
-  const normalizedValue = typeof currentValue === "string" ? currentValue.trim() : getShutdownToken();
-  if (normalizedValue) {
-    shutdownTokenStatus.textContent = "Token gespeichert.";
-    shutdownTokenStatus.classList.remove("missing");
-    shutdownTokenStatus.classList.add("saved");
-  } else {
-    shutdownTokenStatus.textContent = "Kein Token gespeichert.";
-    shutdownTokenStatus.classList.remove("saved");
-    shutdownTokenStatus.classList.add("missing");
-  }
 }
 
 function normalizeBox(box) {
@@ -474,32 +388,16 @@ async function shutdown() {
     return;
   }
 
-  const token = getShutdownToken();
-  if (!token) {
-    updateShutdownTokenStatus("");
-    const proceedWithoutToken = window.confirm(
-      "Es ist kein Shutdown-Token hinterlegt. Für entfernte Zugriffe ist das Token zwingend erforderlich. " +
-      "Für lokale Tests (direkter Zugriff auf das Gerät) kann ohne Token fortgefahren werden. Möchten Sie trotzdem ohne Token fortfahren?"
-    );
-    if (!proceedWithoutToken) {
-      if (shutdownTokenInput) {
-        shutdownTokenInput.focus();
-      }
-      return;
-    }
-  }
-
   const shutdownButton = document.getElementById("shutdown");
+  if (!shutdownButton) {
+    return;
+  }
   const originalLabel = shutdownButton.textContent;
   shutdownButton.disabled = true;
   shutdownButton.textContent = "Wird heruntergefahren...";
 
   try {
-    const fetchOptions = { method: "POST" };
-    if (token) {
-      fetchOptions.headers = { "X-Setup-Token": token };
-    }
-    const response = await fetch("/shutdown", fetchOptions);
+    const response = await fetch("/shutdown", { method: "POST" });
     if (!response.ok) {
       alert("Fehler beim Abschalten: " + response.statusText);
       return;
@@ -572,7 +470,8 @@ function showSetup() {
     const box = normalizeBox(knownBoxes[hostname] || {});
     const escapedHostname = escapeHtml(hostname);
     const hostnameArgument = escapeJsString(hostname);
-    html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}</h3><div class="weekday-row">`;
+    const transferMark = transferCompleted[hostname] ? '<span class="transfer-badge">✓ übertragen</span>' : '';
+    html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}${transferMark}</h3><div class="weekday-row">`;
     for (let i = 0; i < days.length; i++) {
       const letters = box.letters?.[days[i]] || [];
       const colors = box.colors?.[days[i]] || [];
@@ -652,6 +551,8 @@ function showSetup() {
 
   document.getElementById("content").innerHTML = html;
   statusArea = document.getElementById("statusArea");
+  renderTransferStatus();
+  updateTransferButton();
 }
 
 function handleKeydown(event, day, word, maxLength, inputElement, triggerIndex = 0, applyAllTriggers = false) {
@@ -870,16 +771,45 @@ function removeBox(hostname) {
   });
 }
 
+function updateTransferButton() {
+  const transferBtn = document.getElementById("transferBtn");
+  if (!transferBtn) {
+    return;
+  }
+  if (transferring) {
+    const remaining = Object.keys(transferPending).length;
+    transferBtn.innerText = `Abbrechen (${remaining} offen)`;
+  } else {
+    transferBtn.innerText = "✓ Übertragen";
+  }
+}
+
+function appendTransferStatus(message) {
+  transferStatusLines.push(message);
+  if (transferStatusLines.length > 20) {
+    transferStatusLines.shift();
+  }
+  renderTransferStatus();
+}
+
+function renderTransferStatus() {
+  if (!statusArea || transferStatusLines.length === 0) {
+    return;
+  }
+  statusArea.innerHTML = transferStatusLines
+    .map(message => `<div class="statusEntry">${escapeHtml(message)}</div>`)
+    .join("");
+}
+
+function isTransferSuccess(statusText) {
+  return typeof statusText === "string" && (
+    statusText.includes("Übertragen") ||
+    statusText.includes("Bereits aktuell")
+  );
+}
+
 async function transferBox(hostname) {
   const headers = { "Content-Type": "application/json" };
-
-  transferQueue[hostname] = true;
-  const transferBtn = document.getElementById("transferBtn");
-  if (!transferring) {
-    transferring = true;
-    transferBtn.disabled = true;
-    transferBtn.innerText = "Übertrage...";
-  }
 
   let statusText = "❌ Unbekannter Fehler";
 
@@ -899,24 +829,67 @@ async function transferBox(hostname) {
   } catch (error) {
     console.error("Fehler beim Übertragen:", error);
     statusText = "❌ Netzwerkfehler";
-  } finally {
-    delete transferQueue[hostname];
-    if (Object.keys(transferQueue).length === 0) {
-      transferring = false;
-      transferBtn.disabled = false;
-      transferBtn.innerText = "✅ Übertragen";
-    }
-    statusArea.innerHTML += `<div class="statusEntry">${escapeHtml(hostname)}: ${statusText}</div>`;
-    setTimeout(() => {
-      if (statusArea.firstChild) {
-        statusArea.removeChild(statusArea.firstChild);
+  }
+
+  appendTransferStatus(`${hostname}: ${statusText}`);
+  return statusText;
+}
+
+async function runTransferLoop() {
+  while (transferring && !transferCancelled && Object.keys(transferPending).length > 0) {
+    await fetchDevices();
+    const connectedHostnames = new Set(connectedBoxes.map(box => box.hostname));
+
+    for (const hostname of Object.keys(transferPending)) {
+      if (transferCancelled) {
+        break;
       }
-    }, 3000);
+      if (!connectedHostnames.has(hostname)) {
+        continue;
+      }
+
+      const statusText = await transferBox(hostname);
+      if (isTransferSuccess(statusText)) {
+        delete transferPending[hostname];
+        transferCompleted[hostname] = true;
+        showSetup();
+      }
+      updateTransferButton();
+    }
+
+    if (Object.keys(transferPending).length > 0 && !transferCancelled) {
+      appendTransferStatus(`Warte auf ${Object.keys(transferPending).length} noch nicht verbundene Box(en)...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
+  const wasCancelled = transferCancelled;
+  transferring = false;
+  transferCancelled = false;
+  updateTransferButton();
+  if (wasCancelled) {
+    appendTransferStatus("Übertragung abgebrochen.");
+  } else {
+    appendTransferStatus("Übertragung abgeschlossen.");
   }
 }
 
 function transferAll() {
-  boxOrder.forEach(transferBox);
+  if (transferring) {
+    transferCancelled = true;
+    return;
+  }
+
+  transferPending = {};
+  transferCompleted = {};
+  boxOrder.forEach(hostname => {
+    transferPending[hostname] = true;
+  });
+  transferStatusLines = [];
+  transferring = true;
+  transferCancelled = false;
+  showSetup();
+  runTransferLoop();
 }
 
 async function reloadAll() {

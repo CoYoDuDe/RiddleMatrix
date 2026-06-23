@@ -6,10 +6,10 @@ Der USB-Stick bleibt als Backup erhalten. Die Windows-App schreibt nichts auf de
 
 ## Funktionen
 
-- AP-SSID, AP-Passwort, Shutdown-Token, Manager-Port und Box-Subnetz lokal speichern
+- AP-SSID, AP-Passwort, Manager-Port und Box-Subnetz lokal speichern
 - vor dem AP-Start fragen, ob ein aktuell verbundenes WLAN getrennt werden soll
-- Windows-AP per `netsh wlan hostednetwork` starten, wenn der Treiber das noch kann
-- Fallback auf Windows Mobile Hotspot per Windows-API
+- Windows Mobile Hotspot per Windows-API starten, damit Windows DHCP/NAT fuer die Boxen bereitstellt
+- Fallback auf `netsh wlan hostednetwork`, wenn der Treiber das noch kann
 - bei blockiertem Hotspot-Fallback die Windows-Hotspot-Einstellungen oeffnen
 - den originalen Flask-Webserver aus `USBStick-Setup/files/usr/local/bin/webserver.py` starten
 - die originale USB-Stick-Weboberflaeche aus `USBStick-Setup/files/usr/local/etc/index.html` verwenden
@@ -49,8 +49,8 @@ Die Windows-App nutzt lokale Daten unter `%AppData%\RiddleMatrixWindowsManager`:
 
 ## Subnetz
 
-Das Standard-Subnetz ist `192.168.137`. Das passt zu Windows-Mobile-Hotspot/Internetfreigabe. Wenn dein Adapter ein anderes Netz nutzt, kann das Feld `Box-Subnetz` angepasst werden, zum Beispiel auf `192.168.10`.
+Das Standard-Subnetz ist `192.168.137`. Das passt normalerweise zu Windows-Mobile-Hotspot/Internetfreigabe. Der Mobile Hotspot stellt DHCP und NAT bereit, damit die Boxen IP-Adressen bekommen. Wenn Windows auf deinem Notebook ein anderes Hotspot-Netz nutzt, kann das Feld `Box-Subnetz` angepasst werden, zum Beispiel auf `192.168.10`.
 
 ## Hinweis zu Windows 11
 
-Einige WLAN-Treiber unterstuetzen `netsh wlan hostednetwork` nicht mehr. Das ist auf aktuellen Windows-10/11-Geraeten normal. Die App versucht dann automatisch den Windows-Mobile-Hotspot per Windows-API zu starten. Wenn Windows auch das blockiert, oeffnet die App die Hotspot-Einstellungen und startet den Manager trotzdem.
+Einige WLAN-Treiber unterstuetzen `netsh wlan hostednetwork` nicht mehr. Das ist auf aktuellen Windows-10/11-Geraeten normal. Die App nutzt deshalb zuerst den Windows-Mobile-Hotspot per Windows-API. Wenn Windows das blockiert, oeffnet die App die Hotspot-Einstellungen; aktiviere den Hotspot dort manuell und starte danach den Manager.

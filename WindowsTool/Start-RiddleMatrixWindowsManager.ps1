@@ -22,7 +22,6 @@ function Get-DefaultSettings {
     [ordered]@{
         Ssid = 'RiddleMatrix-Hotspot'
         Password = 'BittePasswortAnpassen123!'
-        ShutdownToken = 'BitteTokenAnpassen123!'
         ManagerPort = 8080
         BoxSubnet = '192.168.137'
         ServerPid = 0
@@ -222,6 +221,32 @@ function Test-HostedNetworkSupport {
     return $true
 }
 
+function Confirm-WifiDisconnectForAp {
+    $connectedWifi = Get-ConnectedWifiName
+    if (-not $connectedWifi) {
+        return
+    }
+
+    $answer = [System.Windows.MessageBox]::Show(
+        "Das Notebook ist aktuell mit dem WLAN '$connectedWifi' verbunden.`n`nJa = WLAN trennen und AP starten.`nNein = verbunden bleiben und Windows Mobile Hotspot versuchen.`nAbbrechen = nichts starten.",
+        'WLAN-Verbindung gefunden',
+        'YesNoCancel',
+        'Question'
+    )
+
+    if ($answer -eq [System.Windows.MessageBoxResult]::Cancel) {
+        throw 'AP-Start abgebrochen.'
+    }
+    if ($answer -ne [System.Windows.MessageBoxResult]::Yes) {
+        return
+    }
+
+    $disconnect = Invoke-Netsh -Arguments @('wlan', 'disconnect')
+    if ($disconnect.ExitCode -ne 0) {
+        throw "WLAN konnte nicht getrennt werden.`n$($disconnect.Output)"
+    }
+}
+
 function Start-MobileHotspot {
     param(
         [Parameter(Mandatory = $true)]
@@ -266,7 +291,6 @@ function Validate-Settings {
     param(
         [string]$Ssid,
         [string]$Password,
-        [string]$ShutdownToken,
         [int]$ManagerPort,
         [string]$BoxSubnet
     )
@@ -279,9 +303,6 @@ function Validate-Settings {
     }
     if ([string]::IsNullOrWhiteSpace($Password) -or $Password.Length -lt 8 -or $Password.Length -gt 63) {
         throw 'WLAN-Passwort muss zwischen 8 und 63 Zeichen lang sein.'
-    }
-    if ([string]::IsNullOrWhiteSpace($ShutdownToken)) {
-        throw 'Shutdown-Token darf nicht leer sein.'
     }
     if ($ManagerPort -lt 1 -or $ManagerPort -gt 65535) {
         throw 'Manager-Port muss zwischen 1 und 65535 liegen.'
@@ -299,26 +320,14 @@ function Start-WindowsAccessPoint {
         [string]$Password
     )
 
-    if (-not (Test-HostedNetworkSupport)) {
+    Confirm-WifiDisconnectForAp
+
+    try {
         return Start-MobileHotspot -Ssid $Ssid -Password $Password
     }
-
-    $connectedWifi = Get-ConnectedWifiName
-    if ($connectedWifi) {
-        $answer = [System.Windows.MessageBox]::Show(
-            "Das Notebook ist aktuell mit dem WLAN '$connectedWifi' verbunden.`n`nSoll diese Verbindung getrennt werden, damit der RiddleMatrix-AP gestartet werden kann?",
-            'WLAN trennen?',
-            'YesNo',
-            'Question'
-        )
-
-        if ($answer -ne [System.Windows.MessageBoxResult]::Yes) {
-            throw 'AP-Start abgebrochen, weil das verbundene WLAN nicht getrennt wurde.'
-        }
-
-        $disconnect = Invoke-Netsh -Arguments @('wlan', 'disconnect')
-        if ($disconnect.ExitCode -ne 0) {
-            throw "WLAN konnte nicht getrennt werden.`n$($disconnect.Output)"
+    catch {
+        if (-not (Test-HostedNetworkSupport)) {
+            throw
         }
     }
 
@@ -385,9 +394,9 @@ function Start-ManagerServer {
     $env:RIDDLEMATRIX_VENDOR_DIR = $vendorDir
     $env:RIDDLEMATRIX_SCAN_SUBNET = $Settings.BoxSubnet
     $env:RIDDLEMATRIX_ENABLE_ARP_SCAN = '1'
+    $env:RIDDLEMATRIX_HIDE_SHUTDOWN = '1'
     $env:RIDDLEMATRIX_SERVER_HOST = '127.0.0.1'
     $env:RIDDLEMATRIX_SERVER_PORT = [string]$Settings.ManagerPort
-    $env:SHUTDOWN_TOKEN = $Settings.ShutdownToken
     $env:SHUTDOWN_COMMAND = ''
 
     $process = Start-Process -FilePath $pythonExe -ArgumentList @(
@@ -456,16 +465,13 @@ function Stop-ManagerServer {
                 <PasswordBox Grid.Row="1" Grid.Column="1" Name="PasswordBox" Margin="0,0,10,12" Padding="10,8"/>
                 <Button Grid.Row="1" Grid.Column="2" Name="ShowPasswordButton" Margin="0,0,0,12" Padding="10,8" Content="Anzeigen"/>
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="Shutdown-Token" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Name="TokenBox" Margin="0,0,0,12" Padding="10,8"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Manager-Port" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Name="PortBox" Margin="0,0,0,12" Padding="10,8"/>
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="Manager-Port" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Name="PortBox" Margin="0,0,0,12" Padding="10,8"/>
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Box-Subnetz" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Name="SubnetBox" Margin="0,0,0,14" Padding="10,8"/>
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="Box-Subnetz" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Name="SubnetBox" Margin="0,0,0,14" Padding="10,8"/>
-
-                <StackPanel Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,14">
+                <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,14">
                     <Button Name="StartAllButton" Content="AP + Manager starten" Padding="14,10" Background="#047857" Foreground="White" Margin="0,0,10,0"/>
                     <Button Name="StartManagerButton" Content="Nur Manager starten" Padding="14,10" Margin="0,0,10,0"/>
                     <Button Name="StopAllButton" Content="Stoppen" Padding="14,10" Margin="0,0,10,0"/>
@@ -491,7 +497,6 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
 
 $ssidBox = $window.FindName('SsidBox')
 $passwordBox = $window.FindName('PasswordBox')
-$tokenBox = $window.FindName('TokenBox')
 $portBox = $window.FindName('PortBox')
 $subnetBox = $window.FindName('SubnetBox')
 $statusBlock = $window.FindName('StatusBlock')
@@ -507,7 +512,6 @@ $savedSettings = Load-Settings
 
 $ssidBox.Text = [string]$savedSettings.Ssid
 $passwordBox.Password = [string]$savedSettings.Password
-$tokenBox.Text = [string]$savedSettings.ShutdownToken
 $portBox.Text = [string]$savedSettings.ManagerPort
 $subnetBox.Text = [string]$savedSettings.BoxSubnet
 
@@ -522,7 +526,6 @@ function Get-CurrentSettingsObject {
     [pscustomobject]@{
         Ssid = $ssidBox.Text.Trim()
         Password = $passwordBox.Password
-        ShutdownToken = $tokenBox.Text.Trim()
         ManagerPort = $port
         BoxSubnet = $subnetBox.Text.Trim()
         ServerPid = [int]$savedSettings.ServerPid
@@ -531,7 +534,7 @@ function Get-CurrentSettingsObject {
 
 function Save-CurrentSettings {
     $settings = Get-CurrentSettingsObject
-    Validate-Settings -Ssid $settings.Ssid -Password $settings.Password -ShutdownToken $settings.ShutdownToken -ManagerPort $settings.ManagerPort -BoxSubnet $settings.BoxSubnet
+    Validate-Settings -Ssid $settings.Ssid -Password $settings.Password -ManagerPort $settings.ManagerPort -BoxSubnet $settings.BoxSubnet
     Save-Settings -Settings $settings
     $script:savedSettings = $settings
     $settings
