@@ -2,7 +2,7 @@
 
 Dieses Tool ersetzt im Alltag den gebooteten USB-Stick: Es startet auf dem Windows-Notebook den Hotspot/AP und danach dieselbe lokale Boxenverwaltung, die auch der USB-Stick nutzt.
 
-Der USB-Stick bleibt als Backup erhalten. Die Windows-App schreibt nichts auf den Stick.
+Der USB-Stick bleibt als Backup erhalten. Die Windows-App schreibt nur dann auf den Stick, wenn `USB-Stick WLAN speichern` genutzt wird.
 
 ## Funktionen
 
@@ -39,6 +39,8 @@ Beim ersten Start legt das Tool automatisch eine lokale Python-Umgebung unter `%
 5. Die App startet die originale Manager-Oberflaeche im Browser.
 
 Wenn dein WLAN-Treiber den AP-Start nicht unterstuetzt, oeffne `Windows-Hotspot Einstellungen`, aktiviere den Mobile Hotspot dort und nutze danach `Nur Manager starten`.
+
+`Nur Manager starten` oeffnet den Manager automatisch im Browser. Ein separater Oeffnen-Button ist deshalb nicht noetig.
 
 ## Daten
 

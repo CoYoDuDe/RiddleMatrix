@@ -490,9 +490,11 @@ function Stop-ManagerServer {
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="RiddleMatrix Windows Manager"
         Height="560"
-        Width="700"
+        Width="820"
+        MinWidth="760"
+        MinHeight="560"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="CanMinimize"
+        ResizeMode="CanResize"
         Background="#F3F4F6">
     <Grid Margin="18">
         <Grid.RowDefinitions>
@@ -541,8 +543,7 @@ function Stop-ManagerServer {
                 <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,14">
                     <Button Name="StartAllButton" Content="AP + Manager starten" Padding="14,10" Background="#047857" Foreground="White" Margin="0,0,10,0"/>
                     <Button Name="StartManagerButton" Content="Nur Manager starten" Padding="14,10" Margin="0,0,10,0"/>
-                    <Button Name="StopAllButton" Content="Stoppen" Padding="14,10" Margin="0,0,10,0"/>
-                    <Button Name="OpenManagerButton" Content="Manager oeffnen" Padding="14,10"/>
+                    <Button Name="StopAllButton" Content="Stoppen" Padding="14,10"/>
                 </StackPanel>
 
                 <Border Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Background="#F9FAFB" CornerRadius="8" Padding="12">
@@ -572,7 +573,6 @@ $showPasswordButton = $window.FindName('ShowPasswordButton')
 $startAllButton = $window.FindName('StartAllButton')
 $startManagerButton = $window.FindName('StartManagerButton')
 $stopAllButton = $window.FindName('StopAllButton')
-$openManagerButton = $window.FindName('OpenManagerButton')
 $saveButton = $window.FindName('SaveButton')
 $syncUsbButton = $window.FindName('SyncUsbButton')
 $openHotspotSettingsButton = $window.FindName('OpenHotspotSettingsButton')
@@ -737,15 +737,6 @@ $stopAllButton.Add_Click({
     catch {
         [System.Windows.MessageBox]::Show($_.Exception.Message, 'Stopp fehlgeschlagen', 'OK', 'Error') | Out-Null
         Update-Status "Fehler: $($_.Exception.Message)"
-    }
-})
-
-$openManagerButton.Add_Click({
-    try {
-        Open-ManagerUrl
-    }
-    catch {
-        [System.Windows.MessageBox]::Show($_.Exception.Message, 'Manager oeffnen fehlgeschlagen', 'OK', 'Warning') | Out-Null
     }
 })
 
