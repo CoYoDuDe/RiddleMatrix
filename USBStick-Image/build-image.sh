@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 OUTPUT_IMAGE="$REPO_ROOT/RiddleMatrix-usb.img"
-IMAGE_SIZE_MIB="${IMAGE_SIZE_MIB:-3072}"
+IMAGE_SIZE_MIB="${IMAGE_SIZE_MIB:-8192}"
 DEBIAN_SUITE="${DEBIAN_SUITE:-bookworm}"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-https://deb.debian.org/debian}"
 COMPRESS=1
@@ -20,7 +20,7 @@ Usage: sudo USBStick-Image/build-image.sh [options]
 
 Options:
   -o, --output <file>       Output raw image path (default: ./RiddleMatrix-usb.img)
-      --size-mib <mib>      Initial image size in MiB (default: 3072)
+      --size-mib <mib>      Initial image size in MiB (default: 8192)
       --suite <name>        Debian suite (default: bookworm)
       --mirror <url>        Debian mirror URL
       --no-compress         Do not create .xz next to the raw image

@@ -26,13 +26,13 @@ Image bauen:
 sudo ./USBStick-Image/build-image.sh --output ./RiddleMatrix-usb.img
 ```
 
-Optional kleiner/groesser bauen:
+Optional groesser bauen:
 
 ```bash
-sudo IMAGE_SIZE_MIB=4096 ./USBStick-Image/build-image.sh --output ./RiddleMatrix-usb.img
+sudo IMAGE_SIZE_MIB=12288 ./USBStick-Image/build-image.sh --output ./RiddleMatrix-usb.img
 ```
 
-Der Builder erzeugt zusaetzlich `RiddleMatrix-usb.img.xz`. Diese komprimierte Datei ist fuer Ablage/Download gedacht. Zum Schreiben mit Win32DiskImager muss sie vorher entpackt werden.
+Der Standard ist 8192 MiB, weil Debian, Firefox, X11 und WLAN-Firmware sonst nicht zuverlaessig in das Image passen. Der Builder erzeugt zusaetzlich `RiddleMatrix-usb.img.xz`. Diese komprimierte Datei ist fuer Ablage/Download gedacht. Zum Schreiben mit Win32DiskImager muss sie vorher entpackt werden.
 
 ## Auf USB-Stick schreiben
 
