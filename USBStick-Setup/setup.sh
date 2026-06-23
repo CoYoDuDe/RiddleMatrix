@@ -214,6 +214,7 @@ ensure_directories() {
     "$TARGET_ROOT/var/lib/misc"
     "$TARGET_ROOT/home/kioskuser"
     "$TARGET_ROOT/usr/local/bin"
+    "$TARGET_ROOT/usr/local/sbin"
     "$TARGET_ROOT/usr/local/libexec"
     "$TARGET_ROOT/etc/systemd/system"
     "$TARGET_ROOT/etc/dnsmasq.d"
@@ -261,6 +262,7 @@ set_permissions() {
   local -a exec_paths=(
     "usr/local/bin/bootlocal.sh"
     "usr/local/bin/webserver.py"
+    "usr/local/sbin/riddlematrix-grow-root.sh"
     "home/kioskuser/start_firefox.sh"
     "etc/hostapd/ifupdown.sh"
     "root/install_public_ap.sh"
@@ -340,7 +342,7 @@ enable_systemd_units() {
   [[ "$TARGET_ROOT" = "/" ]] || { warn "Systemd enable skipped (target root is $TARGET_ROOT)"; return; }
   command -v systemctl >/dev/null 2>&1 || { warn "systemctl not available; skipping service enable"; return; }
 
-  local -a units=(bootlocal.service webserver.service kiosk-startx.service)
+  local -a units=(bootlocal.service webserver.service kiosk-startx.service riddlematrix-grow-root.service)
   run_cmd systemctl daemon-reload
   log "Systemd-Konfiguration neu geladen; kiosk-startx.service läuft nun als Type=simple mit automatischem Neustart bei Fehlern."
   for unit in "${units[@]}"; do

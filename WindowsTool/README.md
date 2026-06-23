@@ -7,6 +7,7 @@ Der USB-Stick bleibt als Backup erhalten. Die Windows-App schreibt nichts auf de
 ## Funktionen
 
 - AP-SSID, AP-Passwort, Manager-Port und Box-Subnetz lokal speichern
+- AP-SSID und AP-Passwort mit `USB-Stick WLAN speichern` auf die Windows-Partition des bootfaehigen RiddleMatrix-Sticks schreiben
 - vor dem AP-Start fragen, ob ein aktuell verbundenes WLAN getrennt werden soll
 - Windows Mobile Hotspot per Windows-API starten, damit Windows DHCP/NAT fuer die Boxen bereitstellt
 - Fallback auf `netsh wlan hostednetwork`, wenn der Treiber das noch kann
@@ -46,6 +47,8 @@ Die Windows-App nutzt lokale Daten unter `%AppData%\RiddleMatrixWindowsManager`:
 - `settings.json` fuer Windows-Tool-Einstellungen
 - `boxen_config.json` fuer die gleiche Box-Konfiguration, die der USB-Stick unter `/mnt/persist/boxen_config/boxen_config.json` nutzt
 - `venv` fuer die lokale Python-Umgebung
+
+Wenn die App vom fertigen RiddleMatrix-USB-Stick gestartet wird, kann sie die Linux-Hotspot-Konfiguration auf der FAT32-Partition unter `config\public_ap.env` aktualisieren. Diese Datei wird beim Booten des Linux-Sticks als `/etc/usbstick/public_ap.env` verwendet.
 
 ## Subnetz
 

@@ -129,6 +129,8 @@ ensure_system_packages() {
     xserver-xorg
     xinit
     x11-xserver-utils
+    cloud-guest-utils
+    parted
     firefox-esr
     firmware-linux-nonfree
     firmware-iwlwifi

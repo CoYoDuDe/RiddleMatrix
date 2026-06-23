@@ -64,6 +64,73 @@ function Save-Settings {
     $Settings | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding UTF8
 }
 
+function ConvertTo-ShellSingleQuotedValue {
+    param([string]$Value)
+    $quote = [string][char]39
+    $replacement = $quote + '"' + $quote + '"' + $quote
+    $quote + $Value.Replace($quote, $replacement) + $quote
+}
+
+function Get-RiddleMatrixUsbDrives {
+    $drives = @()
+
+    try {
+        $removable = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=2" -ErrorAction Stop
+        foreach ($drive in $removable) {
+            if (-not [string]::IsNullOrWhiteSpace($drive.DeviceID)) {
+                $drives += (($drive.DeviceID.TrimEnd('\') + '\'))
+            }
+        }
+    }
+    catch {
+    }
+
+    $currentRoot = [System.IO.Path]::GetPathRoot($toolRoot)
+    if (-not [string]::IsNullOrWhiteSpace($currentRoot)) {
+        $drives += $currentRoot
+    }
+
+    $drives |
+        Sort-Object -Unique |
+        Where-Object {
+            (Test-Path -LiteralPath (Join-Path $_ 'RIDDLEMATRIX_USB.txt')) -or
+            (Test-Path -LiteralPath (Join-Path $_ 'config\public_ap.env')) -or
+            (Test-Path -LiteralPath (Join-Path $_ 'WindowsTool\Start-RiddleMatrixWindowsManager.ps1'))
+        }
+}
+
+function Write-HotspotConfigToUsb {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Settings
+    )
+
+    $targets = @(Get-RiddleMatrixUsbDrives)
+    if ($targets.Count -eq 0) {
+        throw 'Kein RiddleMatrix-USB-Stick gefunden. Bitte den Stick unter Windows einstecken und erneut versuchen.'
+    }
+
+    $written = @()
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    foreach ($driveRoot in $targets) {
+        $configDir = Join-Path $driveRoot 'config'
+        $configFile = Join-Path $configDir 'public_ap.env'
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+
+        $content = @(
+            '# RiddleMatrix Hotspot-Konfiguration fuer den Linux-Boot vom USB-Stick'
+            '# Diese Datei wird vom Windows Manager geschrieben.'
+            ('SSID=' + (ConvertTo-ShellSingleQuotedValue -Value $Settings.Ssid))
+            ('WPA_PASSPHRASE=' + (ConvertTo-ShellSingleQuotedValue -Value $Settings.Password))
+            ''
+        ) -join "`n"
+        [System.IO.File]::WriteAllText($configFile, $content, $encoding)
+        $written += $configFile
+    }
+
+    $written
+}
+
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -486,6 +553,7 @@ function Stop-ManagerServer {
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Name="SaveButton" Content="Einstellungen speichern" Padding="14,10" Margin="0,0,12,0"/>
+            <Button Name="SyncUsbButton" Content="USB-Stick WLAN speichern" Padding="14,10" Margin="0,0,12,0"/>
             <Button Name="OpenHotspotSettingsButton" Content="Windows-Hotspot Einstellungen" Padding="14,10"/>
         </StackPanel>
     </Grid>
@@ -506,6 +574,7 @@ $startManagerButton = $window.FindName('StartManagerButton')
 $stopAllButton = $window.FindName('StopAllButton')
 $openManagerButton = $window.FindName('OpenManagerButton')
 $saveButton = $window.FindName('SaveButton')
+$syncUsbButton = $window.FindName('SyncUsbButton')
 $openHotspotSettingsButton = $window.FindName('OpenHotspotSettingsButton')
 
 $savedSettings = Load-Settings
@@ -562,6 +631,18 @@ $saveButton.Add_Click({
     }
     catch {
         [System.Windows.MessageBox]::Show($_.Exception.Message, 'Speichern fehlgeschlagen', 'OK', 'Warning') | Out-Null
+        Update-Status "Fehler: $($_.Exception.Message)"
+    }
+})
+
+$syncUsbButton.Add_Click({
+    try {
+        $settings = Save-CurrentSettings
+        $written = Write-HotspotConfigToUsb -Settings $settings
+        Update-Status "Hotspot-Konfiguration auf USB-Stick geschrieben:`n$($written -join "`n")"
+    }
+    catch {
+        [System.Windows.MessageBox]::Show($_.Exception.Message, 'USB-Synchronisierung fehlgeschlagen', 'OK', 'Warning') | Out-Null
         Update-Status "Fehler: $($_.Exception.Message)"
     }
 })

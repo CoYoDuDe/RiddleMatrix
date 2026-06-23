@@ -141,6 +141,12 @@ existieren, weist das Skript darauf hin. Sobald der Dienst installiert ist, kann
 problemlos starten und die Lease-Datei exklusiv schreiben, während andere Benutzer:innen nur noch lesenden Zugriff über die
 Gruppenmitgliedschaft erhalten.
 
+## Root-Partition beim ersten Boot erweitern
+
+Fertige Images koennen klein ausgeliefert werden. `riddlematrix-grow-root.service` startet beim ersten Linux-Boot und erweitert
+die Root-Partition auf den restlichen USB-Stick. Danach wird `/var/lib/riddlematrix-grow-root.done` angelegt, damit der Schritt
+nicht erneut ausgefuehrt wird.
+
 ## Legacy-Skripte
 
 Die vorherigen monolithischen Installationsskripte wurden in [`archive/legacy-root-scripts/`](archive/legacy-root-scripts)

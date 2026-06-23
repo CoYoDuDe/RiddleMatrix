@@ -167,6 +167,10 @@ Der Installer kopiert standardmäßig den Inhalt von `USBStick-Setup/files/` auf
 
 Legacy-Skripte wurden in [`USBStick-Setup/archive/legacy-root-scripts/`](USBStick-Setup/archive/legacy-root-scripts) abgelegt und stehen weiterhin als Referenz zur Verfügung.
 
+### Fertiges USB-Stick-Image bauen
+
+Ein fertiges Raw-Image fuer Win32DiskImager/Rufus/balenaEtcher kann mit dem Builder unter [`USBStick-Image`](USBStick-Image) erzeugt werden. Das Image enthaelt eine Windows-sichtbare FAT32-Partition mit dem Windows-Manager sowie ein bootfaehiges Linux-System fuer UEFI und Legacy-BIOS. Beim ersten Linux-Boot erweitert `riddlematrix-grow-root.service` die Root-Partition auf die volle Stickgroesse.
+
 ### Hotspot-Zugangsdaten für den USB-Stick-Installer
 
 - Die Vorlage [`USBStick-Setup/files/etc/usbstick/public_ap.env.example`](USBStick-Setup/files/etc/usbstick/public_ap.env.example) enthält gültige Platzhalterwerte (`RiddleMatrix-Hotspot`, `BittePasswortAnpassen123!`) für SSID und WPA-Passphrase.
