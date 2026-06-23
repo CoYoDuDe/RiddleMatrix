@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from flask import Flask, abort, jsonify, request, send_from_directory
 from bs4 import BeautifulSoup
+import argparse
 import math
 import os, json, subprocess, requests
 import tempfile
@@ -42,8 +43,14 @@ _ALLOWED_COLOR_MODES = {"fixed", "random_selected", "random_all"}
 MAX_HOSTNAME_LENGTH = 64
 
 app = Flask(__name__)
-LEASE_FILE = "/var/lib/misc/dnsmasq.leases"
-CONFIG_FILE = "/mnt/persist/boxen_config/boxen_config.json"
+LEASE_FILE = os.environ.get("RIDDLEMATRIX_LEASE_FILE", "/var/lib/misc/dnsmasq.leases")
+CONFIG_FILE = os.environ.get("RIDDLEMATRIX_CONFIG_FILE", "/mnt/persist/boxen_config/boxen_config.json")
+INDEX_FILE = os.environ.get("RIDDLEMATRIX_INDEX_FILE", "/usr/local/etc/index.html")
+VENDOR_DIR = os.environ.get("RIDDLEMATRIX_VENDOR_DIR", "/usr/local/etc/vendor")
+SCAN_SUBNET = os.environ.get("RIDDLEMATRIX_SCAN_SUBNET", "192.168.137")
+ENABLE_ARP_SCAN = os.environ.get("RIDDLEMATRIX_ENABLE_ARP_SCAN", "").strip().lower() in {"1", "true", "yes", "on"}
+SERVER_HOST = os.environ.get("RIDDLEMATRIX_SERVER_HOST", "0.0.0.0")
+SERVER_PORT = int(os.environ.get("RIDDLEMATRIX_SERVER_PORT", "8080"))
 SHUTDOWN_TOKEN_ENV_VAR = "SHUTDOWN_TOKEN"
 SHUTDOWN_TOKEN_HEADER = "X-Setup-Token"
 PUBLIC_AP_ENV_FILE = os.environ.get("PUBLIC_AP_ENV_FILE", "/etc/usbstick/public_ap.env")
@@ -848,9 +855,109 @@ def fetch_trigger_delays(ip):
     return normalized
 
 
+def _ping_host(ip: str) -> bool:
+    command = ["ping", "-n", "1", "-w", "1000", ip] if os.name == "nt" else ["ping", "-c", "1", "-W", "1", ip]
+    try:
+        return subprocess.call(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ) == 0
+    except (FileNotFoundError, OSError) as exc:
+        app.logger.warning(
+            "Ping-Kommando nicht verfuegbar (%s) - %s wird per HTTP probiert",
+            exc,
+            ip,
+        )
+        return True
+
+
+def _iter_arp_scan_ips():
+    ips = set()
+    try:
+        arp_output = subprocess.check_output(["arp", "-a"], text=True, stderr=subprocess.DEVNULL)
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        arp_output = ""
+
+    pattern = re.compile(rf"({re.escape(SCAN_SUBNET)}\.\d{{1,3}})")
+    for match in pattern.finditer(arp_output):
+        ip = sanitize_ipv4(match.group(1))
+        if ip != SAFE_IP_PLACEHOLDER:
+            ips.add(ip)
+
+    for host_part in range(2, 255):
+        ips.add(f"{SCAN_SUBNET}.{host_part}")
+    return sorted(ips, key=lambda value: tuple(int(part) for part in value.split(".")))
+
+
+def _inspect_candidate_device(ip: str, config: dict):
+    if not _ping_host(ip):
+        return None, config
+
+    try:
+        r = requests.get(
+            f"http://{ip}/",
+            timeout=1.5,
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        return None, config
+
+    _ensure_no_redirect(r, action="Geräte-Scan", host=ip)
+
+    if not r.ok:
+        return None, config
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    hostname_field = soup.find("input", {"name": "hostname"})
+    if hostname_field is None:
+        return None, config
+
+    hostname = get_hostname_from_web(ip)
+    if hostname == "Unbekannt":
+        return None, config
+
+    hostname = sanitize_hostname(hostname)
+    boxen = config.get("boxen", {})
+    identifier = _allocate_unique_hostname(hostname, config)
+
+    existing_box = boxen.get(identifier)
+    if isinstance(existing_box, dict) and existing_box.get("ip") != ip:
+        existing_box["ip"] = ip
+        save_config(config)
+
+    for existing_identifier, box in list(boxen.items()):
+        if (
+            isinstance(box, dict)
+            and box.get("ip") == ip
+            and existing_identifier != identifier
+        ):
+            box["ip"] = SAFE_IP_PLACEHOLDER
+            save_config(config)
+            break
+
+    if existing_box is None:
+        learn_box(ip, identifier)
+        config = load_config()
+
+    return {"ip": ip, "hostname": identifier}, config
+
+
+def get_connected_devices_by_scan():
+    devices = []
+    config = load_config()
+    for ip in _iter_arp_scan_ips():
+        device, config = _inspect_candidate_device(ip, config)
+        if device:
+            devices.append(device)
+    return devices
+
+
 def get_connected_devices():
     devices = []
     config = load_config()
+    if not os.path.exists(LEASE_FILE):
+        return get_connected_devices_by_scan() if ENABLE_ARP_SCAN else devices
     if os.path.exists(LEASE_FILE):
         with open(LEASE_FILE, "r") as f:
             for line in f:
@@ -1014,13 +1121,13 @@ def learn_box(ip, identifier):
 
 @app.route("/")
 def index():
-    with open("/usr/local/etc/index.html", "r") as f:
+    with open(INDEX_FILE, "r", encoding="utf-8") as f:
         return f.read()
 
 
 @app.route("/vendor/<path:filename>")
 def vendor_static(filename: str):
-    return send_from_directory("/usr/local/etc/vendor", filename)
+    return send_from_directory(VENDOR_DIR, filename)
 
 
 @app.route("/devices")
@@ -1500,4 +1607,8 @@ def shutdown():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default=SERVER_HOST)
+    parser.add_argument("--port", type=int, default=SERVER_PORT)
+    args = parser.parse_args()
+    app.run(host=args.host, port=args.port)
