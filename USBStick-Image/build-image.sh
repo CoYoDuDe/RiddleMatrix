@@ -9,6 +9,10 @@ IMAGE_SIZE_MIB="${IMAGE_SIZE_MIB:-3072}"
 DEBIAN_SUITE="${DEBIAN_SUITE:-bookworm}"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-https://deb.debian.org/debian}"
 COMPRESS=1
+work_dir=""
+loop_device=""
+root_mount=""
+fat_mount=""
 
 usage() {
   cat <<'USAGE'
@@ -175,26 +179,31 @@ main() {
   require_root
   require_commands
 
-  local work_dir loop_device root_mount fat_mount
   work_dir="$(mktemp -d)"
   root_mount="$work_dir/root"
   fat_mount="$work_dir/fat"
   mkdir -p "$root_mount" "$fat_mount"
 
-  cleanup() {
+cleanup() {
     set +e
-    umount_if_mounted "$root_mount/boot/efi"
-    umount_if_mounted "$root_mount/dev/pts"
-    umount_if_mounted "$root_mount/dev"
-    umount_if_mounted "$root_mount/proc"
-    umount_if_mounted "$root_mount/sys"
-    umount_if_mounted "$root_mount/riddlematrix"
-    umount_if_mounted "$root_mount"
-    umount_if_mounted "$fat_mount"
+    if [[ -n ${root_mount:-} ]]; then
+      umount_if_mounted "$root_mount/boot/efi"
+      umount_if_mounted "$root_mount/dev/pts"
+      umount_if_mounted "$root_mount/dev"
+      umount_if_mounted "$root_mount/proc"
+      umount_if_mounted "$root_mount/sys"
+      umount_if_mounted "$root_mount/riddlematrix"
+      umount_if_mounted "$root_mount"
+    fi
+    if [[ -n ${fat_mount:-} ]]; then
+      umount_if_mounted "$fat_mount"
+    fi
     if [[ -n ${loop_device:-} ]]; then
       losetup -d "$loop_device" 2>/dev/null || true
     fi
-    rm -rf "$work_dir"
+    if [[ -n ${work_dir:-} ]]; then
+      rm -rf "$work_dir"
+    fi
   }
   trap cleanup EXIT
 
@@ -239,7 +248,7 @@ main() {
   mount_chroot_filesystems "$root_mount"
   echo "grub-pc grub-pc/install_devices_empty boolean true" | chroot "$root_mount" debconf-set-selections
   chroot "$root_mount" apt-get update
-  chroot "$root_mount" apt-get install -y systemd-sysv linux-image-amd64 grub-pc grub-efi-amd64 dosfstools e2fsprogs sudo ca-certificates
+  chroot "$root_mount" apt-get install -y systemd-sysv linux-image-amd64 grub-common grub2-common grub-pc-bin grub-efi-amd64-bin dosfstools e2fsprogs sudo ca-certificates
 
   log "Installiere RiddleMatrix-Payload und Pakete."
   "$REPO_ROOT/USBStick-Setup/setup.sh" --target "$root_mount" --skip-systemd
