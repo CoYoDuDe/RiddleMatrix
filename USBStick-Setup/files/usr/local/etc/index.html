@@ -157,6 +157,9 @@ let devicesPollPromise = null;
 let devicesPollTimeoutId = null;
 const devicesPollIntervalMs = 1000;
 let localBrowserMode = false;
+let localScanInFlight = false;
+let localScanAbortController = null;
+let localScanSubnet = "192.168.137";
 const localStorageKey = "riddlematrix.localBrowserConfig.v1";
 const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 const dayNames = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -199,7 +202,8 @@ function loadLocalBrowserConfig() {
     }
     return {
       boxen: parsed.boxen && typeof parsed.boxen === "object" ? parsed.boxen : {},
-      boxOrder: Array.isArray(parsed.boxOrder) ? parsed.boxOrder : Object.keys(parsed.boxen || {})
+      boxOrder: Array.isArray(parsed.boxOrder) ? parsed.boxOrder : Object.keys(parsed.boxen || {}),
+      localScanSubnet: typeof parsed.localScanSubnet === "string" ? parsed.localScanSubnet : "192.168.137"
     };
   } catch (error) {
     console.warn("Lokale Browser-Konfiguration konnte nicht gelesen werden:", error);
@@ -211,13 +215,14 @@ function saveLocalBrowserConfig() {
   if (!localBrowserMode) {
     return;
   }
-  window.localStorage.setItem(localStorageKey, JSON.stringify({ boxen: knownBoxes, boxOrder }));
+  window.localStorage.setItem(localStorageKey, JSON.stringify({ boxen: knownBoxes, boxOrder, localScanSubnet }));
 }
 
 function enterLocalBrowserMode(reason) {
   if (!localBrowserMode) {
     localBrowserMode = true;
     const localConfig = loadLocalBrowserConfig();
+    localScanSubnet = validateSubnetPrefix(localConfig.localScanSubnet) || localScanSubnet;
     knownBoxes = {};
     Object.entries(localConfig.boxen).forEach(([hostname, box]) => {
       knownBoxes[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
@@ -255,6 +260,39 @@ function validateIpAddress(ip) {
     }
   }
   return value;
+}
+
+function validateSubnetPrefix(subnet) {
+  const value = String(subnet || "").trim();
+  const parts = value.split(".");
+  if (parts.length !== 3) {
+    return "";
+  }
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) {
+      return "";
+    }
+    const number = Number(part);
+    if (!Number.isInteger(number) || number < 0 || number > 255) {
+      return "";
+    }
+  }
+  return parts.map(part => String(Number(part))).join(".");
+}
+
+function fetchWithTimeout(url, options = {}, timeoutMs = 900) {
+  const controller = new AbortController();
+  const parentSignal = options.signal;
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      controller.abort();
+    } else {
+      parentSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+  }
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => window.clearTimeout(timeoutId));
 }
 
 function makeDefaultBox(ip) {
@@ -357,9 +395,13 @@ function extractLocalBoxStateFromHtml(html, ip) {
   return normalizeBox(box);
 }
 
-async function fetchLocalTriggerDelays(ip, box) {
+async function fetchLocalTriggerDelays(ip, box, signal = null) {
   try {
-    const response = await fetch(`http://${ip}/api/trigger-delays`, { method: "GET", mode: "cors", cache: "no-store" });
+    const response = await fetchWithTimeout(
+      `http://${ip}/api/trigger-delays`,
+      { method: "GET", mode: "cors", cache: "no-store", signal },
+      900
+    );
     if (!response.ok) {
       return box;
     }
@@ -396,24 +438,45 @@ function hostnameFromBoxHtml(html, fallbackIp) {
   return `Box-${fallbackIp.replace(/\./g, "-")}`;
 }
 
-async function learnLocalBoxFromIp() {
-  const input = document.getElementById("localBoxIp");
-  const ip = validateIpAddress(input ? input.value : "");
+function looksLikeRiddleMatrixBox(html) {
+  const text = String(html || "");
+  return text.includes("RiddleMatrix") ||
+    text.includes("/updateAllLetters") ||
+    text.includes("triggerLetter") ||
+    text.includes("letter_0_");
+}
+
+async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
+  ip = validateIpAddress(ip);
   if (!ip) {
-    alert("Bitte eine gueltige lokale IPv4-Adresse eintragen.");
-    return;
+    if (!silent) {
+      alert("Bitte eine gueltige lokale IPv4-Adresse eintragen.");
+    }
+    return null;
   }
   let hostname = `Box-${ip.replace(/\./g, "-")}`;
   let learnedBox = makeDefaultBox(ip);
   try {
-    const response = await fetch(`http://${ip}/`, { method: "GET", mode: "cors", cache: "no-store" });
+    const response = await fetchWithTimeout(
+      `http://${ip}/`,
+      { method: "GET", mode: "cors", cache: "no-store", signal },
+      900
+    );
     if (response.ok) {
       const html = await response.text();
+      if (silent && !looksLikeRiddleMatrixBox(html)) {
+        return null;
+      }
       hostname = hostnameFromBoxHtml(html, ip);
       learnedBox = extractLocalBoxStateFromHtml(html, ip);
-      learnedBox = await fetchLocalTriggerDelays(ip, learnedBox);
+      learnedBox = await fetchLocalTriggerDelays(ip, learnedBox, signal);
+    } else if (silent) {
+      return null;
     }
   } catch (error) {
+    if (silent) {
+      return null;
+    }
     console.warn("Box konnte nicht abgefragt werden, sie wird trotzdem lokal angelegt:", error);
   }
   let candidate = hostname;
@@ -427,8 +490,104 @@ async function learnLocalBoxFromIp() {
     boxOrder.push(candidate);
   }
   saveLocalBrowserConfig();
-  enterLocalBrowserMode(`Lokale Box gespeichert: ${candidate} (${ip})`);
-  showSetup();
+  if (!silent) {
+    enterLocalBrowserMode(`Lokale Box gespeichert: ${candidate} (${ip})`);
+    showSetup();
+  }
+  return { hostname: candidate, ip };
+}
+
+async function learnLocalBoxFromIp() {
+  const input = document.getElementById("localBoxIp");
+  await learnLocalBoxByIp(input ? input.value : "");
+}
+
+function updateLocalScanStatus(message) {
+  const target = document.getElementById("localScanStatus") || statusArea;
+  if (target) {
+    target.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
+  }
+}
+
+function stopLocalScan() {
+  if (localScanAbortController) {
+    localScanAbortController.abort();
+  }
+}
+
+async function scanLocalSubnet() {
+  if (localScanInFlight) {
+    stopLocalScan();
+    return;
+  }
+
+  const subnetInput = document.getElementById("localSubnetPrefix");
+  const subnet = validateSubnetPrefix(subnetInput ? subnetInput.value : localScanSubnet);
+  if (!subnet) {
+    alert("Bitte ein gueltiges Subnetz eintragen, z.B. 192.168.137");
+    return;
+  }
+
+  localScanSubnet = subnet;
+  saveLocalBrowserConfig();
+  localScanInFlight = true;
+  localScanAbortController = new AbortController();
+  const scanButton = document.getElementById("localScanBtn");
+  if (scanButton) {
+    scanButton.textContent = "Scan abbrechen";
+  }
+
+  let checked = 0;
+  let found = 0;
+  const ips = [];
+  for (let host = 2; host <= 254; host += 1) {
+    ips.push(`${subnet}.${host}`);
+  }
+  const concurrency = 18;
+  let cursor = 0;
+
+  updateLocalScanStatus(`Scanne ${subnet}.2-${subnet}.254 aus diesem Browser...`);
+
+  async function worker() {
+    while (cursor < ips.length && !localScanAbortController.signal.aborted) {
+      const ip = ips[cursor++];
+      const result = await learnLocalBoxByIp(ip, {
+        signal: localScanAbortController.signal,
+        silent: true
+      });
+      checked += 1;
+      if (result) {
+        found += 1;
+        renderDeviceList();
+        saveLocalBrowserConfig();
+      }
+      if (checked % 10 === 0 || result) {
+        updateLocalScanStatus(`Scan ${subnet}: ${checked}/${ips.length} geprueft, ${found} Box(en) gefunden.`);
+      }
+    }
+  }
+
+  try {
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  } finally {
+    const aborted = localScanAbortController.signal.aborted;
+    localScanInFlight = false;
+    localScanAbortController = null;
+    if (scanButton) {
+      scanButton.textContent = "Subnetz scannen";
+    }
+    connectedBoxes = boxOrder
+      .map(hostname => ({ hostname, ip: knownBoxes[hostname]?.ip }))
+      .filter(box => box.ip && box.ip !== "0.0.0.0");
+    saveLocalBrowserConfig();
+    renderDeviceList();
+    showSetup();
+    updateLocalScanStatus(
+      aborted
+        ? `Scan abgebrochen. ${found} Box(en) gefunden.`
+        : `Scan abgeschlossen. ${found} Box(en) gefunden.`
+    );
+  }
 }
 function escapeHtml(value) {
   return String(value ?? "")
@@ -700,8 +859,12 @@ function showSetup() {
   if (localBrowserMode) {
     html += '<div class="box-card"><h3>Webspace/Lokal-Modus</h3>';
     html += '<p>Diese Seite laeuft vom Webspace. Die Boxen bleiben in deinem lokalen WLAN; die Verwaltung passiert direkt aus diesem Browser und wird lokal im Browser gespeichert.</p>';
+    html += `<p>Subnetz: <input id="localSubnetPrefix" type="text" value="${escapeHtml(localScanSubnet)}" placeholder="z.B. 192.168.137"> `;
+    html += '<button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button></p>';
     html += '<p>Box-IP: <input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> ';
     html += '<button type="button" onclick="learnLocalBoxFromIp()">Box per IP hinzufuegen/lernen</button></p>';
+    html += '<div id="localScanStatus"></div>';
+    html += '<p>Wichtig: Automatisches Finden geht nur aus deinem Browser im selben lokalen Netz. Die Boxen brauchen dafuer die aktuelle Firmware mit CORS/Private-Network-Freigabe.</p>';
     html += '<p>Hinweis: Das eingebettete Box-Webinterface wird bei HTTPS aus Sicherheitsgruenden nicht im iframe geladen. Nutze den Box-Link in der linken Liste oder den Button im Inhaltsbereich.</p>';
     html += '</div>';
   }
