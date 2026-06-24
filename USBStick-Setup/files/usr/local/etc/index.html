@@ -156,6 +156,8 @@ let devicesPollInFlight = false;
 let devicesPollPromise = null;
 let devicesPollTimeoutId = null;
 const devicesPollIntervalMs = 1000;
+let localBrowserMode = false;
+const localStorageKey = "riddlematrix.localBrowserConfig.v1";
 const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 const triggersPerDay = 3;
@@ -180,6 +182,126 @@ letterOptions.push(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split(""));
 let currentWordTrigger = 0;
 let separateWordTriggers = false;
 let separateBoxTriggers = false;
+function isHostedHttpsMode() {
+  return location.protocol === "https:" && !["localhost", "127.0.0.1", "::1"].includes(location.hostname);
+}
+
+function loadLocalBrowserConfig() {
+  try {
+    const raw = window.localStorage.getItem(localStorageKey);
+    if (!raw) {
+      return { boxen: {}, boxOrder: [] };
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return { boxen: {}, boxOrder: [] };
+    }
+    return {
+      boxen: parsed.boxen && typeof parsed.boxen === "object" ? parsed.boxen : {},
+      boxOrder: Array.isArray(parsed.boxOrder) ? parsed.boxOrder : Object.keys(parsed.boxen || {})
+    };
+  } catch (error) {
+    console.warn("Lokale Browser-Konfiguration konnte nicht gelesen werden:", error);
+    return { boxen: {}, boxOrder: [] };
+  }
+}
+
+function saveLocalBrowserConfig() {
+  if (!localBrowserMode) {
+    return;
+  }
+  window.localStorage.setItem(localStorageKey, JSON.stringify({ boxen: knownBoxes, boxOrder }));
+}
+
+function enterLocalBrowserMode(reason) {
+  if (!localBrowserMode) {
+    localBrowserMode = true;
+    const localConfig = loadLocalBrowserConfig();
+    knownBoxes = {};
+    Object.entries(localConfig.boxen).forEach(([hostname, box]) => {
+      knownBoxes[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
+    });
+    boxOrder = localConfig.boxOrder.filter(hostname => knownBoxes[hostname]);
+    Object.keys(knownBoxes).forEach(hostname => {
+      if (!boxOrder.includes(hostname)) {
+        boxOrder.push(hostname);
+      }
+    });
+  }
+  connectedBoxes = boxOrder
+    .map(hostname => ({ hostname, ip: knownBoxes[hostname]?.ip }))
+    .filter(box => box.ip && box.ip !== "0.0.0.0");
+  renderDeviceList();
+  if (statusArea) {
+    const message = reason || "Webspace-Modus aktiv: Boxen werden direkt aus diesem Browser im lokalen WLAN verwaltet.";
+    statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
+  }
+}
+
+function validateIpAddress(ip) {
+  const value = String(ip || "").trim();
+  const parts = value.split(".");
+  if (parts.length !== 4) {
+    return "";
+  }
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) {
+      return "";
+    }
+    const number = Number(part);
+    if (!Number.isInteger(number) || number < 0 || number > 255) {
+      return "";
+    }
+  }
+  return value;
+}
+
+function makeDefaultBox(ip) {
+  const box = normalizeBox({ ip, letters: {}, colors: {}, delays: {}, colorModes: {}, colorPaletteMasks: {} });
+  return box;
+}
+
+function hostnameFromBoxHtml(html, fallbackIp) {
+  const titleMatch = String(html || "").match(/<title[^>]*>(.*?)<\/title>/i);
+  if (titleMatch && titleMatch[1]) {
+    const title = titleMatch[1].replace(/<[^>]+>/g, "").trim();
+    if (title && title.length <= 64) {
+      return title.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || `Box-${fallbackIp.replace(/\./g, "-")}`;
+    }
+  }
+  return `Box-${fallbackIp.replace(/\./g, "-")}`;
+}
+
+async function learnLocalBoxFromIp() {
+  const input = document.getElementById("localBoxIp");
+  const ip = validateIpAddress(input ? input.value : "");
+  if (!ip) {
+    alert("Bitte eine gueltige lokale IPv4-Adresse eintragen.");
+    return;
+  }
+  let hostname = `Box-${ip.replace(/\./g, "-")}`;
+  try {
+    const response = await fetch(`http://${ip}/`, { method: "GET", mode: "cors", cache: "no-store" });
+    if (response.ok) {
+      hostname = hostnameFromBoxHtml(await response.text(), ip);
+    }
+  } catch (error) {
+    console.warn("Box konnte nicht abgefragt werden, sie wird trotzdem lokal angelegt:", error);
+  }
+  let candidate = hostname;
+  let suffix = 2;
+  while (knownBoxes[candidate] && knownBoxes[candidate].ip !== ip) {
+    candidate = `${hostname}-${suffix++}`;
+  }
+  knownBoxes[candidate] = knownBoxes[candidate] ? normalizeBox(knownBoxes[candidate]) : makeDefaultBox(ip);
+  knownBoxes[candidate].ip = ip;
+  if (!boxOrder.includes(candidate)) {
+    boxOrder.push(candidate);
+  }
+  saveLocalBrowserConfig();
+  enterLocalBrowserMode(`Lokale Box gespeichert: ${candidate} (${ip})`);
+  showSetup();
+}
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -269,6 +391,10 @@ function normalizeBox(box) {
 }
 
 async function fetchDevices() {
+  if (localBrowserMode) {
+    enterLocalBrowserMode();
+    return Promise.resolve();
+  }
   if (devicesPollInFlight) {
     return devicesPollPromise;
   }
@@ -278,6 +404,10 @@ async function fetchDevices() {
     try {
       const res = await fetch("/devices");
       if (!res.ok) {
+        if (isHostedHttpsMode()) {
+          enterLocalBrowserMode("Webspace-Modus aktiv: /devices ist auf dem Server nicht verfuegbar, lokale Boxen werden im Browser gespeichert.");
+          return;
+        }
         let errorMessage = `❌ Fehler beim Laden der Boxen (${res.status} ${res.statusText || ""})`;
         try {
           const errorData = await res.json();
@@ -344,6 +474,10 @@ async function fetchDevices() {
         showSetup();
       }
     } catch (e) {
+      if (isHostedHttpsMode()) {
+        enterLocalBrowserMode("Webspace-Modus aktiv: Der Server kann dein lokales WLAN nicht sehen, der Browser verwaltet die Boxen direkt.");
+        return;
+      }
       console.error("Fehler beim Abrufen der Geräte:", e);
       if (statusArea) {
         const message = `❌ Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
@@ -363,8 +497,11 @@ async function fetchDevices() {
 
 function renderDeviceList() {
   const list = document.getElementById("deviceList");
-  list.innerHTML = connectedBoxes.length ? "" : "Keine verbundenen Boxen";
-  connectedBoxes.forEach(({ hostname, ip }) => {
+  const visibleBoxes = localBrowserMode
+    ? boxOrder.map(hostname => ({ hostname, ip: knownBoxes[hostname]?.ip })).filter(box => box.ip)
+    : connectedBoxes;
+  list.innerHTML = visibleBoxes.length ? "" : "Keine verbundenen Boxen";
+  visibleBoxes.forEach(({ hostname, ip }) => {
     const div = document.createElement("div");
     div.className = "device";
     div.innerText = `${hostname} (${ip})`;
@@ -377,6 +514,14 @@ function openBox(ip) {
   const container = document.getElementById("content");
   while (container.firstChild) {
     container.removeChild(container.firstChild);
+  }
+  if (isHostedHttpsMode()) {
+    const url = `http://${ip}`;
+    const wrapper = document.createElement("div");
+    wrapper.className = "box-card";
+    wrapper.innerHTML = `<h2>Box-Webinterface</h2><p>Aus einer HTTPS-Webspace-Seite darf ein lokales HTTP-Webinterface nicht eingebettet werden. Oeffne die Box in einem eigenen Tab:</p><p><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>`;
+    container.appendChild(wrapper);
+    return;
   }
   const iframe = document.createElement("iframe");
   iframe.src = `http://${ip}`;
@@ -424,6 +569,14 @@ async function shutdown() {
 function showSetup() {
   let html = '<h2>Boxen verwalten</h2>';
   const maxLength = boxOrder.length;
+  if (localBrowserMode) {
+    html += '<div class="box-card"><h3>Webspace/Lokal-Modus</h3>';
+    html += '<p>Diese Seite laeuft vom Webspace. Die Boxen bleiben in deinem lokalen WLAN; die Verwaltung passiert direkt aus diesem Browser und wird lokal im Browser gespeichert.</p>';
+    html += '<p>Box-IP: <input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> ';
+    html += '<button type="button" onclick="learnLocalBoxFromIp()">Box per IP hinzufuegen/lernen</button></p>';
+    html += '<p>Hinweis: Das eingebettete Box-Webinterface wird bei HTTPS aus Sicherheitsgruenden nicht im iframe geladen. Nutze den Box-Link in der linken Liste oder den Button im Inhaltsbereich.</p>';
+    html += '</div>';
+  }
 
   html += '<div class="box-card"><h3>Wörter für Wochentage</h3>';
   html += '<div class="toggle-row">';
@@ -620,6 +773,20 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
     value = normalizedMode;
   }
 
+  if (localBrowserMode) {
+    saveLocalBrowserConfig();
+    if (inputElement) {
+      inputElement.classList.remove("pending");
+      inputElement.classList.add("saved");
+      setTimeout(() => inputElement.classList.remove("saved"), 1000);
+    }
+    if (statusArea) {
+      statusArea.innerHTML = '<div class="statusEntry status">Aenderung lokal gespeichert.</div>';
+    }
+    if (updateUI) showSetup();
+    return;
+  }
+
   const payload = { hostname, day, triggerIndex: slotIndex, applyAllTriggers };
   if (fieldType === 'letter') {
     payload.letter = value;
@@ -679,6 +846,13 @@ function savePalette(hostname, day, triggerIndex, applyAllTriggers = false) {
     knownBoxes[hostname].colorPaletteMasks[day][index] = mask;
   });
 
+  if (localBrowserMode) {
+    saveLocalBrowserConfig();
+    statusArea.innerHTML = '<div class="statusEntry status">Zufallspalette lokal gespeichert.</div>';
+    showSetup();
+    return;
+  }
+
   fetch("/update_box", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -734,6 +908,11 @@ function moveBoxDown(hostname) {
 }
 
 function saveBoxOrder() {
+  if (localBrowserMode) {
+    saveLocalBrowserConfig();
+    showSetup();
+    return;
+  }
   const requestHeaders = { "Content-Type": "application/json" };
 
   fetch("/update_box_order", {
@@ -753,6 +932,14 @@ function saveBoxOrder() {
 }
 
 function removeBox(hostname) {
+  if (localBrowserMode) {
+    delete knownBoxes[hostname];
+    boxOrder = boxOrder.filter(entry => entry !== hostname);
+    saveLocalBrowserConfig();
+    enterLocalBrowserMode(`Box entfernt: ${hostname}`);
+    showSetup();
+    return;
+  }
   const headers = { "Content-Type": "application/json" };
 
   fetch("/remove_box", {
@@ -804,6 +991,7 @@ function renderTransferStatus() {
 function isTransferSuccess(statusText) {
   return typeof statusText === "string" && (
     statusText.includes("Übertragen") ||
+    statusText.includes("Uebertragen") ||
     statusText.includes("Bereits aktuell")
   );
 }
@@ -812,6 +1000,38 @@ async function transferBox(hostname) {
   const headers = { "Content-Type": "application/json" };
 
   let statusText = "❌ Unbekannter Fehler";
+
+  if (localBrowserMode) {
+    statusText = "Unbekannter Fehler";
+    const box = knownBoxes[hostname];
+    const ip = validateIpAddress(box?.ip);
+    if (!box || !ip) {
+      statusText = "Keine gueltige lokale IP hinterlegt";
+      appendTransferStatus(`${hostname}: ${statusText}`);
+      return statusText;
+    }
+    try {
+      const payload = {
+        letters: box.letters,
+        colors: box.colors,
+        delays: box.delays,
+        colorModes: box.colorModes,
+        colorPaletteMasks: box.colorPaletteMasks
+      };
+      const response = await fetch(`http://${ip}/updateAllLetters`, {
+        method: "POST",
+        mode: "cors",
+        headers,
+        body: JSON.stringify(payload)
+      });
+      statusText = response.ok ? "Uebertragen" : `Fehler (${response.status})`;
+    } catch (error) {
+      console.error("Fehler beim lokalen Uebertragen:", error);
+      statusText = "Netzwerkfehler/CORS blockiert";
+    }
+    appendTransferStatus(`${hostname}: ${statusText}`);
+    return statusText;
+  }
 
   try {
     const response = await fetch("/transfer_box", {

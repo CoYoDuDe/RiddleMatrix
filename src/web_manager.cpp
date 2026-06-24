@@ -647,6 +647,10 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 void setupWebServer() {
+    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Origin"), F("*"));
+    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Methods"), F("GET, POST, OPTIONS"));
+    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Headers"), F("Content-Type"));
+    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Private-Network"), F("true"));
     // ℹ️ Hinweis: Der Helper refreshWiFiIdleTimer(...) aus wifi_manager.cpp muss
     //             zu Beginn jeder neuen Route mit echter Nutzerinteraktion
     //             aufgerufen werden, damit der WLAN-Timeout zuverlässig
@@ -1913,6 +1917,14 @@ void setupWebServer() {
     server.on("/memory", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /memory"));
         request->send(200, "text/plain", String(ESP.getFreeHeap()));
+    });
+
+    server.onNotFound([](AsyncWebServerRequest *request) {
+        if (request->method() == HTTP_OPTIONS) {
+            request->send(204, "text/plain", "");
+            return;
+        }
+        request->send(404, "text/plain", "Not found");
     });
 
     server.begin();
