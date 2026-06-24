@@ -103,7 +103,7 @@ bool verify_wifi_password_hostname_recovery() {
         return false;
     }
 
-    static const char EXPECTED_PASSWORD[] = "YOUR_WIFI_PASSWORD";
+    static const char EXPECTED_PASSWORD[] = "RiddleMatrix-Setup!";
     if (std::strncmp(wifi_password, EXPECTED_PASSWORD, sizeof(wifi_password)) != 0) {
         std::cerr << "WiFi password fallback failed – got " << wifi_password << std::endl;
         return false;
