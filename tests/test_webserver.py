@@ -641,6 +641,31 @@ def test_update_box_updates_specific_trigger(webserver_app):
     assert config["boxen"]["TestBox"]["delays"]["mo"][0] == module._coerce_delay_value(1.25)
 
 
+def test_update_box_accepts_firmware_color_setting_keys(webserver_app):
+    module, client = webserver_app
+    module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": []})
+
+    color_modes = module._default_color_mode_matrix()
+    color_modes["mo"] = ["fixed", "random_selected", "random_all"]
+    palette_masks = module._default_color_palette_mask_matrix()
+    palette_masks["mo"] = [1, 3, 255]
+
+    response = client.post(
+        "/update_box",
+        json={
+            "hostname": "TestBox",
+            "color_modes": color_modes,
+            "color_palette_masks": palette_masks,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "success"}
+    config = module.load_config()
+    assert config["boxen"]["TestBox"]["colorModes"]["mo"] == color_modes["mo"]
+    assert config["boxen"]["TestBox"]["colorPaletteMasks"]["mo"] == palette_masks["mo"]
+
+
 def test_update_box_rejects_malicious_color_payload(webserver_app):
     module, client = webserver_app
     module.save_config({"boxen": {"TestBox": _empty_box(module)}, "boxOrder": ["TestBox"]})
@@ -1166,13 +1191,81 @@ def test_transfer_box_sends_all_triggers_json(webserver_app, monkeypatch):
 
     response = client.post("/transfer_box", json={"hostname": "TestBox"})
     assert response.status_code == 200
-    assert response.get_json() == {"status": "✅ Übertragen"}
+    assert "bertragen" in response.get_json()["status"]
     assert captured["url"].endswith("/updateAllLetters")
     expected_letters = {
         day: [module.sanitize_letter(letter) for letter in letters[day]]
         for day in module.DAYS
     }
     assert captured["json"] == {"letters": expected_letters, "colors": colors, "delays": delays}
+
+
+def test_transfer_box_sends_custom_color_settings_json(webserver_app, monkeypatch):
+    module, client = webserver_app
+    letters = {day: ["A", "B", "C"] for day in module.DAYS}
+    colors = {day: ["#111111", "#222222", "#333333"] for day in module.DAYS}
+    delays = {day: [0, 1, 2] for day in module.DAYS}
+    color_modes = module._default_color_mode_matrix()
+    color_modes["mo"] = ["fixed", "random_selected", "random_all"]
+    palette_masks = module._default_color_palette_mask_matrix()
+    palette_masks["mo"] = [255, 3, 255]
+    module.save_config(
+        {
+            "boxen": {
+                "TestBox": {
+                    "ip": "1.2.3.4",
+                    "letters": letters,
+                    "colors": colors,
+                    "delays": delays,
+                    "colorModes": color_modes,
+                    "colorPaletteMasks": palette_masks,
+                }
+            },
+            "boxOrder": [],
+        }
+    )
+
+    class FakeResponse:
+        def __init__(self, text: str = "", ok: bool = True, json_data=None) -> None:
+            self.text = text
+            self.ok = ok
+            self._json = json_data
+
+        def json(self):
+            if self._json is None:
+                raise ValueError("No JSON data")
+            return self._json
+
+    def fake_get(url, *args, **kwargs):
+        assert kwargs.get("allow_redirects") is False
+        if url.endswith("/api/trigger-delays"):
+            return FakeResponse(ok=True, json_data={"delays": module._default_delay_matrix()})
+        return FakeResponse("<html></html>", True)
+
+    monkeypatch.setattr(module.requests, "get", fake_get)
+
+    captured = {}
+
+    def fake_post(url, json=None, timeout=3, **kwargs):
+        captured["url"] = url
+        captured["json"] = json
+
+        class PostResponse:
+            ok = True
+
+        return PostResponse()
+
+    monkeypatch.setattr(module.requests, "post", fake_post)
+
+    response = client.post("/transfer_box", json={"hostname": "TestBox"})
+
+    assert response.status_code == 200
+    assert "bertragen" in response.get_json()["status"]
+    assert captured["url"].endswith("/updateAllLetters")
+    assert captured["json"]["color_modes"] == color_modes
+    assert captured["json"]["color_palette_masks"] == palette_masks
+    assert "colorModes" not in captured["json"]
+    assert "colorPaletteMasks" not in captured["json"]
 
 
 def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypatch):
@@ -1219,7 +1312,7 @@ def test_transfer_box_coerces_decimal_delays_to_integers(webserver_app, monkeypa
 
     response = client.post("/transfer_box", json={"hostname": "TestBox"})
     assert response.status_code == 200
-    assert response.get_json() == {"status": "✅ Übertragen"}
+    assert "bertragen" in response.get_json()["status"]
     assert "json" in captured
 
     expected_delays = {

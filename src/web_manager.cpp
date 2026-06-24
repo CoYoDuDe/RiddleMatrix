@@ -1490,6 +1490,9 @@ void setupWebServer() {
                 }
 
                 JsonObjectConst colorModesObject = payload["color_modes"].as<JsonObjectConst>();
+                if (colorModesObject.isNull()) {
+                    colorModesObject = payload["colorModes"].as<JsonObjectConst>();
+                }
                 if (!validationFailed && !colorModesObject.isNull()) {
                     for (size_t day = 0; day < NUM_DAYS && !validationFailed; ++day) {
                         JsonArrayConst dayModes = colorModesObject[DAY_KEYS[day]].as<JsonArrayConst>();
@@ -1516,6 +1519,9 @@ void setupWebServer() {
                 }
 
                 JsonObjectConst paletteMasksObject = payload["color_palette_masks"].as<JsonObjectConst>();
+                if (paletteMasksObject.isNull()) {
+                    paletteMasksObject = payload["colorPaletteMasks"].as<JsonObjectConst>();
+                }
                 if (!validationFailed && !paletteMasksObject.isNull()) {
                     for (size_t day = 0; day < NUM_DAYS && !validationFailed; ++day) {
                         JsonArrayConst dayMasks = paletteMasksObject[DAY_KEYS[day]].as<JsonArrayConst>();

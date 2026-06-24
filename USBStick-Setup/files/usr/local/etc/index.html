@@ -159,7 +159,8 @@ const devicesPollIntervalMs = 1000;
 let localBrowserMode = false;
 const localStorageKey = "riddlematrix.localBrowserConfig.v1";
 const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
-const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+const dayNames = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const firmwareDayIndexByDay = { so: 0, mo: 1, di: 2, mi: 3, do: 4, fr: 5, sa: 6 };
 const triggersPerDay = 3;
 const defaultColor = "#ffffff";
 const defaultDelay = 0;
@@ -180,8 +181,8 @@ const letterLabels = {"": "Leer", "*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": 
 const letterOptions = [""];
 letterOptions.push(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split(""));
 let currentWordTrigger = 0;
-let separateWordTriggers = false;
-let separateBoxTriggers = false;
+let separateWordTriggers = true;
+let separateBoxTriggers = true;
 function isHostedHttpsMode() {
   return location.protocol === "https:" && !["localhost", "127.0.0.1", "::1"].includes(location.hostname);
 }
@@ -261,6 +262,129 @@ function makeDefaultBox(ip) {
   return box;
 }
 
+function selectedValueFromSelect(doc, names, fallback = "") {
+  for (const name of names) {
+    const select = doc.querySelector(`select[name="${name}"], select#${name}`);
+    if (!select) {
+      continue;
+    }
+    const selected = select.querySelector("option:checked");
+    if (selected) {
+      return selected.value ?? fallback;
+    }
+    if (select.value != null) {
+      return select.value;
+    }
+  }
+  return fallback;
+}
+
+function inputValueFromNames(doc, names, fallback = "") {
+  for (const name of names) {
+    const input = doc.querySelector(`input[name="${name}"], input#${name}`);
+    if (input) {
+      return input.value ?? fallback;
+    }
+  }
+  return fallback;
+}
+
+function checkboxCheckedByName(doc, name) {
+  const input = doc.querySelector(`input[name="${name}"]`);
+  return !!(input && input.checked);
+}
+
+function extractLocalBoxStateFromHtml(html, ip) {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  const box = makeDefaultBox(ip);
+  days.forEach((day, dayIndex) => {
+    const firmwareDayIndex = firmwareDayIndexByDay[day] ?? dayIndex;
+    for (let trigger = 0; trigger < triggersPerDay; trigger += 1) {
+      const letterNames = [
+        `letter_${trigger}_${firmwareDayIndex}`,
+        `letter_${trigger}_${dayIndex}`,
+        trigger === 0 ? `letter${firmwareDayIndex}` : "",
+        trigger === 0 ? `letter${dayIndex}` : "",
+        `letter_${firmwareDayIndex}_${trigger}`,
+        `letter_${dayIndex}_${trigger}`,
+        `letter${firmwareDayIndex}_${trigger}`,
+        `letter${dayIndex}_${trigger}`
+      ].filter(Boolean);
+      box.letters[day][trigger] = selectedValueFromSelect(doc, letterNames, box.letters[day][trigger] || "");
+
+      const colorNames = [
+        `color_${trigger}_${firmwareDayIndex}`,
+        `color_${trigger}_${dayIndex}`,
+        trigger === 0 ? `color${firmwareDayIndex}` : "",
+        trigger === 0 ? `color${dayIndex}` : "",
+        `color_${firmwareDayIndex}_${trigger}`,
+        `color_${dayIndex}_${trigger}`,
+        `color${firmwareDayIndex}_${trigger}`,
+        `color${dayIndex}_${trigger}`
+      ].filter(Boolean);
+      box.colors[day][trigger] = sanitizeColor(inputValueFromNames(doc, colorNames, box.colors[day][trigger]));
+
+      const modeNames = [
+        `color_mode_${trigger}_${firmwareDayIndex}`,
+        `color_mode_${trigger}_${dayIndex}`
+      ];
+      const mode = selectedValueFromSelect(doc, modeNames, defaultColorMode).trim().toLowerCase();
+      box.colorModes[day][trigger] = ["fixed", "random_selected", "random_all"].includes(mode) ? mode : defaultColorMode;
+
+      let mask = 0;
+      for (let paletteIndex = 0; paletteIndex < randomPalette.length; paletteIndex += 1) {
+        if (
+          checkboxCheckedByName(doc, `palette_${trigger}_${firmwareDayIndex}_${paletteIndex}`) ||
+          checkboxCheckedByName(doc, `palette_${trigger}_${dayIndex}_${paletteIndex}`)
+        ) {
+          mask |= 1 << paletteIndex;
+        }
+      }
+      box.colorPaletteMasks[day][trigger] = mask || defaultColorPaletteMask;
+
+      const delayNames = [
+        `delay_${trigger}_${firmwareDayIndex}`,
+        `delay_${trigger}_${dayIndex}`,
+        `delay_${firmwareDayIndex}_${trigger}`,
+        `delay_${dayIndex}_${trigger}`
+      ];
+      const parsedDelay = parseFloat(String(inputValueFromNames(doc, delayNames, box.delays[day][trigger])).replace(",", "."));
+      box.delays[day][trigger] = Number.isFinite(parsedDelay) && parsedDelay >= 0
+        ? Math.min(999, Math.round(parsedDelay))
+        : defaultDelay;
+    }
+  });
+  return normalizeBox(box);
+}
+
+async function fetchLocalTriggerDelays(ip, box) {
+  try {
+    const response = await fetch(`http://${ip}/api/trigger-delays`, { method: "GET", mode: "cors", cache: "no-store" });
+    if (!response.ok) {
+      return box;
+    }
+    const data = await response.json();
+    if (!data || typeof data.delays !== "object") {
+      return box;
+    }
+    days.forEach(day => {
+      const values = data.delays[day];
+      if (!Array.isArray(values)) {
+        return;
+      }
+      for (let trigger = 0; trigger < triggersPerDay; trigger += 1) {
+        const parsed = parseFloat(String(values[trigger]).replace(",", "."));
+        box.delays[day][trigger] = Number.isFinite(parsed) && parsed >= 0
+          ? Math.min(999, Math.round(parsed))
+          : defaultDelay;
+      }
+    });
+  } catch (error) {
+    console.warn("Trigger-Delays konnten lokal nicht gelesen werden:", error);
+  }
+  return normalizeBox(box);
+}
+
 function hostnameFromBoxHtml(html, fallbackIp) {
   const titleMatch = String(html || "").match(/<title[^>]*>(.*?)<\/title>/i);
   if (titleMatch && titleMatch[1]) {
@@ -280,10 +404,14 @@ async function learnLocalBoxFromIp() {
     return;
   }
   let hostname = `Box-${ip.replace(/\./g, "-")}`;
+  let learnedBox = makeDefaultBox(ip);
   try {
     const response = await fetch(`http://${ip}/`, { method: "GET", mode: "cors", cache: "no-store" });
     if (response.ok) {
-      hostname = hostnameFromBoxHtml(await response.text(), ip);
+      const html = await response.text();
+      hostname = hostnameFromBoxHtml(html, ip);
+      learnedBox = extractLocalBoxStateFromHtml(html, ip);
+      learnedBox = await fetchLocalTriggerDelays(ip, learnedBox);
     }
   } catch (error) {
     console.warn("Box konnte nicht abgefragt werden, sie wird trotzdem lokal angelegt:", error);
@@ -293,7 +421,7 @@ async function learnLocalBoxFromIp() {
   while (knownBoxes[candidate] && knownBoxes[candidate].ip !== ip) {
     candidate = `${hostname}-${suffix++}`;
   }
-  knownBoxes[candidate] = knownBoxes[candidate] ? normalizeBox(knownBoxes[candidate]) : makeDefaultBox(ip);
+  knownBoxes[candidate] = learnedBox;
   knownBoxes[candidate].ip = ip;
   if (!boxOrder.includes(candidate)) {
     boxOrder.push(candidate);
@@ -580,7 +708,7 @@ function showSetup() {
 
   html += '<div class="box-card"><h3>Wörter für Wochentage</h3>';
   html += '<div class="toggle-row">';
-  html += `<label><input type="checkbox" data-live-edit="true" ${separateWordTriggers ? "checked" : ""} onchange="setSeparateWordTriggers(this.checked)"> Eigene Wörter pro Trigger</label>`;
+  html += `<label><input type="checkbox" data-live-edit="true" ${separateWordTriggers ? "checked" : ""} onchange="setSeparateWordTriggers(this.checked)"> Alle 3 Trigger separat anzeigen</label>`;
   if (separateWordTriggers) {
     html += '<span>Jeder Trigger bekommt sein eigenes Wort pro Tag.</span>';
   } else {
@@ -611,7 +739,7 @@ function showSetup() {
   html += '</div></div>';
 
   html += '<div class="box-card"><div class="toggle-row">';
-  html += `<label><input type="checkbox" data-live-edit="true" ${separateBoxTriggers ? "checked" : ""} onchange="setSeparateBoxTriggers(this.checked)"> Trigger in den Boxkarten getrennt bearbeiten</label>`;
+  html += `<label><input type="checkbox" data-live-edit="true" ${separateBoxTriggers ? "checked" : ""} onchange="setSeparateBoxTriggers(this.checked)"> Alle 3 Trigger in den Boxkarten anzeigen</label>`;
   if (separateBoxTriggers) {
     html += '<span>Alle drei Trigger werden einzeln angezeigt.</span>';
   } else {
@@ -1015,8 +1143,8 @@ async function transferBox(hostname) {
         letters: box.letters,
         colors: box.colors,
         delays: box.delays,
-        colorModes: box.colorModes,
-        colorPaletteMasks: box.colorPaletteMasks
+        color_modes: box.colorModes,
+        color_palette_masks: box.colorPaletteMasks
       };
       const response = await fetch(`http://${ip}/updateAllLetters`, {
         method: "POST",

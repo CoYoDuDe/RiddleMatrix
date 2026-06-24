@@ -1185,6 +1185,8 @@ def update_box():
                     updated = True
 
     color_modes_payload = data.get("colorModes")
+    if not isinstance(color_modes_payload, dict):
+        color_modes_payload = data.get("color_modes")
     if isinstance(color_modes_payload, dict):
         for day, values in color_modes_payload.items():
             if day in DAYS:
@@ -1195,6 +1197,8 @@ def update_box():
                     updated = True
 
     color_palette_masks_payload = data.get("colorPaletteMasks")
+    if not isinstance(color_palette_masks_payload, dict):
+        color_palette_masks_payload = data.get("color_palette_masks")
     if isinstance(color_palette_masks_payload, dict):
         for day, values in color_palette_masks_payload.items():
             if day in DAYS:
