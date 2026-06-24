@@ -35,6 +35,13 @@ void clearWiFiSymbol() {
 #define SCALE_FACTOR 2
 
 void drawWiFiSymbol() {
+    if (!wifi_status_symbol_enabled ||
+        wifi_operation_mode != static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {
+        Serial.println(F("WiFi-Symbol ist fuer diesen WLAN-Modus deaktiviert."));
+        wifiSymbolVisible = false;
+        return;
+    }
+
     if (!wifiConnected) {
         Serial.println(F("ℹ️ WiFi-Symbol wird nicht angezeigt: keine aktive WLAN-Verbindung."));
         wifiSymbolVisible = false;
@@ -109,10 +116,38 @@ void disableWiFiAndServer() {
 void connectWiFi() {
     Serial.println(F("🌐 Verbinde mit WiFi..."));
     WiFi.persistent(false);
-    WiFi.mode(WIFI_STA);
-    WiFi.softAPdisconnect(true);
+    const bool staWithLocalAp = (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp));
+    WiFi.mode(staWithLocalAp ? WIFI_AP_STA : WIFI_STA);
+    if (staWithLocalAp) {
+        const bool apStarted = WiFi.softAP(wifi_local_ap_ssid, wifi_local_ap_password);
+        Serial.print(F("Lokaler Box-AP "));
+        Serial.println(apStarted ? F("gestartet.") : F("konnte nicht gestartet werden."));
+    } else {
+        WiFi.softAPdisconnect(true);
+        Serial.println(F("STA-Modus aktiviert, SoftAP getrennt."));
+    }
     Serial.println(F("ℹ️ STA-Modus aktiviert, SoftAP getrennt."));
     WiFi.hostname(hostname);
+    if (wifi_static_ip_enabled) {
+        IPAddress localIp;
+        IPAddress gateway;
+        IPAddress subnet;
+        IPAddress dns;
+        if (localIp.fromString(wifi_static_ip) &&
+            gateway.fromString(wifi_gateway) &&
+            subnet.fromString(wifi_subnet) &&
+            dns.fromString(wifi_dns)) {
+            WiFi.config(localIp, gateway, subnet, dns);
+            Serial.print(F("Statische IP konfiguriert: "));
+            Serial.println(localIp);
+        } else {
+            Serial.println(F("Statische IP ungueltig, nutze DHCP."));
+            WiFi.config(0U, 0U, 0U);
+        }
+    } else {
+        WiFi.config(0U, 0U, 0U);
+        Serial.println(F("DHCP aktiviert."));
+    }
     WiFi.begin(wifi_ssid, wifi_password);
 
     unsigned long startAttempt = millis();
@@ -141,14 +176,32 @@ void connectWiFi() {
     } else {
         Serial.println(F("\n⛔ WiFi Timeout! Verbindung fehlgeschlagen. WiFi bleibt aus."));
         wifiConnected = false;
-        WiFi.disconnect();
-        WiFi.mode(WIFI_OFF);
+        if (staWithLocalAp) {
+            wifiDisabled = false;
+            if (!webServerRunning) {
+                setupWebServer();
+            }
+            Serial.println(F("Lokaler Box-AP bleibt fuer Konfiguration aktiv."));
+        } else {
+            WiFi.disconnect();
+            WiFi.mode(WIFI_OFF);
+        }
     }
 }
 
 void checkWiFi() {
     if (WiFi.status() != WL_CONNECTED) {
-        if (!wifiDisabled) {
+        const bool persistentMode = (wifi_operation_mode != static_cast<uint8_t>(WiFiOperationMode::TimedManager));
+        if (persistentMode && !wifiDisabled) {
+            static unsigned long lastReconnectAttempt = 0;
+            const unsigned long now = millis();
+            if (now - lastReconnectAttempt >= 30000UL) {
+                Serial.println(F("WLAN-Verbindung verloren. Permanenter Modus versucht Reconnect..."));
+                lastReconnectAttempt = now;
+                WiFi.disconnect();
+                WiFi.begin(wifi_ssid, wifi_password);
+            }
+        } else if (!wifiDisabled) {
             Serial.println(F("⚠️ WLAN-Verbindung verloren. Schalte WiFi & Webserver aus..."));
             disableWiFiAndServer();
             Serial.println(F("🌐 Webserver gestoppt. Neustart erforderlich für neue Verbindung."));

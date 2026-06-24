@@ -373,6 +373,66 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             });
     }
 
+    function loadWiFiNetworks() {
+        const select = document.getElementById('wifiNetworkSelect');
+        if (!select) {
+            return;
+        }
+        select.innerHTML = '<option>Suche Netzwerke...</option>';
+        fetch('/scanWiFi')
+            .then(response => response.json())
+            .then(networks => {
+                select.innerHTML = '<option value="">SSID aus Liste waehlen...</option>';
+                networks.forEach(network => {
+                    const option = document.createElement('option');
+                    option.value = network.ssid;
+                    option.textContent = network.ssid + ' (' + network.rssi + ' dBm' + (network.encrypted ? ', verschluesselt' : ', offen') + ')';
+                    select.appendChild(option);
+                });
+            })
+            .catch(error => {
+                select.innerHTML = '<option value="">Scan fehlgeschlagen</option>';
+                console.error('Fehler beim WLAN-Scan:', error);
+            });
+    }
+
+    function applySelectedWiFiNetwork() {
+        const select = document.getElementById('wifiNetworkSelect');
+        const ssidInput = document.querySelector('#wifiForm input[name="ssid"]');
+        if (select && ssidInput && select.value) {
+            ssidInput.value = select.value;
+        }
+    }
+
+    function updateWiFiModeFields() {
+        const mode = document.querySelector('#wifiForm input[name="wifi_mode"]:checked')?.value || 'timed';
+        const persistentFields = document.getElementById('persistentWifiFields');
+        const apFields = document.getElementById('localApFields');
+        const symbolField = document.getElementById('wifiSymbolField');
+        const symbolCheckbox = document.getElementById('wifi_status_symbol_enabled');
+
+        if (persistentFields) {
+            persistentFields.style.display = mode === 'timed' ? 'none' : 'block';
+        }
+        if (apFields) {
+            apFields.style.display = mode === 'ap_sta' ? 'block' : 'none';
+        }
+        if (symbolField) {
+            symbolField.style.display = mode === 'timed' ? 'block' : 'none';
+        }
+        if (symbolCheckbox && mode !== 'timed') {
+            symbolCheckbox.checked = false;
+        }
+    }
+
+    function toggleStaticIpFields() {
+        const enabled = document.getElementById('wifi_static_ip_enabled')?.checked;
+        const fields = document.getElementById('staticIpFields');
+        if (fields) {
+            fields.style.display = enabled ? 'block' : 'none';
+        }
+    }
+
     // 🔔 Buchstaben-Trigger über Webinterface
     function triggerLetter(triggerIndex) {
         let query = '';
@@ -442,6 +502,11 @@ const char scriptJS[] PROGMEM = R"rawliteral(
                 form.delete('password_remove');
             }
         }
+
+        const symbolCheckbox = document.getElementById('wifi_status_symbol_enabled');
+        form.set('wifi_status_symbol_enabled', symbolCheckbox && symbolCheckbox.checked ? 'on' : 'off');
+        const staticIpCheckbox = document.getElementById('wifi_static_ip_enabled');
+        form.set('wifi_static_ip_enabled', staticIpCheckbox && staticIpCheckbox.checked ? 'on' : 'off');
 
         fetch('/updateWiFi', { method: 'POST', body: form })
             .then(response => response.text())
@@ -568,6 +633,16 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         console.warn('⚠️ Uhrzeiteingabe nicht gefunden, automatische Aktualisierung bleibt aktiv.');
     }
 
+    document.querySelectorAll('#wifiForm input[name="wifi_mode"]').forEach(input => {
+        input.addEventListener('change', updateWiFiModeFields);
+    });
+    const staticIpCheckbox = document.getElementById('wifi_static_ip_enabled');
+    if (staticIpCheckbox) {
+        staticIpCheckbox.addEventListener('change', toggleStaticIpFields);
+    }
+    updateWiFiModeFields();
+    toggleStaticIpFields();
+
     applyTriggerEditMode();
 )rawliteral";
 
@@ -583,15 +658,48 @@ void setupWebServer() {
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
         html += "<form id='wifiForm'>";
+        html += "<p>Standard bleibt: Box verbindet sich nur beim Start zur Verwaltung und schaltet WLAN nach Inaktivitaet wieder ab.</p>";
+        html += "<fieldset><legend>WLAN-Modus</legend>";
+        html += "<label><input type='radio' name='wifi_mode' value='timed' ";
+        html += (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::TimedManager) ? "checked" : "");
+        html += "> Standard: Manager/Hotspot zeitweise</label><br>";
+        html += "<label><input type='radio' name='wifi_mode' value='always' ";
+        html += (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::AlwaysConnected) ? "checked" : "");
+        html += "> Dauerhaft mit bestehendem WLAN verbinden</label><br>";
+        html += "<label><input type='radio' name='wifi_mode' value='ap_sta' ";
+        html += (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp) ? "checked" : "");
+        html += "> AP+STA/Mesh-Kopie: WLAN verbinden und zusaetzlichen Box-AP starten</label>";
+        html += "</fieldset>";
         html += "<p>SSID und Hostname sind Pflichtfelder (mindestens 2 Zeichen), das Passwort ist optional.</p>";
+        html += "Netzwerke: <select id='wifiNetworkSelect' onchange='applySelectedWiFiNetwork()'><option value=''>Noch nicht gesucht</option></select> ";
+        html += "<button type='button' onclick='loadWiFiNetworks()'>WLAN suchen</button><br>";
         html += "SSID: <input type='text' name='ssid' value='" + escapeHtml(String(wifi_ssid)) + "'><br>";
         html += "Passwort: <input type='password' name='password' placeholder='Leer lassen, um es zu behalten'><br>";
-        html += "<label><input type='checkbox' id='password_remove' name='password_remove' value='on'> Passwort löschen</label><br>";
-        html += "<p style='margin-top:4px;'>Leer gelassenes Passwort ohne Haken lässt das bisherige Passwort unverändert.</p>";
+        html += "<label><input type='checkbox' id='password_remove' name='password_remove' value='on'> Passwort loeschen</label><br>";
+        html += "<p style='margin-top:4px;'>Leer gelassenes Passwort ohne Haken laesst das bisherige Passwort unveraendert.</p>";
         html += "Hostname: <input type='text' name='hostname' value='" + escapeHtml(String(hostname)) + "'><br>";
+        html += "<div id='wifiSymbolField'><label><input type='checkbox' id='wifi_status_symbol_enabled' name='wifi_status_symbol_enabled' value='on' ";
+        html += (wifi_status_symbol_enabled ? "checked" : "");
+        html += "> WiFi-Symbol im Standardmodus anzeigen</label></div>";
+        html += "<div id='persistentWifiFields' style='display:none; border-left:3px solid #999; padding-left:10px; margin:8px 0;'>";
+        html += "<p>In dauerhaften WLAN-Modi bleibt die Box online, reconnectet automatisch und zeigt kein WiFi-Symbol auf der Matrix.</p>";
+        html += "<label><input type='checkbox' id='wifi_static_ip_enabled' name='wifi_static_ip_enabled' value='on' ";
+        html += (wifi_static_ip_enabled ? "checked" : "");
+        html += "> Statische IP verwenden</label>";
+        html += "<div id='staticIpFields' style='display:none; margin:6px 0;'>";
+        html += "IP: <input type='text' name='static_ip' value='" + escapeHtml(String(wifi_static_ip)) + "'><br>";
+        html += "Gateway: <input type='text' name='gateway' value='" + escapeHtml(String(wifi_gateway)) + "'><br>";
+        html += "Subnetz: <input type='text' name='subnet' value='" + escapeHtml(String(wifi_subnet)) + "'><br>";
+        html += "DNS: <input type='text' name='dns' value='" + escapeHtml(String(wifi_dns)) + "'><br>";
+        html += "</div>";
+        html += "</div>";
+        html += "<div id='localApFields' style='display:none; border-left:3px solid #999; padding-left:10px; margin:8px 0;'>";
+        html += "<p>AP+STA startet einen lokalen Box-AP mit denselben Zugangsdaten wie das Ziel-WLAN, sofern hier nichts anderes eingetragen wird.</p>";
+        html += "Lokale AP-SSID: <input type='text' name='local_ap_ssid' value='" + escapeHtml(String(wifi_local_ap_ssid)) + "'><br>";
+        html += "Lokales AP-Passwort: <input type='password' name='local_ap_password' placeholder='Leer lassen = WLAN-Passwort uebernehmen'><br>";
+        html += "</div>";
         html += "<button type='button' onclick='saveWiFi()'>Speichern</button>";
         html += "</form>";
-
         // **Anzeige-Einstellungen**
         html += "<h2>Anzeige-Einstellungen</h2>";
         html += "<form id='displayForm'>";
@@ -742,6 +850,32 @@ void setupWebServer() {
         request->send_P(200, "text/javascript", scriptJS);
     });
 
+    server.on("/scanWiFi", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /scanWiFi"));
+        const WiFiMode_t previousMode = WiFi.getMode();
+        if (previousMode == WIFI_OFF) {
+            WiFi.mode(WIFI_STA);
+        }
+
+        const int networkCount = WiFi.scanNetworks();
+        StaticJsonDocument<1024> responseDoc;
+        JsonArray networks = responseDoc.to<JsonArray>();
+        for (int index = 0; index < networkCount && index < 20; ++index) {
+            JsonObject network = networks.createNestedObject();
+            network["ssid"] = WiFi.SSID(index);
+            network["rssi"] = WiFi.RSSI(index);
+            network["encrypted"] = WiFi.encryptionType(index) != ENC_TYPE_NONE;
+        }
+        WiFi.scanDelete();
+        if (previousMode == WIFI_OFF) {
+            WiFi.mode(WIFI_OFF);
+        }
+
+        String responseBody;
+        serializeJson(responseDoc, responseBody);
+        request->send(200, F("application/json"), responseBody);
+    });
+
     server.on("/updateWiFi", HTTP_POST, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("POST /updateWiFi"));
         if (request->hasParam("ssid", true) && request->hasParam("hostname", true)) {
@@ -775,6 +909,20 @@ void setupWebServer() {
                 return value;
             };
 
+            auto parseCheckbox = [](AsyncWebServerRequest *currentRequest, const char *name) {
+                if (!currentRequest->hasParam(name, true)) {
+                    return false;
+                }
+                String value = currentRequest->getParam(name, true)->value();
+                value.trim();
+                value.toLowerCase();
+                return value == F("on") || value == F("1") || value == F("true") || value == F("yes");
+            };
+
+            auto parseIPv4 = [](const String &value, IPAddress &parsed) {
+                return parsed.fromString(value);
+            };
+
             String validationError;
             if (containsForbiddenChars(ssidParam)) {
                 validationError += "SSID enthält ungültige Zeichen. ";
@@ -790,6 +938,29 @@ void setupWebServer() {
             const String sanitizedHostname = normalizeInput(hostnameParam);
             const String sanitizedPassword = hasPasswordField ? normalizeInput(passwordParam) : String();
             const bool applyPassword = hasPasswordField && !sanitizedPassword.isEmpty();
+            String wifiModeValue = request->hasParam("wifi_mode", true) ? request->getParam("wifi_mode", true)->value() : String("timed");
+            wifiModeValue.trim();
+            wifiModeValue.toLowerCase();
+            uint8_t requestedMode = static_cast<uint8_t>(WiFiOperationMode::TimedManager);
+            if (wifiModeValue == F("always")) {
+                requestedMode = static_cast<uint8_t>(WiFiOperationMode::AlwaysConnected);
+            } else if (wifiModeValue == F("ap_sta")) {
+                requestedMode = static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp);
+            } else if (wifiModeValue != F("timed")) {
+                validationError += "Unbekannter WLAN-Modus. ";
+            }
+
+            const bool requestedStatusSymbol =
+                requestedMode == static_cast<uint8_t>(WiFiOperationMode::TimedManager) &&
+                parseCheckbox(request, "wifi_status_symbol_enabled");
+            const bool requestedStaticIp = parseCheckbox(request, "wifi_static_ip_enabled");
+            const String requestedStaticIpValue = normalizeInput(request->hasParam("static_ip", true) ? request->getParam("static_ip", true)->value() : String(wifi_static_ip));
+            const String requestedGatewayValue = normalizeInput(request->hasParam("gateway", true) ? request->getParam("gateway", true)->value() : String(wifi_gateway));
+            const String requestedSubnetValue = normalizeInput(request->hasParam("subnet", true) ? request->getParam("subnet", true)->value() : String(wifi_subnet));
+            const String requestedDnsValue = normalizeInput(request->hasParam("dns", true) ? request->getParam("dns", true)->value() : String(wifi_dns));
+            const String requestedLocalApSsid = normalizeInput(request->hasParam("local_ap_ssid", true) ? request->getParam("local_ap_ssid", true)->value() : String(wifi_local_ap_ssid));
+            const String requestedLocalApPasswordRaw = normalizeInput(request->hasParam("local_ap_password", true) ? request->getParam("local_ap_password", true)->value() : String());
+            const String requestedLocalApPassword = requestedLocalApPasswordRaw.isEmpty() ? (applyPassword ? sanitizedPassword : String(wifi_password)) : requestedLocalApPasswordRaw;
 
             // Ein neu gesetztes Passwort hat Priorität gegenüber einem Löschwunsch.
             if (applyPassword) {
@@ -801,6 +972,32 @@ void setupWebServer() {
             }
             if (sanitizedHostname.length() < MIN_HOSTNAME_LENGTH) {
                 validationError += "Hostname muss mindestens " + String(MIN_HOSTNAME_LENGTH) + " Zeichen enthalten. ";
+            }
+            if (requestedMode == static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp) &&
+                !requestedLocalApSsid.isEmpty() &&
+                requestedLocalApSsid.length() < MIN_SSID_LENGTH) {
+                validationError += "Lokale AP-SSID muss mindestens " + String(MIN_SSID_LENGTH) + " Zeichen enthalten. ";
+            }
+            if (requestedStaticIp) {
+                IPAddress parsedIp;
+                IPAddress parsedGateway;
+                IPAddress parsedSubnet;
+                IPAddress parsedDns;
+                if (!parseIPv4(requestedStaticIpValue, parsedIp)) {
+                    validationError += "Statische IP ist ungueltig. ";
+                }
+                if (!parseIPv4(requestedGatewayValue, parsedGateway)) {
+                    validationError += "Gateway ist ungueltig. ";
+                }
+                if (!parseIPv4(requestedSubnetValue, parsedSubnet)) {
+                    validationError += "Subnetz ist ungueltig. ";
+                }
+                if (!parseIPv4(requestedDnsValue, parsedDns)) {
+                    validationError += "DNS ist ungueltig. ";
+                }
+            }
+            if (containsForbiddenChars(requestedLocalApSsid) || containsForbiddenChars(requestedLocalApPassword)) {
+                validationError += "Lokale AP-Daten enthalten ungueltige Zeichen. ";
             }
 
             if (!validationError.isEmpty()) {
@@ -819,6 +1016,7 @@ void setupWebServer() {
             bool passwordTruncated = false;
             bool passwordCleared = false;
             bool passwordUnchanged = false;
+            bool appliedInfraDefaults = false;
 
             if (applyPassword) {
                 passwordTruncated = copyWithTermination(sanitizedPassword, wifi_password, sizeof(wifi_password));
@@ -831,6 +1029,35 @@ void setupWebServer() {
             } else {
                 passwordUnchanged = true;
             }
+
+            if (requestedMode != static_cast<uint8_t>(WiFiOperationMode::TimedManager) &&
+                sanitizedSsid == F("RiddleMatrix_AP") &&
+                !applyPassword) {
+                copyWithTermination(String(DEFAULT_INFRA_WIFI_SSID), wifi_ssid, sizeof(wifi_ssid));
+                copyWithTermination(String(DEFAULT_INFRA_WIFI_PASSWORD), wifi_password, sizeof(wifi_password));
+                appliedInfraDefaults = true;
+                passwordUnchanged = false;
+            }
+
+            wifi_operation_mode = requestedMode;
+            wifi_status_symbol_enabled = requestedStatusSymbol;
+            wifi_static_ip_enabled = requestedStaticIp;
+            copyWithTermination(requestedStaticIpValue, wifi_static_ip, sizeof(wifi_static_ip));
+            copyWithTermination(requestedGatewayValue, wifi_gateway, sizeof(wifi_gateway));
+            copyWithTermination(requestedSubnetValue, wifi_subnet, sizeof(wifi_subnet));
+            copyWithTermination(requestedDnsValue, wifi_dns, sizeof(wifi_dns));
+            String localApSsidToStore = requestedLocalApSsid;
+            String localApPasswordToStore = requestedLocalApPassword;
+            if (requestedMode == static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp)) {
+                if (localApSsidToStore.isEmpty() || localApSsidToStore == F("RiddleMatrix-Box")) {
+                    localApSsidToStore = String(wifi_ssid);
+                }
+                if (requestedLocalApPasswordRaw.isEmpty()) {
+                    localApPasswordToStore = String(wifi_password);
+                }
+            }
+            copyWithTermination(localApSsidToStore, wifi_local_ap_ssid, sizeof(wifi_local_ap_ssid));
+            copyWithTermination(localApPasswordToStore, wifi_local_ap_password, sizeof(wifi_local_ap_password));
 
             saveConfig();
 
@@ -850,6 +1077,19 @@ void setupWebServer() {
             if (passwordUnchanged) {
                 response += " Hinweis: Passwort blieb unverändert.";
             }
+
+            if (appliedInfraDefaults) {
+                response += " Hinweis: Ziel-WLAN wurde auf RiddleMatrix_WLAN / ChangeMe-RiddleMatrix! gesetzt.";
+            }
+
+            if (requestedMode == static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {
+                response += " Modus: Standard/zeitweise.";
+            } else if (requestedMode == static_cast<uint8_t>(WiFiOperationMode::AlwaysConnected)) {
+                response += " Modus: dauerhaftes WLAN. WiFi-Symbol bleibt aus.";
+            } else {
+                response += " Modus: AP+STA/Mesh-Kopie. WiFi-Symbol bleibt aus.";
+            }
+            response += " Neustart der Box empfohlen, damit WLAN-Modus und IP-Konfiguration sauber neu starten.";
 
             request->send(200, "text/plain", response);
         } else {

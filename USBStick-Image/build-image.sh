@@ -96,8 +96,8 @@ write_public_ap_env() {
   cat > "$output" <<'EOF'
 # RiddleMatrix Hotspot-Konfiguration
 # Diese Datei kann unter Windows mit dem RiddleMatrix Windows Manager angepasst werden.
-SSID='RiddleMatrix-Hotspot'
-WPA_PASSPHRASE='BittePasswortAnpassen123!'
+SSID='RiddleMatrix_AP'
+WPA_PASSPHRASE='RiddleMatrix-Setup!'
 EOF
 }
 

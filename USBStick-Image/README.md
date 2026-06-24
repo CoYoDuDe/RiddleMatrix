@@ -62,8 +62,8 @@ UEFI-Boot nutzt die FAT32-Partition als ESP. Legacy-Boot nutzt GRUB im MBR plus 
 Die Datei `config/public_ap.env` liegt auf der Windows-sichtbaren FAT32-Partition:
 
 ```bash
-SSID='RiddleMatrix-Hotspot'
-WPA_PASSPHRASE='BittePasswortAnpassen123!'
+SSID='RiddleMatrix_AP'
+WPA_PASSPHRASE='RiddleMatrix-Setup!'
 ```
 
 Im Windows-Manager koennen SSID und Passwort gespeichert und mit `USB-Stick WLAN speichern` auf den Stick geschrieben werden. Beim Linux-Boot verwendet `/etc/usbstick/public_ap.env` diese Datei.

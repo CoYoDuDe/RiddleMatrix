@@ -104,7 +104,7 @@ unangetastet. Beide Kopierpfade protokollieren die Ausschlüsse explizit, sodass
 Hotspot-Konfigurationen erhalten wurden.
 
 Passen Sie unmittelbar nach der Installation SSID und WPA-Passphrase an, damit der Hotspot nicht mit den Standardwerten
-(`RiddleMatrix-Hotspot` / `BittePasswortAnpassen123!`) aktiv bleibt:
+(`RiddleMatrix_AP` / `RiddleMatrix-Setup!`) aktiv bleibt:
 
 ```bash
 sudo editor /etc/usbstick/public_ap.env

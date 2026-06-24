@@ -20,8 +20,8 @@ function Ensure-SettingsDirectory {
 
 function Get-DefaultSettings {
     [ordered]@{
-        Ssid = 'RiddleMatrix-Hotspot'
-        Password = 'BittePasswortAnpassen123!'
+        Ssid = 'RiddleMatrix_AP'
+        Password = 'RiddleMatrix-Setup!'
         ManagerPort = 8080
         BoxSubnet = '192.168.137'
         ServerPid = 0

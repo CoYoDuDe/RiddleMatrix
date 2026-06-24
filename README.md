@@ -22,6 +22,14 @@ Frisch geflashte Boxen nutzen beim ersten Start diese Standard-WLAN-Daten:
 
 Diese Werte sind in `src/config.cpp` als `DEFAULT_WIFI_SSID` und `DEFAULT_WIFI_PASSWORD` hinterlegt. Sie werden verwendet, wenn im EEPROM der Box noch keine gültigen WLAN-Daten gespeichert sind.
 
+Die Weboberflaeche bietet drei WLAN-Modi:
+
+- `Standard`: Die Box verbindet sich wie bisher nur zum Manager-Hotspot, zeigt dabei optional das WiFi-Symbol und schaltet WLAN nach Inaktivitaet wieder ab.
+- `Dauerhaftes WLAN`: Die Box bleibt in einem bestehenden WLAN online, reconnectet automatisch, nutzt wahlweise DHCP oder eine feste IP und zeigt kein WiFi-Symbol auf der Matrix.
+- `AP+STA/Mesh-Kopie`: Die Box verbindet sich mit dem bestehenden WLAN und startet parallel einen lokalen Box-AP. Wenn keine lokalen AP-Daten eingetragen werden, uebernimmt der lokale AP dieselbe SSID und dasselbe Passwort wie das Ziel-WLAN.
+
+Fuer die dauerhaften WLAN-Modi sind als Vorschlag `RiddleMatrix_WLAN` und `ChangeMe-RiddleMatrix!` hinterlegt, wenn von den frischen Manager-Hotspot-Daten auf einen permanenten Modus umgestellt wird. Die Uhrzeit wird bei erfolgreicher WLAN-Verbindung automatisch per NTP synchronisiert; zusaetzlich gibt es in der Oberflaeche eine manuelle NTP-Synchronisierung.
+
 1. Firmware kompilieren und hochladen.
 2. Box mit dem RiddleMatrix-Hotspot verbinden lassen.
 3. Nach erfolgreicher Verbindung `http://<hostname>` aufrufen und bei Bedarf neue Zugangsdaten im EEPROM speichern.
@@ -93,7 +101,7 @@ Nach der Einrichtung zeigt die Firmware die Buchstaben automatisch an und kann �
 
 ## Konfiguration
 
-`config.h` enthält Platzhalter für drahtlose Zugangsdaten, falls noch nichts im EEPROM gespeichert ist. Echte Zugangsdaten sollten **nicht** ins Repository gelangen. Sie können initial über das EEPROM oder die Konfigurationsseite gesetzt werden. Der Parameter `wifi_connect_timeout` bestimmt, wie lange die Verbindung versucht wird (Standard 30 Sekunden).
+`src/config.cpp` enthaelt die Standardwerte fuer frisch geflashte Boxen und die Vorschlagswerte fuer dauerhafte WLAN-Modi. Der Parameter `wifi_connect_timeout` bestimmt, wie lange die Verbindung versucht wird (Standard 30 Sekunden).
 
 > **Hinweis:** Die Firmware erkennt jetzt gelöschte EEPROM-Zellen plattformunabhängig. Vergleiche gegen `0xFF` erfolgen explizit auf `uint8_t`-Basis, sodass Host-Tests und der ESP8266 dieselbe Initialisierung der Voreinstellungen auslösen.
 
@@ -180,7 +188,7 @@ Ein fertiges Raw-Image fuer Win32DiskImager/Rufus/balenaEtcher kann mit dem Buil
 
 ### Hotspot-Zugangsdaten für den USB-Stick-Installer
 
-- Die Vorlage [`USBStick-Setup/files/etc/usbstick/public_ap.env.example`](USBStick-Setup/files/etc/usbstick/public_ap.env.example) enthält gültige Platzhalterwerte (`RiddleMatrix-Hotspot`, `BittePasswortAnpassen123!`) für SSID und WPA-Passphrase.
+- Die Vorlage [`USBStick-Setup/files/etc/usbstick/public_ap.env.example`](USBStick-Setup/files/etc/usbstick/public_ap.env.example) enthaelt die Standardwerte `RiddleMatrix_AP` und `RiddleMatrix-Setup!` fuer SSID und WPA-Passphrase.
 - `setup.sh` kopiert die Vorlage bei der Installation einmalig nach `/etc/usbstick/public_ap.env`, sofern dort noch keine Datei existiert. Dry-Runs weisen den Schritt explizit als geplante Aktion aus. Sowohl der reguläre `rsync`-Pfad als auch der `tar`-Fallback schließen die Datei beim reinen Kopieren des Payloads aus und protokollieren, dass vorhandene Hotspot-Konfigurationen unangetastet bleiben.
 - `bootlocal.sh` und `root/install_public_ap.sh` protokollieren fehlende oder unvollständige Dateien, verweisen auf die Vorlage und greifen automatisch auf dieselben Standardwerte zurück, anstatt mit einem Fehler abzubrechen.
 - Nach der Installation sollten die Werte in `/etc/usbstick/public_ap.env` direkt angepasst werden, um individuelle Hotspot-Zugangsdaten zu verwenden.

@@ -11,8 +11,25 @@ char hostname[50] = "";
 // RiddleMatrix manager/hotspot defaults so unconfigured boxes can join.
 constexpr char DEFAULT_WIFI_SSID[] = "RiddleMatrix_AP";
 constexpr char DEFAULT_WIFI_PASSWORD[] = "RiddleMatrix-Setup!";
+const char DEFAULT_INFRA_WIFI_SSID[] = "RiddleMatrix_WLAN";
+const char DEFAULT_INFRA_WIFI_PASSWORD[] = "ChangeMe-RiddleMatrix!";
 constexpr char DEFAULT_HOSTNAME[] = "your-device-hostname";
+constexpr char DEFAULT_WIFI_STATIC_IP[] = "192.168.137.50";
+constexpr char DEFAULT_WIFI_GATEWAY[] = "192.168.137.1";
+constexpr char DEFAULT_WIFI_SUBNET[] = "255.255.255.0";
+constexpr char DEFAULT_WIFI_DNS[] = "192.168.137.1";
+constexpr char DEFAULT_WIFI_LOCAL_AP_SSID[] = "RiddleMatrix-Box";
+constexpr char DEFAULT_WIFI_LOCAL_AP_PASSWORD[] = "RiddleMatrix-Setup!";
 int wifi_connect_timeout = 30;
+uint8_t wifi_operation_mode = static_cast<uint8_t>(WiFiOperationMode::TimedManager);
+bool wifi_status_symbol_enabled = true;
+bool wifi_static_ip_enabled = false;
+char wifi_static_ip[16] = "";
+char wifi_gateway[16] = "";
+char wifi_subnet[16] = "";
+char wifi_dns[16] = "";
+char wifi_local_ap_ssid[50] = "";
+char wifi_local_ap_password[50] = "";
 
 static const char DEFAULT_DAILY_LETTERS[NUM_TRIGGERS][NUM_DAYS] = {
     {'A', 'B', 'C', 'D', 'E', 'F', 'G'},
@@ -68,6 +85,7 @@ constexpr uint16_t EEPROM_VERSION_INVALID = 0xFFFF;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_AUTH = 4;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITHOUT_ACTIVITY_WINDOW = 5;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_ACTIVITY_WINDOW = 6;
+constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_COLOR_MODES = 7;
 constexpr uint16_t DEFAULT_ACTIVE_START_MINUTES = 0;
 constexpr uint16_t DEFAULT_ACTIVE_END_MINUTES = 1439;
 
@@ -79,6 +97,32 @@ uint16_t getFullRandomPaletteMask() {
         mask |= static_cast<uint16_t>(1U << index);
     }
     return mask;
+}
+
+void copyDefaultString(char *destination, size_t destinationSize, const char *value) {
+    strncpy(destination, value, destinationSize);
+    destination[destinationSize - 1] = '\0';
+}
+
+void resetNetworkExtensionDefaults() {
+    wifi_operation_mode = static_cast<uint8_t>(WiFiOperationMode::TimedManager);
+    wifi_status_symbol_enabled = true;
+    wifi_static_ip_enabled = false;
+    copyDefaultString(wifi_static_ip, sizeof(wifi_static_ip), DEFAULT_WIFI_STATIC_IP);
+    copyDefaultString(wifi_gateway, sizeof(wifi_gateway), DEFAULT_WIFI_GATEWAY);
+    copyDefaultString(wifi_subnet, sizeof(wifi_subnet), DEFAULT_WIFI_SUBNET);
+    copyDefaultString(wifi_dns, sizeof(wifi_dns), DEFAULT_WIFI_DNS);
+    copyDefaultString(wifi_local_ap_ssid, sizeof(wifi_local_ap_ssid), DEFAULT_WIFI_LOCAL_AP_SSID);
+    copyDefaultString(wifi_local_ap_password, sizeof(wifi_local_ap_password), DEFAULT_WIFI_LOCAL_AP_PASSWORD);
+}
+
+bool isValidOperationModeValue(uint8_t mode) {
+    return mode <= static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp);
+}
+
+bool isValidIPv4Literal(const char *value) {
+    IPAddress parsed;
+    return value != nullptr && parsed.fromString(value);
 }
 
 bool isValidHexColor(const char *value) {
@@ -346,6 +390,24 @@ void loadConfigFromVersion6Layout() {
     EEPROM.get(EEPROM_OFFSET_ACTIVE_END_MINUTES, standalone_active_end_minutes);
 }
 
+void loadConfigFromVersion7Layout() {
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
+    EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
+    sanitizeColorMatrix(dailyLetterColors);
+    EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, letter_trigger_delays);
+    EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
+    uint8_t autoModeByte = 0;
+    EEPROM.get(EEPROM_OFFSET_AUTO_MODE, autoModeByte);
+    autoDisplayMode = (autoModeByte == 1);
+    EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
+    EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
+    EEPROM.get(EEPROM_OFFSET_WIFI_CONNECT_TIMEOUT, wifi_connect_timeout);
+    EEPROM.get(EEPROM_OFFSET_ACTIVE_START_MINUTES, standalone_active_start_minutes);
+    EEPROM.get(EEPROM_OFFSET_ACTIVE_END_MINUTES, standalone_active_end_minutes);
+    EEPROM.get(EEPROM_OFFSET_COLOR_MODE_MATRIX, dailyLetterColorModes);
+    EEPROM.get(EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX, dailyLetterRandomPaletteMasks);
+}
+
 } // namespace
 
 void saveConfig() {
@@ -371,6 +433,17 @@ void saveConfig() {
     EEPROM.put(EEPROM_OFFSET_ACTIVE_END_MINUTES, standalone_active_end_minutes);
     EEPROM.put(EEPROM_OFFSET_COLOR_MODE_MATRIX, dailyLetterColorModes);
     EEPROM.put(EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX, dailyLetterRandomPaletteMasks);
+    EEPROM.put(EEPROM_OFFSET_WIFI_OPERATION_MODE, wifi_operation_mode);
+    uint8_t statusSymbolByte = wifi_status_symbol_enabled ? 1 : 0;
+    uint8_t staticIpByte = wifi_static_ip_enabled ? 1 : 0;
+    EEPROM.put(EEPROM_OFFSET_WIFI_STATUS_SYMBOL_ENABLED, statusSymbolByte);
+    EEPROM.put(EEPROM_OFFSET_WIFI_STATIC_IP_ENABLED, staticIpByte);
+    EEPROM.put(EEPROM_OFFSET_WIFI_STATIC_IP, wifi_static_ip);
+    EEPROM.put(EEPROM_OFFSET_WIFI_GATEWAY, wifi_gateway);
+    EEPROM.put(EEPROM_OFFSET_WIFI_SUBNET, wifi_subnet);
+    EEPROM.put(EEPROM_OFFSET_WIFI_DNS, wifi_dns);
+    EEPROM.put(EEPROM_OFFSET_WIFI_LOCAL_AP_SSID, wifi_local_ap_ssid);
+    EEPROM.put(EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD, wifi_local_ap_password);
     EEPROM.commit();
 
     Serial.println(F("✅ Einstellungen erfolgreich gespeichert!"));
@@ -383,6 +456,7 @@ void loadConfig() {
     resetTriggerDelaysToDefaults();
     standalone_active_start_minutes = DEFAULT_ACTIVE_START_MINUTES;
     standalone_active_end_minutes = DEFAULT_ACTIVE_END_MINUTES;
+    resetNetworkExtensionDefaults();
 
     EEPROM.begin(EEPROM_SIZE);
     EEPROM.get(EEPROM_OFFSET_WIFI_SSID, wifi_ssid);
@@ -455,6 +529,29 @@ void loadConfig() {
         EEPROM.get(EEPROM_OFFSET_ACTIVE_END_MINUTES, standalone_active_end_minutes);
         EEPROM.get(EEPROM_OFFSET_COLOR_MODE_MATRIX, dailyLetterColorModes);
         EEPROM.get(EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX, dailyLetterRandomPaletteMasks);
+        EEPROM.get(EEPROM_OFFSET_WIFI_OPERATION_MODE, wifi_operation_mode);
+        uint8_t statusSymbolByte = 1;
+        uint8_t staticIpByte = 0;
+        EEPROM.get(EEPROM_OFFSET_WIFI_STATUS_SYMBOL_ENABLED, statusSymbolByte);
+        EEPROM.get(EEPROM_OFFSET_WIFI_STATIC_IP_ENABLED, staticIpByte);
+        wifi_status_symbol_enabled = (statusSymbolByte == 1);
+        wifi_static_ip_enabled = (staticIpByte == 1);
+        EEPROM.get(EEPROM_OFFSET_WIFI_STATIC_IP, wifi_static_ip);
+        wifi_static_ip[sizeof(wifi_static_ip) - 1] = '\0';
+        EEPROM.get(EEPROM_OFFSET_WIFI_GATEWAY, wifi_gateway);
+        wifi_gateway[sizeof(wifi_gateway) - 1] = '\0';
+        EEPROM.get(EEPROM_OFFSET_WIFI_SUBNET, wifi_subnet);
+        wifi_subnet[sizeof(wifi_subnet) - 1] = '\0';
+        EEPROM.get(EEPROM_OFFSET_WIFI_DNS, wifi_dns);
+        wifi_dns[sizeof(wifi_dns) - 1] = '\0';
+        EEPROM.get(EEPROM_OFFSET_WIFI_LOCAL_AP_SSID, wifi_local_ap_ssid);
+        wifi_local_ap_ssid[sizeof(wifi_local_ap_ssid) - 1] = '\0';
+        EEPROM.get(EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD, wifi_local_ap_password);
+        wifi_local_ap_password[sizeof(wifi_local_ap_password) - 1] = '\0';
+    } else if (storedVersion == EEPROM_CONFIG_VERSION_WITH_COLOR_MODES) {
+        Serial.println(F("ℹ️ Konfiguration ohne erweiterte WLAN-Optionen erkannt – setze WLAN-Defaults."));
+        loadConfigFromVersion7Layout();
+        migratedLegacyLayout = true;
     } else if (storedVersion == EEPROM_CONFIG_VERSION_WITH_ACTIVITY_WINDOW) {
         Serial.println(F("ℹ️ Konfiguration ohne Farbmodi erkannt – feste Farben werden übernommen."));
         loadConfigFromVersion6Layout();
@@ -638,6 +735,62 @@ void loadConfig() {
     if (wifi_connect_timeout < 1 || wifi_connect_timeout > 300) {
         Serial.println("🛑 Ungültiger WiFi-Timeout! Setze Standardwert...");
         wifi_connect_timeout = 30;
+        eepromUpdated = true;
+    }
+
+    if (!isValidOperationModeValue(wifi_operation_mode)) {
+        Serial.println(F("⚠️ Ungültiger WLAN-Betriebsmodus! Setze Timeout-Manager-Modus."));
+        wifi_operation_mode = static_cast<uint8_t>(WiFiOperationMode::TimedManager);
+        eepromUpdated = true;
+    }
+
+    if (wifi_status_symbol_enabled && wifi_operation_mode != static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {
+        Serial.println(F("ℹ️ WLAN-Symbol wird in permanenten Netzwerkmodi deaktiviert."));
+        wifi_status_symbol_enabled = false;
+        eepromUpdated = true;
+    }
+
+    if (wifi_static_ip_enabled) {
+        if (!isValidIPv4Literal(wifi_static_ip)) {
+            Serial.println(F("⚠️ Ungültige statische IP! Setze Standard-IP."));
+            copyDefaultString(wifi_static_ip, sizeof(wifi_static_ip), DEFAULT_WIFI_STATIC_IP);
+            eepromUpdated = true;
+        }
+        if (!isValidIPv4Literal(wifi_gateway)) {
+            Serial.println(F("⚠️ Ungültiges Gateway! Setze Standard-Gateway."));
+            copyDefaultString(wifi_gateway, sizeof(wifi_gateway), DEFAULT_WIFI_GATEWAY);
+            eepromUpdated = true;
+        }
+        if (!isValidIPv4Literal(wifi_subnet)) {
+            Serial.println(F("⚠️ Ungültige Subnetzmaske! Setze Standard-Subnetz."));
+            copyDefaultString(wifi_subnet, sizeof(wifi_subnet), DEFAULT_WIFI_SUBNET);
+            eepromUpdated = true;
+        }
+        if (!isValidIPv4Literal(wifi_dns)) {
+            Serial.println(F("⚠️ Ungültiger DNS-Server! Setze Standard-DNS."));
+            copyDefaultString(wifi_dns, sizeof(wifi_dns), DEFAULT_WIFI_DNS);
+            eepromUpdated = true;
+        }
+    }
+
+    const bool localApSsidInvalid =
+        strnLength(wifi_local_ap_ssid, sizeof(wifi_local_ap_ssid)) < 2 ||
+        isWhitespaceOnly(wifi_local_ap_ssid, sizeof(wifi_local_ap_ssid)) ||
+        containsNonPrintable(wifi_local_ap_ssid, sizeof(wifi_local_ap_ssid)) ||
+        contains0xFF(wifi_local_ap_ssid, sizeof(wifi_local_ap_ssid));
+    if (localApSsidInvalid) {
+        Serial.println(F("⚠️ Ungültige lokale AP-SSID! Setze Standardwert."));
+        copyDefaultString(wifi_local_ap_ssid, sizeof(wifi_local_ap_ssid), DEFAULT_WIFI_LOCAL_AP_SSID);
+        eepromUpdated = true;
+    }
+
+    const bool localApPasswordInvalid =
+        isWhitespaceOnly(wifi_local_ap_password, sizeof(wifi_local_ap_password)) ||
+        containsNonPrintable(wifi_local_ap_password, sizeof(wifi_local_ap_password)) ||
+        contains0xFF(wifi_local_ap_password, sizeof(wifi_local_ap_password));
+    if (localApPasswordInvalid) {
+        Serial.println(F("⚠️ Ungültiges lokales AP-Passwort! Setze Standardwert."));
+        copyDefaultString(wifi_local_ap_password, sizeof(wifi_local_ap_password), DEFAULT_WIFI_LOCAL_AP_PASSWORD);
         eepromUpdated = true;
     }
 

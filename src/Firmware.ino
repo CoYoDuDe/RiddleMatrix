@@ -68,7 +68,7 @@ void loop() {
         if (elapsedTime >= ((unsigned long)letter_display_time * 1000UL)) {
             Serial.println(F("🧹 Anzeigezeit abgelaufen, Buchstabe wird gelöscht!"));
             clearDisplay();
-            if (!triggerActive && wifiConnected && !wifiDisabled) {
+            if (!triggerActive && wifiConnected && !wifiDisabled && wifi_status_symbol_enabled) {
                 Serial.println(F("🔁 Sicherheits-Check: WiFi-Symbol nach dem Löschen erneut anzeigen."));
                 drawWiFiSymbol();
             }
@@ -87,7 +87,8 @@ void loop() {
     checkAutoDisplay();
     processPendingTriggers();
 
-    if (!triggerActive && wifiConnected && !wifiDisabled && wifiStartTime != 0) {
+    if (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::TimedManager) &&
+        !triggerActive && wifiConnected && !wifiDisabled && wifiStartTime != 0) {
         unsigned long now = millis();
         if (now - wifiStartTime >= WIFI_IDLE_TIMEOUT_MS) {
             Serial.println(F("⏱️ Keine Anzeigeaktivität – deaktiviere WiFi & Webserver."));
