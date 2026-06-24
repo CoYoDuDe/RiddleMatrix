@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <title>Boxen verwalten</title>
   <script src="/vendor/xlsx.full.min.js"></script>
+  <script>window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 = window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 || "";</script>
+  <script src="/webspace-config.js"></script>
   <script type="text/javascript">
     var gk_isXlsx = false;
     var gk_xlsxFileLookup = {};
@@ -53,11 +55,12 @@
     #deviceList { flex-grow: 1; overflow-y: auto; }
     .device { padding: 8px; cursor: pointer; border-bottom: 1px solid #555; }
     .device:hover { background: #444; }
-    #shutdown, #setupBtn {
+    #shutdown, #setupBtn, #settingsBtn {
       margin-top: 10px; padding: 10px; font-size: 14px; cursor: pointer;
     }
     #shutdown { background: red; color: white; }
-    #setupBtn { background: #555; color: white; width: 100%; }
+    #setupBtn, #settingsBtn { background: #555; color: white; width: 100%; }
+    #settingsBtn { display: none; }
     #content {
       flex-grow: 1; background: #f4f4f4; padding: 0; overflow-y: auto; position: relative;
     }
@@ -130,6 +133,19 @@
     .transfer-badge {
       color: green; font-weight: bold; margin-left: 8px;
     }
+    .auth-overlay {
+      position: fixed; inset: 0; z-index: 9999; background: #1f2937; color: white;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .auth-card {
+      width: min(420px, 100%); background: #fff; color: #111827; padding: 22px;
+      border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    }
+    .auth-card input { width: 100%; box-sizing: border-box; padding: 10px; margin: 10px 0; }
+    .auth-card button { padding: 10px 14px; }
+    .settings-grid {
+      display: grid; grid-template-columns: minmax(160px, 260px) auto; gap: 8px; align-items: center;
+    }
   </style>
 </head>
 <body onload="init()">
@@ -139,7 +155,10 @@
     <button id="setupBtn" onclick="showSetup()">Boxen verwalten</button>
     <div id="deviceList">Lade...</div>
   </div>
-  <button id="shutdown" onclick="shutdown()">Herunterfahren</button>
+  <div>
+    <button id="settingsBtn" onclick="showAppSettings()">Einstellungen</button>
+    <button id="shutdown" onclick="shutdown()">Herunterfahren</button>
+  </div>
 </div>
 <div id="content"><p>Willkommen im Märchen-Manager</p></div>
 <script>
@@ -160,7 +179,10 @@ let localBrowserMode = false;
 let localScanInFlight = false;
 let localScanAbortController = null;
 let localScanSubnet = "192.168.137";
+let localAutoScanStarted = false;
+let webspaceAuthenticated = false;
 const localStorageKey = "riddlematrix.localBrowserConfig.v1";
+const webspaceAuthStorageKey = "riddlematrix.webspaceAuth.v1";
 const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 const dayNames = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const firmwareDayIndexByDay = { so: 0, mo: 1, di: 2, mi: 3, do: 4, fr: 5, sa: 6 };
@@ -188,6 +210,80 @@ let separateWordTriggers = true;
 let separateBoxTriggers = true;
 function isHostedHttpsMode() {
   return location.protocol === "https:" && !["localhost", "127.0.0.1", "::1"].includes(location.hostname);
+}
+
+function updateRuntimeButtons() {
+  const shutdownButton = document.getElementById("shutdown");
+  const settingsButton = document.getElementById("settingsBtn");
+  const shutdownAvailable = !!shutdownButton;
+  const shouldShowShutdown = shutdownAvailable && !isHostedHttpsMode() && location.protocol !== "file:";
+  if (shutdownButton && !shouldShowShutdown) {
+    shutdownButton.style.display = "none";
+  }
+  if (settingsButton && (!shutdownButton || !shouldShowShutdown || isHostedHttpsMode() || location.protocol === "file:")) {
+    settingsButton.style.display = "block";
+  }
+}
+
+async function sha256Hex(value) {
+  const bytes = new TextEncoder().encode(String(value || ""));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function ensureWebspaceAccess() {
+  if (!isHostedHttpsMode()) {
+    webspaceAuthenticated = true;
+    return true;
+  }
+  const expectedHash = String(window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 || "").trim().toLowerCase();
+  if (!expectedHash) {
+    webspaceAuthenticated = true;
+    return true;
+  }
+  if (window.sessionStorage.getItem(webspaceAuthStorageKey) === expectedHash) {
+    webspaceAuthenticated = true;
+    return true;
+  }
+
+  return new Promise(resolve => {
+    const overlay = document.createElement("div");
+    overlay.className = "auth-overlay";
+    overlay.innerHTML = `
+      <div class="auth-card">
+        <h2>Märchen Manager</h2>
+        <p>Bitte Passwort eingeben.</p>
+        <input id="webspacePasswordInput" type="password" autocomplete="current-password" autofocus>
+        <button id="webspacePasswordButton" type="button">Öffnen</button>
+        <p id="webspacePasswordStatus" class="status"></p>
+      </div>`;
+    document.body.appendChild(overlay);
+    const input = document.getElementById("webspacePasswordInput");
+    const button = document.getElementById("webspacePasswordButton");
+    const status = document.getElementById("webspacePasswordStatus");
+    const submit = async () => {
+      const hash = await sha256Hex(input.value);
+      if (hash === expectedHash) {
+        window.sessionStorage.setItem(webspaceAuthStorageKey, expectedHash);
+        webspaceAuthenticated = true;
+        overlay.remove();
+        resolve(true);
+      } else {
+        status.textContent = "Passwort falsch.";
+        input.value = "";
+        input.focus();
+      }
+    };
+    button.addEventListener("click", submit);
+    input.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        submit();
+      }
+    });
+    input.focus();
+  });
 }
 
 function loadLocalBrowserConfig() {
@@ -241,6 +337,10 @@ function enterLocalBrowserMode(reason) {
   if (statusArea) {
     const message = reason || "Webspace-Modus aktiv: Boxen werden direkt aus diesem Browser im lokalen WLAN verwaltet.";
     statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
+  }
+  if (isHostedHttpsMode() && !localAutoScanStarted) {
+    localAutoScanStarted = true;
+    window.setTimeout(() => scanLocalSubnet({ automatic: true }), 250);
   }
 }
 
@@ -515,16 +615,21 @@ function stopLocalScan() {
   }
 }
 
-async function scanLocalSubnet() {
+async function scanLocalSubnet(options = {}) {
+  const automatic = !!options.automatic;
   if (localScanInFlight) {
-    stopLocalScan();
+    if (!automatic) {
+      stopLocalScan();
+    }
     return;
   }
 
   const subnetInput = document.getElementById("localSubnetPrefix");
   const subnet = validateSubnetPrefix(subnetInput ? subnetInput.value : localScanSubnet);
   if (!subnet) {
-    alert("Bitte ein gueltiges Subnetz eintragen, z.B. 192.168.137");
+    if (!automatic) {
+      alert("Bitte ein gueltiges Subnetz eintragen, z.B. 192.168.137");
+    }
     return;
   }
 
@@ -546,7 +651,7 @@ async function scanLocalSubnet() {
   const concurrency = 18;
   let cursor = 0;
 
-  updateLocalScanStatus(`Scanne ${subnet}.2-${subnet}.254 aus diesem Browser...`);
+  updateLocalScanStatus(`Suche Märchen im lokalen Netz ${subnet}.0/24...`);
 
   async function worker() {
     while (cursor < ips.length && !localScanAbortController.signal.aborted) {
@@ -562,7 +667,7 @@ async function scanLocalSubnet() {
         saveLocalBrowserConfig();
       }
       if (checked % 10 === 0 || result) {
-        updateLocalScanStatus(`Scan ${subnet}: ${checked}/${ips.length} geprueft, ${found} Box(en) gefunden.`);
+        updateLocalScanStatus(`Suche Märchen: ${checked}/${ips.length} geprüft, ${found} gefunden.`);
       }
     }
   }
@@ -584,8 +689,8 @@ async function scanLocalSubnet() {
     showSetup();
     updateLocalScanStatus(
       aborted
-        ? `Scan abgebrochen. ${found} Box(en) gefunden.`
-        : `Scan abgeschlossen. ${found} Box(en) gefunden.`
+        ? `Suche abgebrochen. ${found} Märchen gefunden.`
+        : `Suche abgeschlossen. ${found} Märchen gefunden.`
     );
   }
 }
@@ -626,7 +731,12 @@ function scheduleNextDevicesPoll(delay = devicesPollIntervalMs) {
   }, normalizedDelay);
 }
 
-function init() {
+async function init() {
+  updateRuntimeButtons();
+  const allowed = await ensureWebspaceAccess();
+  if (!allowed) {
+    return;
+  }
   fetchDevices();
 }
 
@@ -857,16 +967,7 @@ function showSetup() {
   let html = '<h2>Boxen verwalten</h2>';
   const maxLength = boxOrder.length;
   if (localBrowserMode) {
-    html += '<div class="box-card"><h3>Webspace/Lokal-Modus</h3>';
-    html += '<p>Diese Seite laeuft vom Webspace. Die Boxen bleiben in deinem lokalen WLAN; die Verwaltung passiert direkt aus diesem Browser und wird lokal im Browser gespeichert.</p>';
-    html += `<p>Subnetz: <input id="localSubnetPrefix" type="text" value="${escapeHtml(localScanSubnet)}" placeholder="z.B. 192.168.137"> `;
-    html += '<button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button></p>';
-    html += '<p>Box-IP: <input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> ';
-    html += '<button type="button" onclick="learnLocalBoxFromIp()">Box per IP hinzufuegen/lernen</button></p>';
     html += '<div id="localScanStatus"></div>';
-    html += '<p>Wichtig: Automatisches Finden geht nur aus deinem Browser im selben lokalen Netz. Die Boxen brauchen dafuer die aktuelle Firmware mit CORS/Private-Network-Freigabe.</p>';
-    html += '<p>Hinweis: Das eingebettete Box-Webinterface wird bei HTTPS aus Sicherheitsgruenden nicht im iframe geladen. Nutze den Box-Link in der linken Liste oder den Button im Inhaltsbereich.</p>';
-    html += '</div>';
   }
 
   html += '<div class="box-card"><h3>Wörter für Wochentage</h3>';
@@ -997,6 +1098,27 @@ function showSetup() {
   statusArea = document.getElementById("statusArea");
   renderTransferStatus();
   updateTransferButton();
+}
+
+function showAppSettings() {
+  let html = '<h2>Einstellungen</h2>';
+  html += '<div class="box-card">';
+  html += '<h3>Lokale Märchen-Suche</h3>';
+  html += '<div class="settings-grid">';
+  html += '<label for="localSubnetPrefix">IP-Bereich</label>';
+  html += `<input id="localSubnetPrefix" type="text" value="${escapeHtml(localScanSubnet)}" placeholder="z.B. 192.168.137">`;
+  html += '<span></span><button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button>';
+  html += '<label for="localBoxIp">Box-IP direkt</label>';
+  html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> <button type="button" onclick="learnLocalBoxFromIp()">Hinzufügen/lernen</button></span>';
+  html += '</div>';
+  html += '<div id="localScanStatus" style="margin-top:10px;"></div>';
+  html += '<p>Die Suche läuft im Browser und übernimmt nur Geräte, die wie RiddleMatrix-Boxen antworten.</p>';
+  if (isHostedHttpsMode()) {
+    html += '<p>Die öffentliche Server-Seite kann dein lokales Netzwerk nicht selbst sehen; der Browser auf diesem Gerät übernimmt die lokale Suche.</p>';
+  }
+  html += '</div>';
+  document.getElementById("content").innerHTML = html;
+  statusArea = document.getElementById("localScanStatus");
 }
 
 function handleKeydown(event, day, word, maxLength, inputElement, triggerIndex = 0, applyAllTriggers = false) {

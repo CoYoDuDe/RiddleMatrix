@@ -1047,6 +1047,16 @@ def vendor_static(filename: str):
     return send_from_directory(VENDOR_DIR, filename)
 
 
+@app.route("/webspace-config.js")
+def webspace_config():
+    return (
+        "window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 = "
+        "window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 || '';\n",
+        200,
+        {"Content-Type": "application/javascript; charset=utf-8"},
+    )
+
+
 @app.route("/devices")
 def devices():
     try:

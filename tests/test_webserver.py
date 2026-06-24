@@ -45,6 +45,17 @@ def webserver_app(tmp_path):
         yield module, client
 
 
+def test_webspace_config_route_is_safe_empty_default(webserver_app):
+    _, client = webserver_app
+
+    response = client.get("/webspace-config.js")
+
+    assert response.status_code == 200
+    assert response.mimetype == "application/javascript"
+    assert "RIDDLEMATRIX_WEBSPACE_AUTH_SHA256" in response.get_data(as_text=True)
+    assert "|| ''" in response.get_data(as_text=True)
+
+
 def test_load_config_recovers_from_corrupted_file(tmp_path):
     module = _load_webserver(tmp_path)
     config_path = Path(module.CONFIG_FILE)
