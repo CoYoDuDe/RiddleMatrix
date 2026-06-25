@@ -211,7 +211,7 @@ const localStorageKey = "riddlematrix.localBrowserConfig.v1";
 const symbolStorageKey = "riddlematrix.customSymbols.v1";
 const webspaceAuthStorageKey = "riddlematrix.webspaceAuth.v1";
 const managerBasePath = location.pathname.endsWith("/")
-   location.pathname
+  ? location.pathname
   : location.pathname.replace(/[^/]*$/, "");
 const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 const dayNames = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -347,9 +347,9 @@ function loadLocalBrowserConfig() {
       return { boxen: {}, boxOrder: [] };
     }
     return {
-      boxen: parsed.boxen && typeof parsed.boxen === "object"  parsed.boxen : {},
-      boxOrder: Array.isArray(parsed.boxOrder)  parsed.boxOrder : Object.keys(parsed.boxen || {}),
-      localScanSubnet: typeof parsed.localScanSubnet === "string"  parsed.localScanSubnet : "192.168.137"
+      boxen: parsed.boxen && typeof parsed.boxen === "object" ? parsed.boxen : {},
+      boxOrder: Array.isArray(parsed.boxOrder) ? parsed.boxOrder : Object.keys(parsed.boxen || {}),
+      localScanSubnet: typeof parsed.localScanSubnet === "string" ? parsed.localScanSubnet : "192.168.137"
     };
   } catch (error) {
     console.warn("Lokale Browser-Konfiguration konnte nicht gelesen werden:", error);
@@ -372,13 +372,13 @@ function loadManagerCustomSymbols() {
     }
     const normalized = {};
     customSymbolSlots.forEach(slot => {
-      const stored = parsed[slot] && typeof parsed[slot] === "object"  parsed[slot] : {};
+      const stored = parsed[slot] && typeof parsed[slot] === "object" ? parsed[slot] : {};
       normalized[slot] = {
         name: typeof stored.name === "string" && stored.name.trim()
-           stored.name.trim().slice(0, 32)
+          ? stored.name.trim().slice(0, 32)
           : `Symbol ${slot}`,
         enabled: stored.enabled !== false,
-        bitmap: isValidSymbolHex(stored.bitmap)  String(stored.bitmap).trim().toUpperCase() : symbolBitmapToHex(emptySymbolBitmap())
+        bitmap: isValidSymbolHex(stored.bitmap) ? String(stored.bitmap).trim().toUpperCase() : symbolBitmapToHex(emptySymbolBitmap())
       };
     });
     return normalized;
@@ -421,21 +421,21 @@ function getManagerCustomSymbol(slot) {
   const stored = managerCustomSymbols[normalizedSlot] || {};
   return {
     name: typeof stored.name === "string" && stored.name.trim()
-       stored.name.trim().slice(0, 32)
+      ? stored.name.trim().slice(0, 32)
       : `Symbol ${normalizedSlot}`,
     enabled: stored.enabled !== false,
-    bitmap: isValidSymbolHex(stored.bitmap)  String(stored.bitmap).trim().toUpperCase() : symbolBitmapToHex(emptySymbolBitmap())
+    bitmap: isValidSymbolHex(stored.bitmap) ? String(stored.bitmap).trim().toUpperCase() : symbolBitmapToHex(emptySymbolBitmap())
   };
 }
 
 function getLetterLabel(value) {
-  const key = String(value  "");
+  const key = String(value ?? "");
   if (Object.prototype.hasOwnProperty.call(fixedSymbolLabels, key)) {
     return fixedSymbolLabels[key];
   }
   if (customSymbolSlots.includes(key)) {
     const symbol = getManagerCustomSymbol(key);
-    return symbol.enabled  symbol.name : `${symbol.name} (inaktiv)`;
+    return symbol.enabled ? symbol.name : `${symbol.name} (inaktiv)`;
   }
   return key;
 }
@@ -443,7 +443,7 @@ function getLetterLabel(value) {
 function renderSymbolSlotOptions(selectedSlot = managerSymbolSlot) {
   return customSymbolSlots.map(slot => {
     const symbol = getManagerCustomSymbol(slot);
-    const selected = String(selectedSlot) === slot  "selected" : "";
+    const selected = String(selectedSlot) === slot ? "selected" : "";
     return `<option value="${slot}" ${selected}>${escapeHtml(slot + " - " + symbol.name)}</option>`;
   }).join("");
 }
@@ -511,7 +511,7 @@ function renderManagerSymbolEditor() {
     for (let x = 0; x < 32; x++) {
       const cell = document.createElement("button");
       cell.type = "button";
-      cell.className = "symbol-cell" + (managerSymbolBitIsSet(x, y)  " on" : "");
+      cell.className = "symbol-cell" + (managerSymbolBitIsSet(x, y) ? " on" : "");
       cell.addEventListener("click", () => {
         setManagerSymbolBit(x, y, !managerSymbolBitIsSet(x, y));
         persistCurrentManagerSymbol();
@@ -757,7 +757,7 @@ async function detectLocalSubnetCandidates({ apply = true, silent = false } = {}
   if (!silent) {
     updateLocalScanStatus(
       candidates.length > 0
-         `IP-Bereich erkannt: ${candidates[0]}.0/24`
+        ? `IP-Bereich erkannt: ${candidates[0]}.0/24`
         : "IP-Bereich konnte nicht automatisch erkannt werden. Bitte manuell eintragen."
     );
   }
@@ -792,7 +792,7 @@ function selectedValueFromSelect(doc, names, fallback = "") {
     }
     const selected = select.querySelector("option:checked");
     if (selected) {
-      return selected.value  fallback;
+      return selected.value ?? fallback;
     }
     if (select.value != null) {
       return select.value;
@@ -805,7 +805,7 @@ function inputValueFromNames(doc, names, fallback = "") {
   for (const name of names) {
     const input = doc.querySelector(`input[name="${name}"], input#${name}`);
     if (input) {
-      return input.value  fallback;
+      return input.value ?? fallback;
     }
   }
   return fallback;
@@ -820,13 +820,13 @@ function extractLocalBoxStateFromHtml(html, ip) {
   const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
   const box = makeDefaultBox(ip);
   days.forEach((day, dayIndex) => {
-    const firmwareDayIndex = firmwareDayIndexByDay[day]  dayIndex;
+    const firmwareDayIndex = firmwareDayIndexByDay[day] ?? dayIndex;
     for (let trigger = 0; trigger < triggersPerDay; trigger += 1) {
       const letterNames = [
         `letter_${trigger}_${firmwareDayIndex}`,
         `letter_${trigger}_${dayIndex}`,
-        trigger === 0  `letter${firmwareDayIndex}` : "",
-        trigger === 0  `letter${dayIndex}` : "",
+        trigger === 0 ? `letter${firmwareDayIndex}` : "",
+        trigger === 0 ? `letter${dayIndex}` : "",
         `letter_${firmwareDayIndex}_${trigger}`,
         `letter_${dayIndex}_${trigger}`,
         `letter${firmwareDayIndex}_${trigger}`,
@@ -837,8 +837,8 @@ function extractLocalBoxStateFromHtml(html, ip) {
       const colorNames = [
         `color_${trigger}_${firmwareDayIndex}`,
         `color_${trigger}_${dayIndex}`,
-        trigger === 0  `color${firmwareDayIndex}` : "",
-        trigger === 0  `color${dayIndex}` : "",
+        trigger === 0 ? `color${firmwareDayIndex}` : "",
+        trigger === 0 ? `color${dayIndex}` : "",
         `color_${firmwareDayIndex}_${trigger}`,
         `color_${dayIndex}_${trigger}`,
         `color${firmwareDayIndex}_${trigger}`,
@@ -851,7 +851,7 @@ function extractLocalBoxStateFromHtml(html, ip) {
         `color_mode_${trigger}_${dayIndex}`
       ];
       const mode = selectedValueFromSelect(doc, modeNames, defaultColorMode).trim().toLowerCase();
-      box.colorModes[day][trigger] = ["fixed", "random_selected", "random_all"].includes(mode)  mode : defaultColorMode;
+      box.colorModes[day][trigger] = ["fixed", "random_selected", "random_all"].includes(mode) ? mode : defaultColorMode;
 
       let mask = 0;
       for (let paletteIndex = 0; paletteIndex < randomPalette.length; paletteIndex += 1) {
@@ -872,7 +872,7 @@ function extractLocalBoxStateFromHtml(html, ip) {
       ];
       const parsedDelay = parseFloat(String(inputValueFromNames(doc, delayNames, box.delays[day][trigger])).replace(",", "."));
       box.delays[day][trigger] = Number.isFinite(parsedDelay) && parsedDelay >= 0
-         Math.min(999, Math.round(parsedDelay))
+        ? Math.min(999, Math.round(parsedDelay))
         : defaultDelay;
     }
   });
@@ -901,7 +901,7 @@ async function fetchLocalTriggerDelays(ip, box, signal = null) {
       for (let trigger = 0; trigger < triggersPerDay; trigger += 1) {
         const parsed = parseFloat(String(values[trigger]).replace(",", "."));
         box.delays[day][trigger] = Number.isFinite(parsed) && parsed >= 0
-           Math.min(999, Math.round(parsed))
+          ? Math.min(999, Math.round(parsed))
           : defaultDelay;
       }
     });
@@ -983,7 +983,7 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
 
 async function learnLocalBoxFromIp() {
   const input = document.getElementById("localBoxIp");
-  await learnLocalBoxByIp(input  input.value : "");
+  await learnLocalBoxByIp(input ? input.value : "");
 }
 
 function updateLocalScanStatus(message) {
@@ -1014,7 +1014,7 @@ async function scanLocalSubnet(options = {}) {
   }
 
   const subnetInput = document.getElementById("localSubnetPrefix");
-  const subnet = validateSubnetPrefix(subnetInput  subnetInput.value : localScanSubnet);
+  const subnet = validateSubnetPrefix(subnetInput ? subnetInput.value : localScanSubnet);
   if (!subnet) {
     if (!automatic) {
       alert("Bitte ein gueltiges Subnetz eintragen, z.B. 192.168.137");
@@ -1078,13 +1078,13 @@ async function scanLocalSubnet(options = {}) {
     showSetup();
     updateLocalScanStatus(
       aborted
-         `Suche abgebrochen. ${found} Boxen gefunden.`
+        ? `Suche abgebrochen. ${found} Boxen gefunden.`
         : `Suche abgeschlossen. ${found} Boxen gefunden.`
     );
   }
 }
 function escapeHtml(value) {
-  return String(value  "")
+  return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -1094,7 +1094,7 @@ function escapeHtml(value) {
 }
 
 function sanitizeColor(color) {
-  const value = typeof color === "string"  color.trim() : "";
+  const value = typeof color === "string" ? color.trim() : "";
   if (colorPattern.test(value)) {
     return value.toLowerCase();
   }
@@ -1106,11 +1106,11 @@ function escapeColor(color) {
 }
 
 function escapeJsString(value) {
-  return escapeHtml(JSON.stringify(value  ""));
+  return escapeHtml(JSON.stringify(value ?? ""));
 }
 
 function scheduleNextDevicesPoll(delay = devicesPollIntervalMs) {
-  const normalizedDelay = Number.isFinite(delay) && delay >= 0  delay : devicesPollIntervalMs;
+  const normalizedDelay = Number.isFinite(delay) && delay >= 0 ? delay : devicesPollIntervalMs;
   if (devicesPollTimeoutId) {
     clearTimeout(devicesPollTimeoutId);
   }
@@ -1137,36 +1137,36 @@ function normalizeBox(box) {
   box.colorModes = box.colorModes || {};
   box.colorPaletteMasks = box.colorPaletteMasks || {};
   days.forEach(day => {
-    const letters = Array.isArray(box.letters[day])  box.letters[day].slice(0, triggersPerDay) : [];
+    const letters = Array.isArray(box.letters[day]) ? box.letters[day].slice(0, triggersPerDay) : [];
     while (letters.length < triggersPerDay) letters.push("");
     box.letters[day] = letters;
 
-    const colors = Array.isArray(box.colors[day])  box.colors[day].slice(0, triggersPerDay) : [];
+    const colors = Array.isArray(box.colors[day]) ? box.colors[day].slice(0, triggersPerDay) : [];
     const sanitizedColors = colors.map(sanitizeColor);
     while (sanitizedColors.length < triggersPerDay) sanitizedColors.push(defaultColor);
     box.colors[day] = sanitizedColors;
 
-    const delays = Array.isArray(box.delays[day])  box.delays[day].slice(0, triggersPerDay) : [];
+    const delays = Array.isArray(box.delays[day]) ? box.delays[day].slice(0, triggersPerDay) : [];
     while (delays.length < triggersPerDay) delays.push(defaultDelay);
     box.delays[day] = delays.map(value => {
-      const numeric = typeof value === "number"  value : parseFloat(String(value).replace(",", "."));
+      const numeric = typeof value === "number" ? value : parseFloat(String(value).replace(",", "."));
       if (!Number.isFinite(numeric) || numeric < 0) {
         return defaultDelay;
       }
       return Math.min(999, Math.round(numeric));
     });
 
-    const colorModes = Array.isArray(box.colorModes[day])  box.colorModes[day].slice(0, triggersPerDay) : [];
+    const colorModes = Array.isArray(box.colorModes[day]) ? box.colorModes[day].slice(0, triggersPerDay) : [];
     while (colorModes.length < triggersPerDay) colorModes.push(defaultColorMode);
     box.colorModes[day] = colorModes.map(value => {
-      const normalized = typeof value === "string"  value.trim().toLowerCase() : defaultColorMode;
-      return ["fixed", "random_selected", "random_all"].includes(normalized)  normalized : defaultColorMode;
+      const normalized = typeof value === "string" ? value.trim().toLowerCase() : defaultColorMode;
+      return ["fixed", "random_selected", "random_all"].includes(normalized) ? normalized : defaultColorMode;
     });
 
-    const colorPaletteMasks = Array.isArray(box.colorPaletteMasks[day])  box.colorPaletteMasks[day].slice(0, triggersPerDay) : [];
+    const colorPaletteMasks = Array.isArray(box.colorPaletteMasks[day]) ? box.colorPaletteMasks[day].slice(0, triggersPerDay) : [];
     while (colorPaletteMasks.length < triggersPerDay) colorPaletteMasks.push(defaultColorPaletteMask);
     box.colorPaletteMasks[day] = colorPaletteMasks.map(value => {
-      const numeric = typeof value === "number"  value : parseInt(String(value), 10);
+      const numeric = typeof value === "number" ? value : parseInt(String(value), 10);
       if (!Number.isFinite(numeric) || numeric < 0) {
         return defaultColorPaletteMask;
       }
@@ -1266,7 +1266,7 @@ async function fetchDevices() {
       }
       console.error("Fehler beim Abrufen der Geräte:", e);
       if (statusArea) {
-        const message = ` Fehler beim Laden der Boxen: ${e && e.message  e.message : "Unbekannter Fehler"}`;
+        const message = ` Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
         statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
         statusArea.dataset.fetchError = "true";
       }
@@ -1284,9 +1284,9 @@ async function fetchDevices() {
 function renderDeviceList() {
   const list = document.getElementById("deviceList");
   const visibleBoxes = localBrowserMode
-     boxOrder.map(hostname => ({ hostname, ip: knownBoxes[hostname]?.ip })).filter(box => box.ip)
+    ? boxOrder.map(hostname => ({ hostname, ip: knownBoxes[hostname]?.ip })).filter(box => box.ip)
     : connectedBoxes;
-  list.innerHTML = visibleBoxes.length  "" : "Keine verbundenen Boxen";
+  list.innerHTML = visibleBoxes.length ? "" : "Keine verbundenen Boxen";
   visibleBoxes.forEach(({ hostname, ip }) => {
     const div = document.createElement("div");
     div.className = "device";
@@ -1353,7 +1353,7 @@ async function shutdown() {
 }
 
 function setSetupTab(tab) {
-  setupTab = ["words", "boxes", "symbols"].includes(tab)  tab : "words";
+  setupTab = ["words", "boxes", "symbols"].includes(tab) ? tab : "words";
   showSetup();
 }
 
@@ -1364,15 +1364,15 @@ function showSetup() {
     html += '<div id="localScanStatus"></div>';
   }
   html += '<div class="setup-tabs">';
-  html += `<button type="button" class="${setupTab === "words"  "active" : ""}" onclick="setSetupTab('words')">Zeichenfolgen</button>`;
-  html += `<button type="button" class="${setupTab === "boxes"  "active" : ""}" onclick="setSetupTab('boxes')">Boxen</button>`;
-  html += `<button type="button" class="${setupTab === "symbols"  "active" : ""}" onclick="setSetupTab('symbols')">Zeichen/Symbole</button>`;
+  html += `<button type="button" class="${setupTab === "words" ? "active" : ""}" onclick="setSetupTab('words')">Zeichenfolgen</button>`;
+  html += `<button type="button" class="${setupTab === "boxes" ? "active" : ""}" onclick="setSetupTab('boxes')">Boxen</button>`;
+  html += `<button type="button" class="${setupTab === "symbols" ? "active" : ""}" onclick="setSetupTab('symbols')">Zeichen/Symbole</button>`;
   html += '</div>';
 
   if (setupTab === "words") {
     html += '<div class="box-card"><h3>Zeichenfolgen für Wochentage</h3>';
     html += '<div class="toggle-row">';
-    html += `<label><input type="checkbox" data-live-edit="true" ${separateWordTriggers  "checked" : ""} onchange="setSeparateWordTriggers(this.checked)"> Alle 3 Trigger separat anzeigen</label>`;
+    html += `<label><input type="checkbox" data-live-edit="true" ${separateWordTriggers ? "checked" : ""} onchange="setSeparateWordTriggers(this.checked)"> Alle 3 Trigger separat anzeigen</label>`;
     if (separateWordTriggers) {
       html += '<span>Jeder Trigger bekommt sein eigenes Wort pro Tag.</span>';
     } else {
@@ -1383,13 +1383,13 @@ function showSetup() {
     html += '<div class="weekday-row">';
     for (let i = 0; i < days.length; i++) {
       html += `<div class="weekday-col"><label>${dayNames[i]}</label>`;
-      const triggerRange = separateWordTriggers  [...Array(triggersPerDay).keys()] : [0];
+      const triggerRange = separateWordTriggers ? [...Array(triggersPerDay).keys()] : [0];
       triggerRange.forEach(trigger => {
         const currentWord = boxOrder.map(hostname => {
           const letters = knownBoxes[hostname]?.letters?.[days[i]] || [];
           return letters[trigger] || "";
         }).join("");
-        const label = separateWordTriggers  `Trigger ${trigger + 1}` : "Alle Trigger";
+        const label = separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger";
         html += `
           <div class="trigger-entry">
             <span>${label}</span>
@@ -1409,7 +1409,7 @@ function showSetup() {
       .join("");
     html += '<div class="box-card">';
     html += '<h3>Zeichen/Symbole bearbeiten</h3>';
-    html += '<p>Die Firmware hat feste Zeichen A-Z sowie Sun, WIFI, Rad, Riddler und Sun+Rad. Zus?tzlich gibt es 8 frei editierbare 32x32-Slots, die du hier benennen, bearbeiten und an die Boxen Übertragen kannst.</p>';
+    html += '<p>Die Firmware hat feste Zeichen A-Z sowie Sun, WIFI, Rad, Riddler und Sun+Rad. Zusätzlich gibt es 8 frei editierbare 32x32-Slots, die du hier benennen, bearbeiten und an die Boxen übertragen kannst.</p>';
     html += '<div class="symbol-editor">';
     html += '<div id="managerSymbolGrid" class="symbol-grid"></div>';
     html += '<div class="symbol-actions">';
@@ -1429,11 +1429,11 @@ function showSetup() {
 
   if (setupTab === "boxes") {
     html += '<div class="box-card"><div class="toggle-row">';
-    html += `<label><input type="checkbox" data-live-edit="true" ${separateBoxTriggers  "checked" : ""} onchange="setSeparateBoxTriggers(this.checked)"> Alle 3 Trigger in den Boxkarten anzeigen</label>`;
+    html += `<label><input type="checkbox" data-live-edit="true" ${separateBoxTriggers ? "checked" : ""} onchange="setSeparateBoxTriggers(this.checked)"> Alle 3 Trigger in den Boxkarten anzeigen</label>`;
     if (separateBoxTriggers) {
       html += '<span>Alle drei Trigger werden einzeln angezeigt.</span>';
     } else {
-      html += '<span>?nderungen gelten pro Tag für alle drei Trigger.</span>';
+      html += '<span>Änderungen gelten pro Tag für alle drei Trigger.</span>';
     }
     html += '</div></div>';
 
@@ -1441,7 +1441,7 @@ function showSetup() {
       const box = normalizeBox(knownBoxes[hostname] || {});
       const escapedHostname = escapeHtml(hostname);
       const hostnameArgument = escapeJsString(hostname);
-      const transferMark = transferCompleted[hostname]  '<span class="transfer-badge"> Übertragen</span>' : '';
+      const transferMark = transferCompleted[hostname] ? '<span class="transfer-badge">✓ übertragen</span>' : '';
       html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}${transferMark}</h3><div class="weekday-row">`;
       for (let i = 0; i < days.length; i++) {
         const letters = box.letters?.[days[i]] || [];
@@ -1451,39 +1451,39 @@ function showSetup() {
           <div class="weekday-col">
             <label>${dayNames[i]}</label>
             <div class="trigger-container">`;
-        const triggerRange = separateBoxTriggers  [...Array(triggersPerDay).keys()] : [0];
+        const triggerRange = separateBoxTriggers ? [...Array(triggersPerDay).keys()] : [0];
         for (const trigger of triggerRange) {
           const letter = letters[trigger] || "";
           const color = sanitizeColor(colors[trigger] || defaultColor);
           const rawDelay = delays[trigger];
           const colorMode = (box.colorModes?.[days[i]] || [defaultColorMode])[trigger] || defaultColorMode;
           const colorPaletteMask = (box.colorPaletteMasks?.[days[i]] || [defaultColorPaletteMask])[trigger] || defaultColorPaletteMask;
-          const parsedDelay = typeof rawDelay === "number"  rawDelay : parseFloat(String(rawDelay).replace(",", "."));
+          const parsedDelay = typeof rawDelay === "number" ? rawDelay : parseFloat(String(rawDelay).replace(",", "."));
           const delayValue = Number.isFinite(parsedDelay) && parsedDelay >= 0
-             Math.min(999, Math.round(parsedDelay))
+            ? Math.min(999, Math.round(parsedDelay))
             : defaultDelay;
           const delayDisplay = delayValue.toString();
           const letterOptionsHtml = letterOptions.map(optionValue => {
-            const isSelected = letter === ""  optionValue === "" : optionValue === letter;
+            const isSelected = letter === "" ? optionValue === "" : optionValue === letter;
             const label = getLetterLabel(optionValue);
-            return `<option value="${optionValue}" ${isSelected  "selected" : ""}>${escapeHtml(label)}</option>`;
+            return `<option value="${optionValue}" ${isSelected ? "selected" : ""}>${escapeHtml(label)}</option>`;
           }).join("");
           html += `
               <div class="trigger-entry">
-                <span>${separateBoxTriggers  `Trigger ${trigger + 1}` : "Alle Trigger"}</span>
+                <span>${separateBoxTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</span>
                 <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter', true, null, ${!separateBoxTriggers})" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
                   ${letterOptionsHtml}
                 </select>
                 <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateBoxTriggers})">
                 <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateBoxTriggers})">
-                  <option value="fixed" ${colorMode === "fixed"  "selected" : ""}>Fest</option>
-                  <option value="random_selected" ${colorMode === "random_selected"  "selected" : ""}>Zufall (ausgewählt)</option>
-                  <option value="random_all" ${colorMode === "random_all"  "selected" : ""}>Zufall (alle)</option>
+                  <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Fest</option>
+                  <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewählt)</option>
+                  <option value="random_all" ${colorMode === "random_all" ? "selected" : ""}>Zufall (alle)</option>
                 </select>
                 <div class="palette-grid">
                   ${randomPalette.map((entry, paletteIndex) => `
                     <label class="palette-chip">
-                      <input type="checkbox" data-live-edit="true" ${((colorPaletteMask & (1 << paletteIndex)) !== 0)  "checked" : ""}
+                      <input type="checkbox" data-live-edit="true" ${((colorPaletteMask & (1 << paletteIndex)) !== 0) ? "checked" : ""}
                         onchange="savePalette(${hostnameArgument}, '${days[i]}', ${trigger}, ${!separateBoxTriggers})"
                         data-palette-hostname="${escapeHtml(hostname)}"
                         data-palette-day="${days[i]}"
@@ -1504,8 +1504,8 @@ function showSetup() {
       }
       html += `</div>
         <div class="order-buttons">
-          <button onclick="moveBoxUp(${hostnameArgument})">?</button>
-          <button onclick="moveBoxDown(${hostnameArgument})">?</button>
+          <button onclick="moveBoxUp(${hostnameArgument})">↑</button>
+          <button onclick="moveBoxDown(${hostnameArgument})">↓</button>
           <button onclick="removeBox(${hostnameArgument})">Entfernen</button>
         </div></div>`;
     });
@@ -1564,7 +1564,7 @@ function updateWord(day, word, maxLength, inputElement, triggerIndex = 0, applyA
     inputElement.value = sanitizedWord;
   }
   for (let i = 0; i < boxOrder.length; i++) {
-    const letter = i < word.length  word[i] : "";
+    const letter = i < word.length ? word[i] : "";
     knownBoxes[boxOrder[i]] = knownBoxes[boxOrder[i]] || {};
     saveField(boxOrder[i], day, triggerIndex, letter, 'letter', false, inputElement, applyAllTriggers);
   }
@@ -1578,9 +1578,9 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
 
   knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
   const slotIndex = Number(triggerIndex);
-  const targetIndices = applyAllTriggers  [...Array(triggersPerDay).keys()] : [slotIndex];
+  const targetIndices = applyAllTriggers ? [...Array(triggersPerDay).keys()] : [slotIndex];
   if (fieldType === 'letter') {
-    const normalizedLetter = value == null  "" : String(value);
+    const normalizedLetter = value == null ? "" : String(value);
     targetIndices.forEach(index => {
       knownBoxes[hostname].letters[day][index] = normalizedLetter;
     });
@@ -1592,7 +1592,7 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
     });
     value = colorValue;
   } else if (fieldType === 'delay') {
-    let numericValue = typeof value === 'number'  value : parseFloat(String(value).replace(",", "."));
+    let numericValue = typeof value === 'number' ? value : parseFloat(String(value).replace(",", "."));
     if (!Number.isFinite(numericValue) || numericValue < 0) {
       numericValue = defaultDelay;
     }
@@ -1605,10 +1605,10 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
       inputElement.value = numericValue.toString();
     }
   } else if (fieldType === 'colorMode') {
-    const normalizedMode = typeof value === "string"  value.trim().toLowerCase() : defaultColorMode;
+    const normalizedMode = typeof value === "string" ? value.trim().toLowerCase() : defaultColorMode;
     targetIndices.forEach(index => {
       knownBoxes[hostname].colorModes[day][index] =
-        ["fixed", "random_selected", "random_all"].includes(normalizedMode)  normalizedMode : defaultColorMode;
+        ["fixed", "random_selected", "random_all"].includes(normalizedMode) ? normalizedMode : defaultColorMode;
     });
     value = normalizedMode;
   }
@@ -1681,7 +1681,7 @@ function savePalette(hostname, day, triggerIndex, applyAllTriggers = false) {
   }
 
   knownBoxes[hostname] = normalizeBox(knownBoxes[hostname] || {});
-  const targetIndices = applyAllTriggers  [...Array(triggersPerDay).keys()] : [Number(triggerIndex)];
+  const targetIndices = applyAllTriggers ? [...Array(triggersPerDay).keys()] : [Number(triggerIndex)];
   targetIndices.forEach(index => {
     knownBoxes[hostname].colorPaletteMasks[day][index] = mask;
   });
@@ -1831,7 +1831,7 @@ function renderTransferStatus() {
 function isTransferSuccess(statusText) {
   return typeof statusText === "string" && (
     statusText.includes("Übertragen") ||
-    statusText.includes("Uebertragen") ||
+    statusText.includes("Übertragen") ||
     statusText.includes("Bereits aktuell")
   );
 }
@@ -1864,9 +1864,9 @@ async function transferBox(hostname) {
         headers,
         body: JSON.stringify(payload)
       });
-      statusText = response.ok  "Uebertragen" : `Fehler (${response.status})`;
+      statusText = response.ok ? "Übertragen" : `Fehler (${response.status})`;
     } catch (error) {
-      console.error("Fehler beim lokalen Uebertragen:", error);
+      console.error("Fehler beim lokalen Übertragen:", error);
       statusText = "Netzwerkfehler/CORS blockiert";
     }
     appendTransferStatus(`${hostname}: ${statusText}`);
@@ -1908,7 +1908,7 @@ async function transferCurrentSymbolToAll() {
 
   const lines = [];
   if (status) {
-    status.innerHTML = `<div class="statusEntry status">Uebertrage Symbol ${escapeHtml(slot)} an ${targets.length} Box(en)...</div>`;
+    status.innerHTML = `<div class="statusEntry status">Übertrage Symbol ${escapeHtml(slot)} an ${targets.length} Box(en)...</div>`;
   }
 
   for (const hostname of targets) {
@@ -1918,7 +1918,7 @@ async function transferCurrentSymbolToAll() {
       if (localBrowserMode) {
         const form = new FormData();
         form.append("slot", slot);
-        form.append("enabled", symbol.enabled  "1" : "0");
+        form.append("enabled", symbol.enabled ? "1" : "0");
         form.append("bitmap", symbol.bitmap);
         response = await fetch(`http://${box.ip}/api/custom-symbol`, { method: "POST", mode: "cors", body: form });
       } else {
@@ -1929,7 +1929,7 @@ async function transferCurrentSymbolToAll() {
         });
       }
       const text = await response.text();
-      lines.push(`${response.ok  "" : ""} ${hostname}: ${text || response.statusText}`);
+      lines.push(`${response.ok ? "" : ""} ${hostname}: ${text || response.statusText}`);
     } catch (error) {
       lines.push(` ${hostname}: ${error.message || error}`);
     }
@@ -2002,7 +2002,7 @@ async function reloadAll() {
   }
 
   const reloadButton = document.getElementById("reloadBtn");
-  const originalLabel = reloadButton  reloadButton.textContent : "";
+  const originalLabel = reloadButton ? reloadButton.textContent : "";
   if (reloadButton) {
     reloadButton.disabled = true;
     reloadButton.textContent = "Lade Geräte...";
