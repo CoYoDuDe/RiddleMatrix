@@ -6,6 +6,32 @@
 bool wifiSymbolVisible = false;
 bool webServerRunning = false;
 
+namespace {
+constexpr unsigned long NTP_RETRY_INTERVAL_MS = 300UL * 1000UL;
+constexpr unsigned long NTP_PERIODIC_INTERVAL_MS = 6UL * 60UL * 60UL * 1000UL;
+unsigned long lastNtpSyncAttempt = 0;
+bool ntpSyncedSinceBoot = false;
+
+void syncTimeAfterWiFiConnection(const __FlashStringHelper *reason) {
+    const unsigned long now = millis();
+    const unsigned long minimumInterval = ntpSyncedSinceBoot ? NTP_PERIODIC_INTERVAL_MS : NTP_RETRY_INTERVAL_MS;
+    if (lastNtpSyncAttempt != 0 && (now - lastNtpSyncAttempt) < minimumInterval) {
+        return;
+    }
+
+    lastNtpSyncAttempt = now;
+    if (reason != nullptr) {
+        Serial.print(F("NTP-Synchronisierung wegen WLAN-Verbindung: "));
+        Serial.println(reason);
+    }
+    if (syncTimeWithNTP()) {
+        ntpSyncedSinceBoot = true;
+    } else {
+        Serial.println(F("⚠️ Hinweis: NTP Synchronisierung fehlgeschlagen, wird spaeter erneut versucht."));
+    }
+}
+}
+
 void refreshWiFiIdleTimer(const __FlashStringHelper *reason) {
     wifiStartTime = millis();
 
@@ -168,9 +194,7 @@ void connectWiFi() {
         wifiConnected = true;
         wifiDisabled = false;
         drawWiFiSymbol();
-        if (!syncTimeWithNTP()) {
-            Serial.println(F("⚠️ Hinweis: NTP Synchronisierung beim Verbindungsaufbau fehlgeschlagen."));
-        }
+        syncTimeAfterWiFiConnection(F("connectWiFi"));
         setupWebServer();
         refreshWiFiIdleTimer(F("connectWiFi"));
     } else {
@@ -215,6 +239,7 @@ void checkWiFi() {
             wifiConnected = true;
             wifiDisabled = false;
             refreshWiFiIdleTimer(F("checkWiFi reconnect"));
+            syncTimeAfterWiFiConnection(F("checkWiFi reconnect"));
 
             if (!webServerRunning) {
                 Serial.println(F("🌐 Webserver war gestoppt – starte Listener neu."));
@@ -225,6 +250,8 @@ void checkWiFi() {
             if (!triggerActive) {
                 drawWiFiSymbol();
             }
+        } else {
+            syncTimeAfterWiFiConnection(F("checkWiFi periodic"));
         }
     }
 }
