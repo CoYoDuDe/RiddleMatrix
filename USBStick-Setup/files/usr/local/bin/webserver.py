@@ -1166,7 +1166,7 @@ def update_box():
             if sanitized == "":
                 raw_repr = repr(raw_value)
                 return (
-                    f"Ungültiger Buchstabe für {day} (Trigger {index + 1}, Quelle: {source}) – Eingabe {raw_repr} wird abgelehnt."
+                    f"Ungültiges Zeichen/Symbol für {day} (Trigger {index + 1}, Quelle: {source}) – Eingabe {raw_repr} wird abgelehnt."
                 )
             if new_letters[index] != sanitized:
                 new_letters[index] = sanitized
@@ -1299,7 +1299,7 @@ def update_box():
                     jsonify(
                         {
                             "status": "error",
-                            "message": f"Ungültiger Buchstabe für {day} (Trigger {trigger_index + 1}, Quelle: Feld \"letter\").",
+                            "message": f"Ungültiges Zeichen/Symbol für {day} (Trigger {trigger_index + 1}, Quelle: Feld \"letter\").",
                         }
                     ),
                     400,

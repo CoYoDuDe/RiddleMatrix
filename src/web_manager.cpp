@@ -497,7 +497,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         }
     }
 
-    // 🔔 Buchstaben-Trigger über Webinterface
+    // 🔔 Zeichen-/Symbol-Trigger über Webinterface
     function triggerLetter(triggerIndex) {
         let query = '';
         if (typeof triggerIndex === 'number' && triggerIndex >= 0) {
@@ -521,11 +521,11 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             });
     }
 
-    // 👁️ Buchstaben direkt anzeigen
+    // 👁️ Zeichen/Symbol direkt anzeigen
     function displayLetter(triggerIndex, letter) {
         if (typeof letter !== 'string' || letter.length !== 1) {
-            console.warn('❌ Ungültiger Buchstabe:', letter);
-            alert('❌ Bitte einen einzelnen Buchstaben auswählen.');
+            console.warn('❌ Ungültiges Zeichen/Symbol:', letter);
+            alert('❌ Bitte ein einzelnes Zeichen/Symbol auswählen.');
             return;
         }
 
@@ -537,7 +537,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         fetch(url)
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => {
-                const text = result.message && result.message.trim() !== '' ? result.message : (result.ok ? '✅ Buchstabe angezeigt!' : '❌ Anzeige fehlgeschlagen!');
+                const text = result.message && result.message.trim() !== '' ? result.message : (result.ok ? '✅ Zeichen/Symbol angezeigt!' : '❌ Anzeige fehlgeschlagen!');
                 if (!result.ok) {
                     console.warn('❌ Serverfehler:', text);
                 } else {
@@ -715,7 +715,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             .catch(error => alert('❌ Fehler: ' + error));
     }
 
-    // 💾 Alle Buchstaben & Farben speichern
+    // 💾 Alle Zeichen/Symbole & Farben speichern
     function saveAllLetters() {
         syncSharedTriggerFormFields();
         let formData = new FormData(document.getElementById('lettersForm'));
@@ -837,7 +837,7 @@ void setupWebServer() {
     //             zurückgesetzt wird.
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /"));
-        String html = "<h1>Märchen Einstellungen</h1>";
+        String html = "<h1>RiddleMatrix Einstellungen</h1>";
 
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
@@ -888,7 +888,7 @@ void setupWebServer() {
         html += "<h2>Anzeige-Einstellungen</h2>";
         html += "<form id='displayForm'>";
         html += "Helligkeit (1–255): <input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'><br>";
-        html += "Buchstaben-Anzeigezeit (Sekunden, 1–60): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
+        html += "Zeichen-Anzeigezeit (Sekunden, 1–60): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
         html += "Automodus-Intervall (Sekunden, 30–600): <input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'><br>";
         html += "Standalone aktiv von: <input type='time' name='active_start' value='" + escapeHtml(formatMinutesAsTime(standalone_active_start_minutes)) + "'><br>";
         html += "Standalone aktiv bis: <input type='time' name='active_end' value='" + escapeHtml(formatMinutesAsTime(standalone_active_end_minutes)) + "'><br>";
@@ -937,8 +937,8 @@ void setupWebServer() {
         html += "</form>";
         html += "<button type='button' onclick='syncNTP()'>Zeit mit NTP synchronisieren</button>";
 
-        // **Buchstabenauswahl pro Wochentag**
-        html += "<h2>Buchstaben pro Wochentag &amp; Trigger</h2>";
+        // **Zeichen-/Symbolauswahl pro Wochentag**
+        html += "<h2>Zeichen/Symbole pro Wochentag &amp; Trigger</h2>";
         html += "<form id='lettersForm'>";
         html += "<table border='1' style='width:100%; text-align:center;'>";
         html += "<tr><th>Wochentag</th>";
@@ -1617,7 +1617,7 @@ void setupWebServer() {
                         JsonArrayConst dayLetters = lettersObject[DAY_KEYS[day]].as<JsonArrayConst>();
                         if (dayLetters.isNull() || dayLetters.size() != NUM_TRIGGERS) {
                             validationFailed = true;
-                            validationMessage = F("Ungültige Buchstabenliste für Tag ");
+                            validationMessage = F("Ungültige Zeichenliste für Tag ");
                             validationMessage += DAY_KEYS[day];
                             break;
                         }
@@ -1627,7 +1627,7 @@ void setupWebServer() {
                             const char *letterRaw = letterVariant.as<const char *>();
                             if (letterRaw == nullptr) {
                                 validationFailed = true;
-                                validationMessage = F("Buchstabe fehlt für Trigger ");
+                                validationMessage = F("Zeichen/Symbol fehlt für Trigger ");
                                 validationMessage += String(trigger + 1);
                                 validationMessage += F(" am Tag ");
                                 validationMessage += DAY_KEYS[day];
@@ -1638,7 +1638,7 @@ void setupWebServer() {
                             letterValue.trim();
                             if (letterValue.length() != 1) {
                                 validationFailed = true;
-                                validationMessage = F("Buchstabe muss genau ein Zeichen besitzen (Tag ");
+                                validationMessage = F("Auswahl muss genau ein Zeichen/Symbol besitzen (Tag ");
                                 validationMessage += DAY_KEYS[day];
                                 validationMessage += F(", Trigger ");
                                 validationMessage += String(trigger + 1);
@@ -1649,7 +1649,7 @@ void setupWebServer() {
                             const char letterChar = letterValue.charAt(0);
                             if (!isSupportedLetter(letterChar)) {
                                 validationFailed = true;
-                                validationMessage = F("Ungültiger Buchstabe für Trigger ");
+                                validationMessage = F("Ungültiges Zeichen/Symbol für Trigger ");
                                 validationMessage += String(trigger + 1);
                                 validationMessage += F(" am Tag ");
                                 validationMessage += DAY_KEYS[day];
@@ -1839,9 +1839,9 @@ void setupWebServer() {
 
                 saveConfig();
                 refreshWiFiIdleTimer(F("POST /updateAllLetters JSON"));
-                Serial.println(F("✅ JSON-Update: Buchstaben, Farben, Farbmodi & Verzögerungen übernommen."));
+                Serial.println(F("✅ JSON-Update: Zeichen/Symbole, Farben, Farbmodi & Verzögerungen übernommen."));
                 cleanup();
-                sendJsonStatus(request, 200, "ok", F("Buchstaben, Farben, Farbmodi & Verzögerungen gespeichert."));
+                sendJsonStatus(request, 200, "ok", F("Zeichen/Symbole, Farben, Farbmodi & Verzögerungen gespeichert."));
                 return;
             }
 
@@ -1876,7 +1876,7 @@ void setupWebServer() {
                         !request->hasParam(colorParam, true) ||
                         !request->hasParam(colorModeParam, true)) {
                         success = false;
-                        errorMessage = F("Nicht alle Buchstaben-, Farb- oder Farbmodus-Felder wurden uebermittelt.");
+                        errorMessage = F("Nicht alle Zeichen-/Symbol-, Farb- oder Farbmodus-Felder wurden uebermittelt.");
                         break;
                     }
 
@@ -1884,14 +1884,14 @@ void setupWebServer() {
                     letterValue.trim();
                     if (letterValue.length() != 1) {
                         success = false;
-                        errorMessage = F("Buchstabe muss genau ein Zeichen besitzen.");
+                        errorMessage = F("Auswahl muss genau ein Zeichen/Symbol besitzen.");
                         break;
                     }
 
                     const char letterChar = letterValue.charAt(0);
                     if (!isSupportedLetter(letterChar)) {
                         success = false;
-                        errorMessage = F("Ungültiger Buchstabe im Formular.");
+                        errorMessage = F("Ungültiges Zeichen/Symbol im Formular.");
                         break;
                     }
 
@@ -1986,14 +1986,14 @@ void setupWebServer() {
             saveConfig();
             refreshWiFiIdleTimer(F("POST /updateAllLetters Formular"));
             if (expectDelays) {
-                Serial.println(F("✅ Formular-Update: Buchstaben, Farben, Farbmodi & Verzögerungen gespeichert."));
+                Serial.println(F("✅ Formular-Update: Zeichen/Symbole, Farben, Farbmodi & Verzögerungen gespeichert."));
             } else {
-                Serial.println(F("✅ Formular-Update: Buchstaben, Farben & Farbmodi gespeichert."));
+                Serial.println(F("✅ Formular-Update: Zeichen/Symbole, Farben & Farbmodi gespeichert."));
             }
             cleanup();
 
-            String confirmation = expectDelays ? String(F("✅ Buchstaben, Farben, Farbmodi & Verzoegerungen gespeichert!"))
-                                               : String(F("✅ Buchstaben, Farben & Farbmodi gespeichert!"));
+            String confirmation = expectDelays ? String(F("✅ Zeichen/Symbole, Farben, Farbmodi & Verzoegerungen gespeichert!"))
+                                               : String(F("✅ Zeichen/Symbole, Farben & Farbmodi gespeichert!"));
             request->send(200, "text/plain", confirmation);
         },
         nullptr,
@@ -2041,7 +2041,7 @@ void setupWebServer() {
 
         String letter = request->getParam("char")->value();
         if (letter.length() != 1) {
-            request->send(400, "text/plain", "❌ Fehler: Buchstabe muss genau ein Zeichen sein!");
+            request->send(400, "text/plain", "❌ Fehler: Auswahl muss genau ein Zeichen/Symbol sein!");
             return;
         }
 
@@ -2060,7 +2060,7 @@ void setupWebServer() {
         if (displayed) {
             alreadyCleared = false;
             refreshWiFiIdleTimer(F("GET /displayLetter success"));
-            request->send(200, "text/plain", "✅ Buchstabe " + letter + " für Trigger " + String(triggerIndex + 1) + " angezeigt!");
+            request->send(200, "text/plain", "✅ Zeichen/Symbol " + letter + " für Trigger " + String(triggerIndex + 1) + " angezeigt!");
             return;
         }
 
@@ -2070,11 +2070,11 @@ void setupWebServer() {
         switch (lastDisplayLetterError) {
             case DisplayLetterError::TriggerAlreadyActive:
                 statusCode = 409;
-                errorMessage = F("❌ Fehler: Bereits aktiver Buchstabe verhindert neue Anzeige!");
+                errorMessage = F("❌ Fehler: Bereits aktives Zeichen/Symbol verhindert neue Anzeige!");
                 break;
             case DisplayLetterError::LetterNotFound:
                 statusCode = 422;
-                errorMessage = F("❌ Fehler: Kein Muster für den gewünschten Buchstaben gefunden!");
+                errorMessage = F("❌ Fehler: Kein Muster für das gewünschte Zeichen/Symbol gefunden!");
                 break;
             case DisplayLetterError::InvalidWeekday:
                 statusCode = 503;
@@ -2115,7 +2115,7 @@ void setupWebServer() {
             customIndex < static_cast<int>(CUSTOM_SYMBOL_COUNT) &&
             customSymbolEnabled[customIndex] == 1;
         if (todayLetter != '*' && !customAvailable && letterData.find(todayLetter) == letterData.end()) {
-            request->send(500, "text/plain", "❌ Fehler: Kein Muster für den heutigen Buchstaben vorhanden!");
+            request->send(500, "text/plain", "❌ Fehler: Kein Muster für das heutige Zeichen/Symbol vorhanden!");
             return;
         }
 
@@ -2131,7 +2131,7 @@ void setupWebServer() {
             return;
         }
 
-        String response = "✅ Buchstaben-Trigger für Trigger " + String(triggerIndex + 1) + " eingeplant!";
+        String response = "✅ Zeichen-/Symbol-Trigger für Trigger " + String(triggerIndex + 1) + " eingeplant!";
         if (delaySeconds == 0) {
             response += " Start erfolgt sofort.";
         } else {

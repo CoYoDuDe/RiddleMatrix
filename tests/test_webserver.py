@@ -737,7 +737,7 @@ def test_update_box_rejects_invalid_letters(webserver_app):
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["status"] == "error"
-    assert "Ungültiger Buchstabe" in payload["message"]
+    assert "Ungültiges Zeichen/Symbol" in payload["message"]
 
     config_after_letters = json.loads(json.dumps(module.load_config()))
     assert config_after_letters == baseline
@@ -750,7 +750,7 @@ def test_update_box_rejects_invalid_letters(webserver_app):
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["status"] == "error"
-    assert "Ungültiger Buchstabe" in payload["message"]
+    assert "Ungültiges Zeichen/Symbol" in payload["message"]
 
     config_after_direct = json.loads(json.dumps(module.load_config()))
     assert config_after_direct == baseline
@@ -802,7 +802,7 @@ def test_update_box_sanitizes_letters_and_transfer(webserver_app, monkeypatch):
 
     assert response.status_code == 400
     assert response.get_json()["status"] == "error"
-    assert "Ungültiger Buchstabe" in response.get_json()["message"]
+    assert "Ungültiges Zeichen/Symbol" in response.get_json()["message"]
 
     config = module.load_config()
     assert config["boxen"]["TestBox"]["letters"]["mo"][2] == "C"
