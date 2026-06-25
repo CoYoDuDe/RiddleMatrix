@@ -181,6 +181,7 @@ let localScanAbortController = null;
 let localScanSubnet = "192.168.137";
 let localAutoScanStarted = false;
 let webspaceAuthenticated = false;
+let localSubnetCandidates = [];
 const localStorageKey = "riddlematrix.localBrowserConfig.v1";
 const webspaceAuthStorageKey = "riddlematrix.webspaceAuth.v1";
 const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
@@ -340,7 +341,7 @@ function enterLocalBrowserMode(reason) {
   }
   if (isHostedHttpsMode() && !localAutoScanStarted) {
     localAutoScanStarted = true;
-    window.setTimeout(() => scanLocalSubnet({ automatic: true }), 250);
+    window.setTimeout(() => scanLocalSubnet({ automatic: true, detectSubnet: true }), 250);
   }
 }
 
@@ -378,6 +379,134 @@ function validateSubnetPrefix(subnet) {
     }
   }
   return parts.map(part => String(Number(part))).join(".");
+}
+
+function subnetPrefixFromIp(ip) {
+  const value = validateIpAddress(ip);
+  if (!value) {
+    return "";
+  }
+  const parts = value.split(".");
+  if (parts[0] === "127" || parts[0] === "0" || parts[0] === "169") {
+    return "";
+  }
+  return parts.slice(0, 3).join(".");
+}
+
+function addSubnetCandidate(candidate, candidates = localSubnetCandidates) {
+  const subnet = validateSubnetPrefix(candidate);
+  if (subnet && !candidates.includes(subnet)) {
+    candidates.push(subnet);
+  }
+  return candidates;
+}
+
+function collectKnownSubnetCandidates(candidates = []) {
+  Object.values(knownBoxes || {}).forEach(box => {
+    addSubnetCandidate(subnetPrefixFromIp(box?.ip), candidates);
+  });
+  addSubnetCandidate(subnetPrefixFromIp(location.hostname), candidates);
+  return candidates;
+}
+
+function updateSubnetCandidateUi() {
+  const dataList = document.getElementById("localSubnetCandidateList");
+  if (dataList) {
+    dataList.innerHTML = localSubnetCandidates
+      .map(subnet => `<option value="${escapeHtml(subnet)}">`)
+      .join("");
+  }
+}
+
+async function detectServerSubnetCandidates(candidates) {
+  if (isHostedHttpsMode() || location.protocol === "file:") {
+    return candidates;
+  }
+  try {
+    const response = await fetchWithTimeout("/local_networks", { cache: "no-store" }, 1200);
+    if (!response.ok) {
+      return candidates;
+    }
+    const data = await response.json();
+    if (Array.isArray(data.subnets)) {
+      data.subnets.forEach(subnet => addSubnetCandidate(subnet, candidates));
+    }
+    addSubnetCandidate(data.defaultSubnet, candidates);
+  } catch (error) {
+    console.warn("Lokale Netzbereiche konnten nicht vom Manager gelesen werden:", error);
+  }
+  return candidates;
+}
+
+async function detectWebRtcSubnetCandidates(candidates) {
+  const PeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+  if (!PeerConnection) {
+    return candidates;
+  }
+
+  let peer = null;
+  try {
+    peer = new PeerConnection({ iceServers: [] });
+    peer.createDataChannel("riddlematrix");
+    const seen = new Set();
+    const parseCandidate = candidate => {
+      const matches = String(candidate || "").match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) || [];
+      matches.forEach(ip => {
+        if (!seen.has(ip)) {
+          seen.add(ip);
+          addSubnetCandidate(subnetPrefixFromIp(ip), candidates);
+        }
+      });
+    };
+    peer.onicecandidate = event => {
+      if (event.candidate) {
+        parseCandidate(event.candidate.candidate);
+      }
+    };
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    parseCandidate(offer.sdp);
+    await new Promise(resolve => window.setTimeout(resolve, 900));
+    parseCandidate(peer.localDescription?.sdp);
+  } catch (error) {
+    console.warn("Browser-IP-Erkennung per WebRTC nicht verfuegbar:", error);
+  } finally {
+    if (peer) {
+      peer.close();
+    }
+  }
+  return candidates;
+}
+
+async function detectLocalSubnetCandidates({ apply = true, silent = false } = {}) {
+  const candidates = [];
+  collectKnownSubnetCandidates(candidates);
+  await detectServerSubnetCandidates(candidates);
+  await detectWebRtcSubnetCandidates(candidates);
+  addSubnetCandidate(localScanSubnet, candidates);
+  addSubnetCandidate("192.168.137", candidates);
+  addSubnetCandidate("192.168.178", candidates);
+  addSubnetCandidate("192.168.1", candidates);
+  addSubnetCandidate("192.168.0", candidates);
+
+  localSubnetCandidates = candidates;
+  if (apply && candidates.length > 0) {
+    localScanSubnet = candidates[0];
+    const input = document.getElementById("localSubnetPrefix");
+    if (input) {
+      input.value = localScanSubnet;
+    }
+    saveLocalBrowserConfig();
+  }
+  updateSubnetCandidateUi();
+  if (!silent) {
+    updateLocalScanStatus(
+      candidates.length > 0
+        ? `IP-Bereich erkannt: ${candidates[0]}.0/24`
+        : "IP-Bereich konnte nicht automatisch erkannt werden. Bitte manuell eintragen."
+    );
+  }
+  return candidates;
 }
 
 function fetchWithTimeout(url, options = {}, timeoutMs = 900) {
@@ -617,11 +746,16 @@ function stopLocalScan() {
 
 async function scanLocalSubnet(options = {}) {
   const automatic = !!options.automatic;
+  const detectSubnet = !!options.detectSubnet;
   if (localScanInFlight) {
     if (!automatic) {
       stopLocalScan();
     }
     return;
+  }
+
+  if (detectSubnet) {
+    await detectLocalSubnetCandidates({ apply: true, silent: true });
   }
 
   const subnetInput = document.getElementById("localSubnetPrefix");
@@ -1106,19 +1240,19 @@ function showAppSettings() {
   html += '<h3>Lokale Märchen-Suche</h3>';
   html += '<div class="settings-grid">';
   html += '<label for="localSubnetPrefix">IP-Bereich</label>';
-  html += `<input id="localSubnetPrefix" type="text" value="${escapeHtml(localScanSubnet)}" placeholder="z.B. 192.168.137">`;
-  html += '<span></span><button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button>';
+  html += `<span><input id="localSubnetPrefix" type="text" list="localSubnetCandidateList" value="${escapeHtml(localScanSubnet)}" placeholder="z.B. 192.168.137">`;
+  html += '<datalist id="localSubnetCandidateList"></datalist></span>';
+  html += '<span></span><span><button type="button" onclick="detectLocalSubnetCandidates()">IP-Bereich erkennen</button> ';
+  html += '<button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button></span>';
   html += '<label for="localBoxIp">Box-IP direkt</label>';
   html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> <button type="button" onclick="learnLocalBoxFromIp()">Hinzufügen/lernen</button></span>';
   html += '</div>';
   html += '<div id="localScanStatus" style="margin-top:10px;"></div>';
-  html += '<p>Die Suche läuft im Browser und übernimmt nur Geräte, die wie RiddleMatrix-Boxen antworten.</p>';
-  if (isHostedHttpsMode()) {
-    html += '<p>Die öffentliche Server-Seite kann dein lokales Netzwerk nicht selbst sehen; der Browser auf diesem Gerät übernimmt die lokale Suche.</p>';
-  }
+  html += '<p>Die Suche übernimmt nur Geräte, die wie RiddleMatrix-Boxen antworten. Der IP-Bereich wird automatisch vorgeschlagen und kann bei Bedarf geändert werden.</p>';
   html += '</div>';
   document.getElementById("content").innerHTML = html;
   statusArea = document.getElementById("localScanStatus");
+  detectLocalSubnetCandidates({ apply: false, silent: true }).then(updateSubnetCandidateUi);
 }
 
 function handleKeydown(event, day, word, maxLength, inputElement, triggerIndex = 0, applyAllTriggers = false) {

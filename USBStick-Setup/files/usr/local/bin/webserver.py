@@ -10,6 +10,7 @@ import re
 import ipaddress
 import copy
 import shutil
+import socket
 from functools import lru_cache
 from typing import Optional
 
@@ -1033,6 +1034,56 @@ def learn_box(ip, identifier):
         config["boxOrder"].append(identifier)
     save_config(config)
 
+
+def _subnet_prefix_from_ip(value: str) -> Optional[str]:
+    try:
+        ip = ipaddress.ip_address(str(value).strip())
+    except ValueError:
+        return None
+    if ip.version != 4 or ip.is_loopback or ip.is_link_local or ip.is_unspecified:
+        return None
+    parts = str(ip).split(".")
+    return ".".join(parts[:3])
+
+
+def _local_ipv4_subnet_candidates() -> list[str]:
+    candidates: list[str] = []
+
+    def add(value: str) -> None:
+        prefix = _subnet_prefix_from_ip(value)
+        if prefix is None:
+            try:
+                prefix = str(ipaddress.ip_network(f"{str(value).strip()}.0/24", strict=False).network_address)
+                prefix = ".".join(prefix.split(".")[:3])
+            except ValueError:
+                prefix = None
+        if prefix and prefix not in candidates:
+            candidates.append(prefix)
+
+    add(SCAN_SUBNET)
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("8.8.8.8", 80))
+            add(probe.getsockname()[0])
+    except OSError:
+        pass
+
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            add(info[4][0])
+    except OSError:
+        pass
+
+    try:
+        config = load_config()
+        for box in config.get("boxen", {}).values():
+            if isinstance(box, dict):
+                add(str(box.get("ip", "")))
+    except Exception:
+        app.logger.exception("Lokale Netzbereiche konnten nicht aus der Konfiguration gelesen werden")
+
+    return candidates
+
 @app.route("/")
 def index():
     with open(INDEX_FILE, "r", encoding="utf-8") as f:
@@ -1055,6 +1106,11 @@ def webspace_config():
         200,
         {"Content-Type": "application/javascript; charset=utf-8"},
     )
+
+
+@app.route("/local_networks")
+def local_networks():
+    return jsonify({"subnets": _local_ipv4_subnet_candidates(), "defaultSubnet": SCAN_SUBNET})
 
 
 @app.route("/devices")

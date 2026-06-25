@@ -56,6 +56,21 @@ def test_webspace_config_route_is_safe_empty_default(webserver_app):
     assert "|| ''" in response.get_data(as_text=True)
 
 
+def test_local_networks_route_returns_subnet_candidates(webserver_app, monkeypatch):
+    module, client = webserver_app
+    module.SCAN_SUBNET = "192.168.137"
+    module.save_config({"boxen": {"Box": _empty_box(module, ip="192.168.178.22")}, "boxOrder": ["Box"]})
+    monkeypatch.setattr(module.socket, "getaddrinfo", lambda *args, **kwargs: [])
+
+    response = client.get("/local_networks")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["defaultSubnet"] == "192.168.137"
+    assert "192.168.137" in data["subnets"]
+    assert "192.168.178" in data["subnets"]
+
+
 def test_load_config_recovers_from_corrupted_file(tmp_path):
     module = _load_webserver(tmp_path)
     config_path = Path(module.CONFIG_FILE)
