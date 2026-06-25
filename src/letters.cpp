@@ -3,7 +3,7 @@
 std::map<char, const uint8_t*> letterData;
 
 void loadLetterData() {
-    Serial.println(F("📦 Lade Buchstaben-Daten..."));
+    Serial.println(F("📦 Lade Zeichen-/Symbol-Daten..."));
     letterData['A'] = letter_A;
     letterData['B'] = letter_B;
     letterData['C'] = letter_C;

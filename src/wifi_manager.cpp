@@ -56,7 +56,7 @@ void refreshWiFiIdleTimer(const __FlashStringHelper *reason) {
 
 void clearWiFiSymbol() {
     if (triggerActive) {
-        Serial.println(F("⏳ WiFi-Symbol bleibt, weil ein Buchstabe aktiv ist."));
+        Serial.println(F("⏳ WiFi-Symbol bleibt, weil ein Zeichen/Symbol aktiv ist."));
         return;
     }
 
@@ -94,7 +94,7 @@ void drawWiFiSymbol() {
     }
 
     if (triggerActive) {
-        Serial.println(F("⏳ WiFi-Symbol NICHT angezeigt, weil ein Buchstabe aktiv ist."));
+        Serial.println(F("⏳ WiFi-Symbol NICHT angezeigt, weil ein Zeichen/Symbol aktiv ist."));
         wifiSymbolVisible = false;
         return;
     }

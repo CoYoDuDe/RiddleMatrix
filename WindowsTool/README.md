@@ -14,7 +14,7 @@ Der USB-Stick bleibt als Backup erhalten. Die Windows-App schreibt nur dann auf 
 - bei blockiertem Hotspot-Fallback die Windows-Hotspot-Einstellungen oeffnen
 - den originalen Flask-Webserver aus `USBStick-Setup/files/usr/local/bin/webserver.py` starten
 - die originale USB-Stick-Weboberflaeche aus `USBStick-Setup/files/usr/local/etc/index.html` verwenden
-- bekannte Boxen, Reihenfolge, eingebettete Box-Weboberflaechen, Tages-/Trigger-Buchstaben, Farben, Delays und Uebertragung an Boxen wie beim USB-Stick nutzen
+- bekannte Boxen, Reihenfolge, eingebettete Box-Weboberflaechen, Tages-/Trigger-Zeichen, Symbole, Farben, Delays und Uebertragung an Boxen wie beim USB-Stick nutzen
 
 ## Start
 

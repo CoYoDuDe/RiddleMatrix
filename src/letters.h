@@ -4,10 +4,10 @@
 #include <Arduino.h>
 #include <map>
 
-// **Buchstaben-Datenbank (Deklaration für externe Nutzung)**
+// **Zeichen-/Symbol-Datenbank (Deklaration für externe Nutzung)**
 extern std::map<char, const uint8_t*> letterData;
 
-// **Buchstaben A-Z + #**
+// **Zeichen A-Z + Symbole**
 const uint8_t letter_SUN[128] PROGMEM = {
     0b00000000, 0b00000000, 0b00000000, 0b00000000,   //                                 ,
     0b00000000, 0b00000000, 0b00000000, 0b00000000,   //                                 ,
@@ -1093,7 +1093,7 @@ const uint8_t letter_RIDDLER[128] PROGMEM = {
     0b00000000, 0b00000000, 0b00000000, 0b00000000,   //                                 
 };
 
-// **Buchstaben-Datenbank Definition**
+// **Zeichen-/Symbol-Datenbank Definition**
 extern void loadLetterData();
 
 #endif

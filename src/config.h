@@ -158,10 +158,10 @@ extern bool triggerActive;
 extern unsigned long letterStartTime;
 extern unsigned long wifiStartTime;
 
-// **Buchstaben für Wochentage (Standardwerte)**
+// **Zeichen/Symbole für Wochentage (Standardwerte)**
 extern char dailyLetters[NUM_TRIGGERS][NUM_DAYS];
 
-// **Buchstabenfarben für die Wochentage (Standard: Weiß)**
+// **Zeichen-/Symbolfarben für die Wochentage (Standard: Weiß)**
 extern char dailyLetterColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH];
 extern uint8_t dailyLetterColorModes[NUM_TRIGGERS][NUM_DAYS];
 extern uint16_t dailyLetterRandomPaletteMasks[NUM_TRIGGERS][NUM_DAYS];
@@ -177,13 +177,13 @@ enum class LetterColorMode : uint8_t {
 extern const char *const randomColorPalette[RANDOM_COLOR_PALETTE_SIZE];
 extern const char *const randomColorPaletteLabels[RANDOM_COLOR_PALETTE_SIZE];
 
-// **Alle auswählbaren Buchstaben (A-Z & `*`)**
+// **Alle auswählbaren Zeichen/Symbole**
 const char availableLetters[] = {
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
     'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
     '*', '#', '~', '&', '?', '0', '1', '2', '3', '4', '5', '6', '7'};
 
-// **Konfiguration für Buchstabenanzeige**
+// **Konfiguration für Zeichen-/Symbolanzeige**
 extern int display_brightness;           // Standard: 100
 extern unsigned long letter_display_time;           // Standard: 10 Sekunden
 extern unsigned long letter_trigger_delays[NUM_TRIGGERS][NUM_DAYS];
@@ -191,7 +191,7 @@ extern unsigned long letter_auto_display_interval; // Standard: 5 Minuten
 extern uint16_t standalone_active_start_minutes;   // Minuten seit Mitternacht
 extern uint16_t standalone_active_end_minutes;     // Minuten seit Mitternacht
 
-// **Modus für Buchstabenanzeige (Auto/Trigger)**
+// **Modus für Zeichen-/Symbolanzeige (Auto/Trigger)**
 extern bool autoDisplayMode;
 
 // **RTC-Instanz**

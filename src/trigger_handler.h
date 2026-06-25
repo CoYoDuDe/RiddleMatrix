@@ -26,7 +26,7 @@ enum class DisplayLetterError : uint8_t {
 
 extern DisplayLetterError lastDisplayLetterError;
 
-// **Funktion: Buchstaben oder Sonderzeichen anzeigen**
+// **Funktion: Zeichen/Symbole anzeigen**
 bool displayLetter(uint8_t triggerIndex, char letter);
 
 void handleTrigger(char triggerType, bool isAutoMode = false, bool fromWeb = false);

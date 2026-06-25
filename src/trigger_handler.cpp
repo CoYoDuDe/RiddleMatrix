@@ -194,7 +194,7 @@ void clearDisplay() {
         return;
     }
 
-    Serial.println(F("🧹 Buchstabe wird jetzt gelöscht!"));
+    Serial.println(F("🧹 Zeichen/Symbol wird jetzt gelöscht!"));
 
     display.fillScreen(display.color565(0, 0, 0));
     display.display();
@@ -343,13 +343,13 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         triggerIndex = 0;
     }
 
-    Serial.print(F("🎨 Zeichne Buchstabe für Trigger "));
+    Serial.print(F("🎨 Zeichne Zeichen/Symbol für Trigger "));
     Serial.print(triggerIndex + 1);
     Serial.print(F(": "));
     Serial.println(letter);
 
     if (triggerActive) {
-        Serial.println(F("⚠️ Ein Buchstabe ist bereits aktiv. Abbruch."));
+        Serial.println(F("⚠️ Ein Zeichen/Symbol ist bereits aktiv. Abbruch."));
         lastDisplayLetterError = DisplayLetterError::TriggerAlreadyActive;
         return false;
     }
@@ -396,7 +396,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         customSymbolEnabled[customSymbolIndex] == 1;
 
     if (!useCustomSymbol && letterData.find(letter) == letterData.end()) {
-        Serial.println(F("⚠️ Fehler: Buchstabe nicht gefunden!"));
+        Serial.println(F("⚠️ Fehler: Zeichen/Symbol nicht gefunden!"));
         triggerActive = false;
         lastDisplayLetterError = DisplayLetterError::LetterNotFound;
         ensureWiFiSymbolAfterError();
@@ -423,7 +423,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         }
     }
 
-    Serial.println(F("✅ Buchstabe auf Display gezeichnet!"));
+    Serial.println(F("✅ Zeichen/Symbol auf Display gezeichnet!"));
     display.display();
 
     letterStartTime = millis();
@@ -477,7 +477,7 @@ void handleTrigger(char triggerType, bool isAutoMode, bool fromWeb) {
         Serial.print(daysOfTheWeek[today]);
         Serial.print(F(" → Trigger "));
         Serial.print(triggerIndex + 1);
-        Serial.print(F(" zeigt Buchstabe: "));
+        Serial.print(F(" zeigt Zeichen/Symbol: "));
         Serial.println(letter);
 
         unsigned long delayTime = letter_trigger_delays[triggerIndex][delayDayIndex];
@@ -501,13 +501,13 @@ void handleTrigger(char triggerType, bool isAutoMode, bool fromWeb) {
             Serial.print(F("❌ Anzeige fehlgeschlagen: "));
             switch (lastDisplayLetterError) {
                 case DisplayLetterError::TriggerAlreadyActive:
-                    Serial.println(F("Ein anderer Buchstabe wird bereits angezeigt."));
+                    Serial.println(F("Ein anderes Zeichen/Symbol wird bereits angezeigt."));
                     break;
                 case DisplayLetterError::InvalidWeekday:
                     Serial.println(F("Ungültiger Wochentag vom RTC-Modul."));
                     break;
                 case DisplayLetterError::LetterNotFound:
-                    Serial.println(F("Kein Muster für den angeforderten Buchstaben."));
+                    Serial.println(F("Kein Muster für das angeforderte Zeichen/Symbol."));
                     break;
                 case DisplayLetterError::None:
                 default:
@@ -557,7 +557,7 @@ void checkAutoDisplay() {
 
     if (millis() - lastDisplayTime > ((unsigned long)letter_auto_display_interval * 1000UL)) {
         lastDisplayTime = millis();
-        Serial.println(F("🕒 Automodus aktiv: Zeige heutigen Buchstaben automatisch!"));
+        Serial.println(F("🕒 Automodus aktiv: Zeige heutiges Zeichen/Symbol automatisch!"));
 
         handleTrigger('1', true, false);
     }

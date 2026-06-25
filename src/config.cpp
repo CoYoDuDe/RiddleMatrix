@@ -674,7 +674,7 @@ void loadConfig() {
             }
 
             if (!letterValid) {
-                Serial.println(F("🛑 Ungültiger Buchstabe entdeckt! Setze Standardwert."));
+                Serial.println(F("🛑 Ungültiges Zeichen/Symbol entdeckt! Setze Standardwert."));
                 dailyLetters[trigger][day] = DEFAULT_DAILY_LETTERS[trigger][day];
                 eepromUpdated = true;
             }
@@ -718,7 +718,7 @@ void loadConfig() {
     }
 
     if (letter_display_time < 1 || letter_display_time > 60) {
-        Serial.println(F("🛑 Ungültige Buchstaben-Anzeigezeit! Setze Standardwert..."));
+        Serial.println(F("🛑 Ungültige Zeichen-/Symbol-Anzeigezeit! Setze Standardwert..."));
         letter_display_time = 10;
         eepromUpdated = true;
     }

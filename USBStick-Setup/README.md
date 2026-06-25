@@ -1,7 +1,7 @@
 # USBStick-Setup
 
 Dieses Verzeichnis enthält alle Ressourcen, die auf einen USB-Stick kopiert werden können, um ein Venus-OS- oder Debian-basiertes
-System für den Märchen-Manager vorzubereiten. Die Struktur unter `files/` entspricht dem Root-Dateisystem des Zielgerätes.
+System für den RiddleMatrix-Manager vorzubereiten. Die Struktur unter `files/` entspricht dem Root-Dateisystem des Zielgerätes.
 
 Der zentrale Einstiegspunkt ist [`setup.sh`](setup.sh). Das Skript kopiert den vorbereiteten Dateibaum, setzt Dateirechte und
 aktiviert optional die bereitgestellten Systemd-Units. Darüber hinaus können optionale Hooks ausgeführt werden, um zusätzliche
@@ -77,7 +77,7 @@ werden in alphabetischer Reihenfolge mit dem Ziel-Root als einzigem Argument auf
 ### Automatische Webserver-Provisionierung
 
 Der Hook [`hooks.d/10-provision-webserver.sh`](hooks.d/10-provision-webserver.sh) kümmert sich nach dem Kopieren der Dateien
-automatisiert um alle Laufzeitabhängigkeiten des Märchen-Managers:
+automatisiert um alle Laufzeitabhängigkeiten des RiddleMatrix-Managers:
 
 - prüft mittels `dpkg-query`, ob benötigte Debian-Pakete wie `dnsmasq`, `hostapd`, `rfkill`, `x11-xserver-utils`, `python3`
   (inkl. `python3-venv`) und optionale Firmware-Pakete installiert sind und stößt bei Bedarf ein `apt-get install` an

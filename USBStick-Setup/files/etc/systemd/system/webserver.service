@@ -1,5 +1,5 @@
 [Unit]
-Description=Märchen Manager Webserver
+Description=RiddleMatrix Manager Webserver
 After=network.target
 
 [Service]

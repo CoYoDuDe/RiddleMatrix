@@ -1,7 +1,7 @@
 # RiddleMatrix
 
 Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details.
-RiddleMatrix ist eine Firmware für den ESP8266, die eine 64x64 RGB-LED-Matrix ansteuert. Für jeden Wochentag und jede der drei RS485-Triggerleitungen lassen sich individuelle Buchstaben, Farben **und Verzögerungszeiten** festlegen. Die Buchstaben erscheinen entweder zeitgesteuert oder per RS485-Trigger. Die Konfiguration erfolgt über die integrierte Weboberfläche; alle Einstellungen werden im EEPROM gespeichert.
+RiddleMatrix ist eine Firmware für den ESP8266, die eine 64x64 RGB-LED-Matrix ansteuert. Für jeden Wochentag und jede der drei RS485-Triggerleitungen lassen sich individuelle Zeichen/Symbole, Farben **und Verzögerungszeiten** festlegen. Die Zeichen/Symbole erscheinen entweder zeitgesteuert oder per RS485-Trigger. Die Konfiguration erfolgt über die integrierte Weboberfläche; alle Einstellungen werden im EEPROM gespeichert.
 
 Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
@@ -9,7 +9,7 @@ Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
 - Firmware-Builds sind fuer `nodemcuv2` (ESP8266) und `esp32dev` (ESP32) konfiguriert. Bei ESP32 muessen die Matrix-/RTC-/RS485-Pins je nach echter Hardware in `src/config.h` angepasst werden.
 - Die Verwaltung nutzt Zeichen/Symbole statt nur Buchstaben: A-Z, feste Symbole und acht editierbare Symbol-Slots `0` bis `7`.
-- Die editierbaren Symbol-Slots koennen in der Box-Weboberflaeche als 32x32-Raster bearbeitet, aus einer Bilddatei importiert und dauerhaft im EEPROM gespeichert werden.
+- Die editierbaren Symbol-Slots koennen im zentralen Manager benannt, aus vorhandenen Presets oder Bilddateien erstellt, als 32x32-Raster bearbeitet und an die Boxen übertragen werden.
 - Im dauerhaften WLAN oder AP+STA-Modus zeigt die Box kein WiFi-Symbol auf der Matrix. Wenn das Ziel-WLAN nicht erreichbar ist, bleibt ein lokaler Konfigurations-AP als Fallback aktiv.
 - Zeit/Datum werden bei Internetverbindung per NTP gesetzt; bei Reconnects und periodisch wird die Synchronisierung erneut versucht.
 
@@ -105,7 +105,7 @@ pytest tests/test_provision_hook.py
 - RS485-Enable-Pin an `GPIO_RS485_ENABLE` verbinden.
 - Serielle Konsole bei 19200 Baud für Debug-Ausgaben prüfen.
 
-Nach der Einrichtung zeigt die Firmware die Buchstaben automatisch an und kann über die Weboberfläche gesteuert werden.
+Nach der Einrichtung zeigt die Firmware die Zeichen/Symbole automatisch an und kann über die Weboberfläche gesteuert werden.
 
 ## Konfiguration
 
@@ -113,11 +113,11 @@ Nach der Einrichtung zeigt die Firmware die Buchstaben automatisch an und kann �
 
 > **Hinweis:** Die Firmware erkennt jetzt gelöschte EEPROM-Zellen plattformunabhängig. Vergleiche gegen `0xFF` erfolgen explizit auf `uint8_t`-Basis, sodass Host-Tests und der ESP8266 dieselbe Initialisierung der Voreinstellungen auslösen.
 
-### Mehrspuriges Buchstabenraster
+### Mehrspuriges Zeichenraster
 
 Die Tagesbuchstaben werden jetzt dreidimensional abgelegt:
 
-- `dailyLetters[trigger][tag]` speichert den Buchstaben pro Triggerleitung und Wochentag.
+- `dailyLetters[trigger][tag]` speichert das Zeichen/Symbol pro Triggerleitung und Wochentag.
 - `dailyLetterColors[trigger][tag]` enthält die passende Farbe als `#RRGGBB`-String.
 
 Trigger-Index `0` entspricht RS485-Trigger 1, Index `1` Trigger 2 usw. Die Weboberfläche unter `/` zeigt die Werte als Matrix an und erlaubt das gleichzeitige Aktualisieren über `/updateAllLetters`.
@@ -146,7 +146,7 @@ Neben den Großbuchstaben stehen mehrere vordefinierte Symbole zur Verfügung. `
 
 - `letter_trigger_delays[trigger][tag]` verwaltet die Wartezeit (Sekunden) vor der Anzeige.
 - Die Weboberfläche stellt die Werte als Tabelle dar und validiert Eingaben auf ganzzahlige Werte zwischen 0 und 999.
-- Die API `/updateTriggerDelays` akzeptiert ein `FormData`-Payload mit Feldern `delay_<triggerIndex>_<dayIndex>` (Indexbeginn 0). Erfolgreiche Aufrufe speichern Matrix, Buchstaben, Farben und sonstige Parameter gemeinsam im EEPROM (`saveConfig()`).
+- Die API `/updateTriggerDelays` akzeptiert ein `FormData`-Payload mit Feldern `delay_<triggerIndex>_<dayIndex>` (Indexbeginn 0). Erfolgreiche Aufrufe speichern Matrix, Zeichen/Symbole, Farben und sonstige Parameter gemeinsam im EEPROM (`saveConfig()`).
 - Legacy-Konfigurationen mit drei Verzögerungswerten werden beim Laden gleichmäßig auf alle Wochentage verteilt.
 - Die API `/api/trigger-delays` stellt die aktuelle Matrix als JSON mit numerischen Werten bereit. Die Schlüssel folgen den Kürzeln
   `{"so", "mo", "di", "mi", "do", "fr", "sa"}` und jede Liste enthält die Verzögerungen der drei Trigger (Sekunden):
@@ -165,7 +165,7 @@ Neben den Großbuchstaben stehen mehrere vordefinierte Symbole zur Verfügung. `
 ### Anzeigeeinstellungen & REST-API `/updateDisplaySettings`
 
 - **`brightness`** (`1`–`255`): Helligkeit der Matrix. Werte außerhalb führen zu HTTP 400.
-- **`letter_time`** (`1`–`60` Sekunden): Dauer pro Buchstabe. Nur ganzzahlige Sekunden werden akzeptiert.
+- **`letter_time`** (`1`–`60` Sekunden): Dauer pro Zeichen/Symbol. Nur ganzzahlige Sekunden werden akzeptiert.
 - **`auto_interval`** (`30`–`600` Sekunden): Intervall für den Automodus.
 - **`auto_mode`** (optional): `on`, `off`, `true`, `false`, `1` oder `0`. Nicht angegebene Felder deaktivieren den Automodus.
 
