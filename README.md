@@ -32,7 +32,7 @@ Diese Werte sind in `src/config.cpp` als `DEFAULT_WIFI_SSID` und `DEFAULT_WIFI_P
 
 Die Weboberflaeche bietet drei WLAN-Modi:
 
-- `Standard`: Die Box verbindet sich wie bisher nur zum Manager-Hotspot, zeigt dabei optional das WiFi-Symbol und schaltet WLAN nach Inaktivitaet wieder ab.
+- `Standard`: Die Box verbindet sich wie bisher nur zum Manager-Hotspot, zeigt dabei optional das WiFi-Symbol und schaltet WLAN nach 10 Minuten Inaktivitaet wieder ab.
 - `Dauerhaftes WLAN`: Die Box bleibt in einem bestehenden WLAN online, reconnectet automatisch, nutzt wahlweise DHCP oder eine feste IP und zeigt kein WiFi-Symbol auf der Matrix.
 - `AP+STA/Mesh-Kopie`: Die Box verbindet sich mit dem bestehenden WLAN und startet parallel einen lokalen Box-AP. Wenn keine lokalen AP-Daten eingetragen werden, uebernimmt der lokale AP dieselbe SSID und dasselbe Passwort wie das Ziel-WLAN.
 
