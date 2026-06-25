@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="UTF-8">
   <title>Boxen verwalten</title>
-  <script src="/vendor/xlsx.full.min.js"></script>
+  <script src="vendor/xlsx.full.min.js"></script>
   <script>window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 = window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 || "";</script>
-  <script src="/webspace-config.js"></script>
+  <script src="webspace-config.js"></script>
   <script type="text/javascript">
     var gk_isXlsx = false;
     var gk_xlsxFileLookup = {};
@@ -151,7 +151,7 @@
 <body onload="init()">
 <div id="sidebar">
   <div>
-    <h3>Märchen</h3>
+    <h3>MÃ¤rchen</h3>
     <button id="setupBtn" onclick="showSetup()">Boxen verwalten</button>
     <div id="deviceList">Lade...</div>
   </div>
@@ -160,7 +160,7 @@
     <button id="shutdown" onclick="shutdown()">Herunterfahren</button>
   </div>
 </div>
-<div id="content"><p>Willkommen im Märchen-Manager</p></div>
+<div id="content"><p>Willkommen im MÃ¤rchen-Manager</p></div>
 <script>
 let knownBoxes = {};
 let connectedBoxes = [];
@@ -184,6 +184,9 @@ let webspaceAuthenticated = false;
 let localSubnetCandidates = [];
 const localStorageKey = "riddlematrix.localBrowserConfig.v1";
 const webspaceAuthStorageKey = "riddlematrix.webspaceAuth.v1";
+const managerBasePath = location.pathname.endsWith("/")
+  ? location.pathname
+  : location.pathname.replace(/[^/]*$/, "");
 const days = ["mo", "di", "mi", "do", "fr", "sa", "so"];
 const dayNames = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const firmwareDayIndexByDay = { so: 0, mo: 1, di: 2, mi: 3, do: 4, fr: 5, sa: 6 };
@@ -203,12 +206,18 @@ const randomPalette = [
   { color: "#ffffff", label: "Weiss" }
 ];
 const colorPattern = /^#[0-9A-Fa-f]{6}$/;
-const letterLabels = {"": "Leer", "*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler"};
+const letterLabels = {"": "Leer", "*": "Sun+Rad", "#": "Sun", "~": "WIFI", "&": "Rad", "?": "Riddler", "0": "Symbol 0", "1": "Symbol 1", "2": "Symbol 2", "3": "Symbol 3", "4": "Symbol 4", "5": "Symbol 5", "6": "Symbol 6", "7": "Symbol 7"};
 const letterOptions = [""];
-letterOptions.push(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?".split(""));
+letterOptions.push(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?01234567".split(""));
 let currentWordTrigger = 0;
 let separateWordTriggers = true;
 let separateBoxTriggers = true;
+
+function managerPath(path) {
+  const cleanPath = String(path || "").replace(/^\/+/, "");
+  return new URL(cleanPath, location.origin + managerBasePath).pathname;
+}
+
 function isHostedHttpsMode() {
   return location.protocol === "https:" && !["localhost", "127.0.0.1", "::1"].includes(location.hostname);
 }
@@ -254,10 +263,10 @@ async function ensureWebspaceAccess() {
     overlay.className = "auth-overlay";
     overlay.innerHTML = `
       <div class="auth-card">
-        <h2>Märchen Manager</h2>
+        <h2>MÃ¤rchen Manager</h2>
         <p>Bitte Passwort eingeben.</p>
         <input id="webspacePasswordInput" type="password" autocomplete="current-password" autofocus>
-        <button id="webspacePasswordButton" type="button">Öffnen</button>
+        <button id="webspacePasswordButton" type="button">Ã–ffnen</button>
         <p id="webspacePasswordStatus" class="status"></p>
       </div>`;
     document.body.appendChild(overlay);
@@ -423,7 +432,7 @@ async function detectServerSubnetCandidates(candidates) {
     return candidates;
   }
   try {
-    const response = await fetchWithTimeout("/local_networks", { cache: "no-store" }, 1200);
+    const response = await fetchWithTimeout(managerPath("/local_networks"), { cache: "no-store" }, 1200);
     if (!response.ok) {
       return candidates;
     }
@@ -785,7 +794,7 @@ async function scanLocalSubnet(options = {}) {
   const concurrency = 18;
   let cursor = 0;
 
-  updateLocalScanStatus(`Suche Märchen im lokalen Netz ${subnet}.0/24...`);
+  updateLocalScanStatus(`Suche MÃ¤rchen im lokalen Netz ${subnet}.0/24...`);
 
   async function worker() {
     while (cursor < ips.length && !localScanAbortController.signal.aborted) {
@@ -801,7 +810,7 @@ async function scanLocalSubnet(options = {}) {
         saveLocalBrowserConfig();
       }
       if (checked % 10 === 0 || result) {
-        updateLocalScanStatus(`Suche Märchen: ${checked}/${ips.length} geprüft, ${found} gefunden.`);
+        updateLocalScanStatus(`Suche MÃ¤rchen: ${checked}/${ips.length} geprÃ¼ft, ${found} gefunden.`);
       }
     }
   }
@@ -823,8 +832,8 @@ async function scanLocalSubnet(options = {}) {
     showSetup();
     updateLocalScanStatus(
       aborted
-        ? `Suche abgebrochen. ${found} Märchen gefunden.`
-        : `Suche abgeschlossen. ${found} Märchen gefunden.`
+        ? `Suche abgebrochen. ${found} MÃ¤rchen gefunden.`
+        : `Suche abgeschlossen. ${found} MÃ¤rchen gefunden.`
     );
   }
 }
@@ -933,19 +942,19 @@ async function fetchDevices() {
   devicesPollInFlight = true;
   const pollPromise = (async () => {
     try {
-      const res = await fetch("/devices");
+      const res = await fetch(managerPath("/devices"));
       if (!res.ok) {
         if (isHostedHttpsMode()) {
           enterLocalBrowserMode("Webspace-Modus aktiv: /devices ist auf dem Server nicht verfuegbar, lokale Boxen werden im Browser gespeichert.");
           return;
         }
-        let errorMessage = `❌ Fehler beim Laden der Boxen (${res.status} ${res.statusText || ""})`;
+        let errorMessage = `âŒ Fehler beim Laden der Boxen (${res.status} ${res.statusText || ""})`;
         try {
           const errorData = await res.json();
           if (errorData && typeof errorData === "object") {
             const details = [errorData.message, errorData.error, errorData.detail]
               .filter(part => typeof part === "string" && part.trim().length > 0)
-              .join(" – ");
+              .join(" â€“ ");
             if (details) {
               errorMessage += `: ${details}`;
             }
@@ -978,7 +987,7 @@ async function fetchDevices() {
         normalizedIncoming[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
       });
 
-      // Prüfe auf Änderungen
+      // PrÃ¼fe auf Ã„nderungen
       const hasChanges =
         JSON.stringify(knownBoxes) !== JSON.stringify(normalizedIncoming) ||
         JSON.stringify(connectedBoxes) !== JSON.stringify(newConnectedBoxes) ||
@@ -1009,9 +1018,9 @@ async function fetchDevices() {
         enterLocalBrowserMode("Webspace-Modus aktiv: Der Server kann dein lokales WLAN nicht sehen, der Browser verwaltet die Boxen direkt.");
         return;
       }
-      console.error("Fehler beim Abrufen der Geräte:", e);
+      console.error("Fehler beim Abrufen der GerÃ¤te:", e);
       if (statusArea) {
-        const message = `❌ Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
+        const message = `âŒ Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
         statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
         statusArea.dataset.fetchError = "true";
       }
@@ -1073,21 +1082,21 @@ async function shutdown() {
   shutdownButton.textContent = "Wird heruntergefahren...";
 
   try {
-    const response = await fetch("/shutdown", { method: "POST" });
+    const response = await fetch(managerPath("/shutdown"), { method: "POST" });
     if (!response.ok) {
       alert("Fehler beim Abschalten: " + response.statusText);
       return;
     }
-    let message = "Shutdown ausgelöst.";
+    let message = "Shutdown ausgelÃ¶st.";
     try {
       const data = await response.json();
       if (data && data.status) {
-        message = "Shutdown ausgelöst (" + data.status + ").";
+        message = "Shutdown ausgelÃ¶st (" + data.status + ").";
       }
     } catch (e) {
       // JSON optional
     }
-    alert(message + " Das Gerät kann einige Minuten zum Herunterfahren benötigen.");
+    alert(message + " Das GerÃ¤t kann einige Minuten zum Herunterfahren benÃ¶tigen.");
   } catch (error) {
     console.error(error);
     alert("Netzwerkfehler beim Abschalten. Bitte erneut versuchen.");
@@ -1104,7 +1113,7 @@ function showSetup() {
     html += '<div id="localScanStatus"></div>';
   }
 
-  html += '<div class="box-card"><h3>Wörter für Wochentage</h3>';
+  html += '<div class="box-card"><h3>WÃ¶rter fÃ¼r Wochentage</h3>';
   html += '<div class="toggle-row">';
   html += `<label><input type="checkbox" data-live-edit="true" ${separateWordTriggers ? "checked" : ""} onchange="setSeparateWordTriggers(this.checked)"> Alle 3 Trigger separat anzeigen</label>`;
   if (separateWordTriggers) {
@@ -1141,7 +1150,7 @@ function showSetup() {
   if (separateBoxTriggers) {
     html += '<span>Alle drei Trigger werden einzeln angezeigt.</span>';
   } else {
-    html += '<span>Änderungen gelten pro Tag für alle drei Trigger.</span>';
+    html += '<span>Ã„nderungen gelten pro Tag fÃ¼r alle drei Trigger.</span>';
   }
   html += '</div></div>';
 
@@ -1149,7 +1158,7 @@ function showSetup() {
     const box = normalizeBox(knownBoxes[hostname] || {});
     const escapedHostname = escapeHtml(hostname);
     const hostnameArgument = escapeJsString(hostname);
-    const transferMark = transferCompleted[hostname] ? '<span class="transfer-badge">✓ übertragen</span>' : '';
+    const transferMark = transferCompleted[hostname] ? '<span class="transfer-badge">âœ“ Ã¼bertragen</span>' : '';
     html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}${transferMark}</h3><div class="weekday-row">`;
     for (let i = 0; i < days.length; i++) {
       const letters = box.letters?.[days[i]] || [];
@@ -1187,7 +1196,7 @@ function showSetup() {
               <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateBoxTriggers})">
               <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateBoxTriggers})">
                 <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Fest</option>
-                <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewählt)</option>
+                <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewÃ¤hlt)</option>
                 <option value="random_all" ${colorMode === "random_all" ? "selected" : ""}>Zufall (alle)</option>
               </select>
               <div class="palette-grid">
@@ -1203,7 +1212,7 @@ function showSetup() {
                   </label>`).join("")}
               </div>
               <div class="delay-input-wrapper">
-                <span>Verzögerung (s)</span>
+                <span>VerzÃ¶gerung (s)</span>
                 <input type="number" class="delay-input" data-live-edit="true" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this, ${!separateBoxTriggers})">
               </div>
             </div>`;
@@ -1214,16 +1223,16 @@ function showSetup() {
     }
     html += `</div>
       <div class="order-buttons">
-        <button onclick="moveBoxUp(${hostnameArgument})">↑</button>
-        <button onclick="moveBoxDown(${hostnameArgument})">↓</button>
-        <button onclick="removeBox(${hostnameArgument})">❌ Entfernen</button>
+        <button onclick="moveBoxUp(${hostnameArgument})">â†‘</button>
+        <button onclick="moveBoxDown(${hostnameArgument})">â†“</button>
+        <button onclick="removeBox(${hostnameArgument})">âŒ Entfernen</button>
       </div></div>`;
   });
 
   html += `
   <div class="action-buttons">
-    <button onclick="transferAll()" id="transferBtn">✅ Übertragen</button>
-    <button onclick="reloadAll()" id="reloadBtn">🔄 Boxen neu lernen</button>
+    <button onclick="transferAll()" id="transferBtn">âœ… Ãœbertragen</button>
+    <button onclick="reloadAll()" id="reloadBtn">ðŸ”„ Boxen neu lernen</button>
   </div>
   <div id="statusArea"></div>
   `;
@@ -1237,7 +1246,7 @@ function showSetup() {
 function showAppSettings() {
   let html = '<h2>Einstellungen</h2>';
   html += '<div class="box-card">';
-  html += '<h3>Lokale Märchen-Suche</h3>';
+  html += '<h3>Lokale MÃ¤rchen-Suche</h3>';
   html += '<div class="settings-grid">';
   html += '<label for="localSubnetPrefix">IP-Bereich</label>';
   html += `<span><input id="localSubnetPrefix" type="text" list="localSubnetCandidateList" value="${escapeHtml(localScanSubnet)}" placeholder="z.B. 192.168.137">`;
@@ -1245,10 +1254,10 @@ function showAppSettings() {
   html += '<span></span><span><button type="button" onclick="detectLocalSubnetCandidates()">IP-Bereich erkennen</button> ';
   html += '<button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button></span>';
   html += '<label for="localBoxIp">Box-IP direkt</label>';
-  html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> <button type="button" onclick="learnLocalBoxFromIp()">Hinzufügen/lernen</button></span>';
+  html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> <button type="button" onclick="learnLocalBoxFromIp()">HinzufÃ¼gen/lernen</button></span>';
   html += '</div>';
   html += '<div id="localScanStatus" style="margin-top:10px;"></div>';
-  html += '<p>Die Suche übernimmt nur Geräte, die wie RiddleMatrix-Boxen antworten. Der IP-Bereich wird automatisch vorgeschlagen und kann bei Bedarf geändert werden.</p>';
+  html += '<p>Die Suche Ã¼bernimmt nur GerÃ¤te, die wie RiddleMatrix-Boxen antworten. Der IP-Bereich wird automatisch vorgeschlagen und kann bei Bedarf geÃ¤ndert werden.</p>';
   html += '</div>';
   document.getElementById("content").innerHTML = html;
   statusArea = document.getElementById("localScanStatus");
@@ -1347,26 +1356,26 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
 
   const requestHeaders = { "Content-Type": "application/json" };
 
-  fetch("/update_box", {
+  fetch(managerPath("/update_box"), {
     method: "POST",
     headers: requestHeaders,
     body: JSON.stringify(payload)
   }).then(response => {
     if (!response.ok) {
-      statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichen.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichen.</div>';
       if (inputElement) inputElement.classList.remove("pending");
     } else {
       if (inputElement) {
         inputElement.classList.remove("pending");
         inputElement.classList.add("saved");
         setTimeout(() => inputElement.classList.remove("saved"), 1000);
-        statusArea.innerHTML = '<div class="statusEntry status">✅ Änderung gespeichert.</div>';
+        statusArea.innerHTML = '<div class="statusEntry status">âœ… Ã„nderung gespeichert.</div>';
       }
     if (updateUI) showSetup();
     }
   }).catch(e => {
     console.error("Fehler beim Speichern:", e);
-    statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern.</div>';
+    statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern.</div>';
     if (inputElement) inputElement.classList.remove("pending");
   });
 }
@@ -1400,20 +1409,20 @@ function savePalette(hostname, day, triggerIndex, applyAllTriggers = false) {
     return;
   }
 
-  fetch("/update_box", {
+  fetch(managerPath("/update_box"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ hostname, day, triggerIndex: Number(triggerIndex), colorPaletteMask: mask, applyAllTriggers })
   }).then(response => {
     if (!response.ok) {
-      statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern der Zufallspalette.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern der Zufallspalette.</div>';
     } else {
-      statusArea.innerHTML = '<div class="statusEntry status">✅ Zufallspalette gespeichert.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status">âœ… Zufallspalette gespeichert.</div>';
       showSetup();
     }
   }).catch(error => {
     console.error("Fehler beim Speichern der Zufallspalette:", error);
-    statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern der Zufallspalette.</div>';
+    statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern der Zufallspalette.</div>';
   });
 }
 
@@ -1462,19 +1471,19 @@ function saveBoxOrder() {
   }
   const requestHeaders = { "Content-Type": "application/json" };
 
-  fetch("/update_box_order", {
+  fetch(managerPath("/update_box_order"), {
     method: "POST",
     headers: requestHeaders,
     body: JSON.stringify({ boxOrder })
   }).then(response => {
     if (!response.ok) {
-      statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern der Reihenfolge.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern der Reihenfolge.</div>';
     } else {
       showSetup();
     }
   }).catch(e => {
     console.error("Fehler beim Speichern der Reihenfolge:", e);
-    statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Speichern der Reihenfolge.</div>';
+    statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern der Reihenfolge.</div>';
   });
 }
 
@@ -1489,19 +1498,19 @@ function removeBox(hostname) {
   }
   const headers = { "Content-Type": "application/json" };
 
-  fetch("/remove_box", {
+  fetch(managerPath("/remove_box"), {
     method: "POST",
     headers,
     body: JSON.stringify({ hostname })
   }).then(response => {
     if (!response.ok) {
-      statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Entfernen.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Entfernen.</div>';
     } else {
       showSetup();
     }
   }).catch(e => {
     console.error("Fehler beim Entfernen:", e);
-    statusArea.innerHTML = '<div class="statusEntry status">❌ Fehler beim Entfernen.</div>';
+    statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Entfernen.</div>';
   });
 }
 
@@ -1514,7 +1523,7 @@ function updateTransferButton() {
     const remaining = Object.keys(transferPending).length;
     transferBtn.innerText = `Abbrechen (${remaining} offen)`;
   } else {
-    transferBtn.innerText = "✓ Übertragen";
+    transferBtn.innerText = "âœ“ Ãœbertragen";
   }
 }
 
@@ -1537,7 +1546,7 @@ function renderTransferStatus() {
 
 function isTransferSuccess(statusText) {
   return typeof statusText === "string" && (
-    statusText.includes("Übertragen") ||
+    statusText.includes("Ãœbertragen") ||
     statusText.includes("Uebertragen") ||
     statusText.includes("Bereits aktuell")
   );
@@ -1546,7 +1555,7 @@ function isTransferSuccess(statusText) {
 async function transferBox(hostname) {
   const headers = { "Content-Type": "application/json" };
 
-  let statusText = "❌ Unbekannter Fehler";
+  let statusText = "âŒ Unbekannter Fehler";
 
   if (localBrowserMode) {
     statusText = "Unbekannter Fehler";
@@ -1581,21 +1590,21 @@ async function transferBox(hostname) {
   }
 
   try {
-    const response = await fetch("/transfer_box", {
+    const response = await fetch(managerPath("/transfer_box"), {
       method: "POST",
       headers,
       body: JSON.stringify({ hostname })
     });
 
     if (!response.ok) {
-      statusText = `❌ Fehler (${response.status})`;
+      statusText = `âŒ Fehler (${response.status})`;
     } else {
       const data = await response.json();
-      statusText = data.status || "❌ Unerwartete Antwort";
+      statusText = data.status || "âŒ Unerwartete Antwort";
     }
   } catch (error) {
-    console.error("Fehler beim Übertragen:", error);
-    statusText = "❌ Netzwerkfehler";
+    console.error("Fehler beim Ãœbertragen:", error);
+    statusText = "âŒ Netzwerkfehler";
   }
 
   appendTransferStatus(`${hostname}: ${statusText}`);
@@ -1635,9 +1644,9 @@ async function runTransferLoop() {
   transferCancelled = false;
   updateTransferButton();
   if (wasCancelled) {
-    appendTransferStatus("Übertragung abgebrochen.");
+    appendTransferStatus("Ãœbertragung abgebrochen.");
   } else {
-    appendTransferStatus("Übertragung abgeschlossen.");
+    appendTransferStatus("Ãœbertragung abgeschlossen.");
   }
 }
 
@@ -1668,11 +1677,11 @@ async function reloadAll() {
   const originalLabel = reloadButton ? reloadButton.textContent : "";
   if (reloadButton) {
     reloadButton.disabled = true;
-    reloadButton.textContent = "Lade Geräte...";
+    reloadButton.textContent = "Lade GerÃ¤te...";
   }
 
   try {
-    const response = await fetch("/reload_all", { method: "POST" });
+    const response = await fetch(managerPath("/reload_all"), { method: "POST" });
     if (!response.ok) {
       alert("Fehler beim Neu-Laden der Boxen: " + response.statusText);
       return;
@@ -1684,7 +1693,7 @@ async function reloadAll() {
     alert("Netzwerkfehler beim Neu-Laden. Bitte erneut versuchen.");
   } finally {
     if (reloadButton) {
-      reloadButton.textContent = originalLabel || "🔄 Boxen neu lernen";
+      reloadButton.textContent = originalLabel || "ðŸ”„ Boxen neu lernen";
       reloadButton.disabled = false;
     }
   }

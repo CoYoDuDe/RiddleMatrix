@@ -5,6 +5,14 @@ RiddleMatrix ist eine Firmware für den ESP8266, die eine 64x64 RGB-LED-Matrix a
 
 Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
+## Aktueller Funktionsumfang
+
+- Firmware-Builds sind fuer `nodemcuv2` (ESP8266) und `esp32dev` (ESP32) konfiguriert. Bei ESP32 muessen die Matrix-/RTC-/RS485-Pins je nach echter Hardware in `src/config.h` angepasst werden.
+- Die Verwaltung nutzt Zeichen/Symbole statt nur Buchstaben: A-Z, feste Symbole und acht editierbare Symbol-Slots `0` bis `7`.
+- Die editierbaren Symbol-Slots koennen in der Box-Weboberflaeche als 32x32-Raster bearbeitet, aus einer Bilddatei importiert und dauerhaft im EEPROM gespeichert werden.
+- Im dauerhaften WLAN oder AP+STA-Modus zeigt die Box kein WiFi-Symbol auf der Matrix. Wenn das Ziel-WLAN nicht erreichbar ist, bleibt ein lokaler Konfigurations-AP als Fallback aktiv.
+- Zeit/Datum werden bei Internetverbindung per NTP gesetzt; bei Reconnects und periodisch wird die Synchronisierung erneut versucht.
+
 ## Hardware-Voraussetzungen
 
 - **ESP8266-Board** (NodeMCU v2 empfohlen)

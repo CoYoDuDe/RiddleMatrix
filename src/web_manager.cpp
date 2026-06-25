@@ -67,6 +67,14 @@ bool isSupportedLetter(char letter) {
     return false;
 }
 
+bool isOpenWifiNetwork(int networkIndex) {
+#if defined(ESP32)
+    return WiFi.encryptionType(networkIndex) == WIFI_AUTH_OPEN;
+#else
+    return WiFi.encryptionType(networkIndex) == ENC_TYPE_NONE;
+#endif
+}
+
 bool isValidHexColorString(const String &value) {
     if (value.length() != 7 || value.charAt(0) != '#') {
         return false;
@@ -297,9 +305,65 @@ String getLetterOptionLabel(char letter) {
             return F("Rad");
         case '?':
             return F("Riddler");
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+            return String(F("Symbol ")) + String(letter);
         default:
             return String(letter);
     }
+}
+
+int customSymbolIndexFromChar(char value) {
+    if (value < '0' || value > '7') {
+        return -1;
+    }
+    return value - '0';
+}
+
+String bitmapToHex(const uint8_t *bitmap) {
+    static const char hexChars[] = "0123456789ABCDEF";
+    String result;
+    result.reserve(SYMBOL_BITMAP_SIZE * 2);
+    for (size_t index = 0; index < SYMBOL_BITMAP_SIZE; ++index) {
+        const uint8_t value = bitmap[index];
+        result += hexChars[(value >> 4) & 0x0F];
+        result += hexChars[value & 0x0F];
+    }
+    return result;
+}
+
+int hexDigitValue(char value) {
+    if (value >= '0' && value <= '9') {
+        return value - '0';
+    }
+    if (value >= 'a' && value <= 'f') {
+        return value - 'a' + 10;
+    }
+    if (value >= 'A' && value <= 'F') {
+        return value - 'A' + 10;
+    }
+    return -1;
+}
+
+bool parseBitmapHex(const String &hex, uint8_t *bitmap) {
+    if (hex.length() != SYMBOL_BITMAP_SIZE * 2) {
+        return false;
+    }
+    for (size_t index = 0; index < SYMBOL_BITMAP_SIZE; ++index) {
+        const int high = hexDigitValue(hex[index * 2]);
+        const int low = hexDigitValue(hex[index * 2 + 1]);
+        if (high < 0 || low < 0) {
+            return false;
+        }
+        bitmap[index] = static_cast<uint8_t>((high << 4) | low);
+    }
+    return true;
 }
 
 String getColorModeOptionLabel(uint8_t mode) {
@@ -488,6 +552,122 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     }
 
     // 💾 WiFi-Daten speichern
+    let symbolEditorBitmap = new Array(128).fill(0);
+
+    function symbolBitIsSet(x, y) {
+        const byteIndex = y * 4 + Math.floor(x / 8);
+        return (symbolEditorBitmap[byteIndex] & (1 << (7 - (x % 8)))) !== 0;
+    }
+
+    function setSymbolBit(x, y, enabled) {
+        const byteIndex = y * 4 + Math.floor(x / 8);
+        const mask = 1 << (7 - (x % 8));
+        if (enabled) {
+            symbolEditorBitmap[byteIndex] |= mask;
+        } else {
+            symbolEditorBitmap[byteIndex] &= ~mask;
+        }
+    }
+
+    function renderSymbolEditor() {
+        const grid = document.getElementById('symbolGrid');
+        if (!grid) {
+            return;
+        }
+        grid.innerHTML = '';
+        for (let y = 0; y < 32; y++) {
+            for (let x = 0; x < 32; x++) {
+                const cell = document.createElement('button');
+                cell.type = 'button';
+                cell.className = 'symbol-cell' + (symbolBitIsSet(x, y) ? ' on' : '');
+                cell.addEventListener('click', () => {
+                    setSymbolBit(x, y, !symbolBitIsSet(x, y));
+                    renderSymbolEditor();
+                });
+                grid.appendChild(cell);
+            }
+        }
+    }
+
+    function symbolBitmapToHex() {
+        return symbolEditorBitmap
+            .map(value => (value & 255).toString(16).padStart(2, '0'))
+            .join('')
+            .toUpperCase();
+    }
+
+    function loadSymbolFromHex(hex) {
+        const clean = String(hex || '').trim();
+        if (!/^[0-9a-fA-F]{256}$/.test(clean)) {
+            symbolEditorBitmap = new Array(128).fill(0);
+        } else {
+            symbolEditorBitmap = [];
+            for (let index = 0; index < clean.length; index += 2) {
+                symbolEditorBitmap.push(parseInt(clean.slice(index, index + 2), 16));
+            }
+        }
+        renderSymbolEditor();
+    }
+
+    function loadCustomSymbol() {
+        const slot = document.getElementById('symbolSlot')?.value || '0';
+        fetch('/api/custom-symbol?slot=' + encodeURIComponent(slot))
+            .then(response => response.json())
+            .then(data => {
+                loadSymbolFromHex(data.bitmap || '');
+                const enabled = document.getElementById('symbolEnabled');
+                if (enabled) {
+                    enabled.checked = !!data.enabled;
+                }
+            })
+            .catch(error => alert('Symbol konnte nicht geladen werden: ' + error));
+    }
+
+    function saveCustomSymbol() {
+        const form = new FormData();
+        form.append('slot', document.getElementById('symbolSlot')?.value || '0');
+        form.append('enabled', document.getElementById('symbolEnabled')?.checked ? '1' : '0');
+        form.append('bitmap', symbolBitmapToHex());
+        fetch('/api/custom-symbol', { method: 'POST', body: form })
+            .then(response => response.text().then(message => ({ ok: response.ok, message })))
+            .then(result => alert(result.message || (result.ok ? 'Symbol gespeichert.' : 'Symbol konnte nicht gespeichert werden.')))
+            .catch(error => alert('Symbol konnte nicht gespeichert werden: ' + error));
+    }
+
+    function clearCustomSymbol() {
+        symbolEditorBitmap = new Array(128).fill(0);
+        renderSymbolEditor();
+    }
+
+    function importSymbolImage(input) {
+        const file = input.files && input.files[0];
+        if (!file) {
+            return;
+        }
+        const image = new Image();
+        image.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(image, 0, 0, 32, 32);
+            const pixels = ctx.getImageData(0, 0, 32, 32).data;
+            symbolEditorBitmap = new Array(128).fill(0);
+            for (let y = 0; y < 32; y++) {
+                for (let x = 0; x < 32; x++) {
+                    const offset = (y * 32 + x) * 4;
+                    const alpha = pixels[offset + 3];
+                    const brightness = (pixels[offset] + pixels[offset + 1] + pixels[offset + 2]) / 3;
+                    setSymbolBit(x, y, alpha > 32 && brightness < 220);
+                }
+            }
+            renderSymbolEditor();
+            URL.revokeObjectURL(image.src);
+        };
+        image.onerror = () => alert('Bild konnte nicht gelesen werden.');
+        image.src = URL.createObjectURL(file);
+    }
+
     function saveWiFi() {
         const formElement = document.getElementById('wifiForm');
         let form = new FormData(formElement);
@@ -838,6 +1018,25 @@ void setupWebServer() {
         html += "<br><button type='button' onclick='saveAllLetters()'>Alle speichern</button>";
         html += "</form>";
 
+        html += "<h2>Zeichen/Symbole bearbeiten</h2>";
+        html += "<p>Slots 0 bis 7 sind frei editierbare 32x32-Symbole. Danach koennen sie oben wie normale Zeichen ausgewaehlt werden.</p>";
+        html += "<style>.symbol-editor{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}.symbol-grid{display:grid;grid-template-columns:repeat(32,12px);gap:1px;background:#333;padding:4px;width:max-content}.symbol-cell{width:12px;height:12px;border:0;background:#f3f3f3;padding:0;cursor:pointer}.symbol-cell.on{background:#111}.symbol-actions{display:flex;flex-direction:column;gap:8px;max-width:320px}</style>";
+        html += "<div class='symbol-editor'>";
+        html += "<div id='symbolGrid' class='symbol-grid'></div>";
+        html += "<div class='symbol-actions'>";
+        html += "<label>Symbol-Slot: <select id='symbolSlot' onchange='loadCustomSymbol()'>";
+        for (size_t symbolIndex = 0; symbolIndex < CUSTOM_SYMBOL_COUNT; ++symbolIndex) {
+            html += "<option value='" + String(symbolIndex) + "'>Symbol " + String(symbolIndex) + " (" + String(static_cast<char>('0' + symbolIndex)) + ")</option>";
+        }
+        html += "</select></label>";
+        html += "<label><input id='symbolEnabled' type='checkbox'> Symbol aktiv</label>";
+        html += "<label>Bild importieren (PNG/JPG/BMP): <input type='file' accept='image/*,.bmp' onchange='importSymbolImage(this)'></label>";
+        html += "<button type='button' onclick='saveCustomSymbol()'>Symbol speichern</button>";
+        html += "<button type='button' onclick='clearCustomSymbol()'>Raster leeren</button>";
+        html += "<button type='button' onclick='displayLetter(0, document.getElementById(\"symbolSlot\").value)'>Symbol anzeigen</button>";
+        html += "</div></div>";
+        html += "<script>setTimeout(loadCustomSymbol, 100);</script>";
+
         // **Manuellen Trigger starten**
         html += "<h2>Manueller Trigger</h2>";
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
@@ -868,7 +1067,7 @@ void setupWebServer() {
             JsonObject network = networks.createNestedObject();
             network["ssid"] = WiFi.SSID(index);
             network["rssi"] = WiFi.RSSI(index);
-            network["encrypted"] = WiFi.encryptionType(index) != ENC_TYPE_NONE;
+            network["encrypted"] = !isOpenWifiNetwork(index);
         }
         WiFi.scanDelete();
         if (previousMode == WIFI_OFF) {
@@ -878,6 +1077,57 @@ void setupWebServer() {
         String responseBody;
         serializeJson(responseDoc, responseBody);
         request->send(200, F("application/json"), responseBody);
+    });
+
+    server.on("/api/custom-symbol", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /api/custom-symbol"));
+        if (!request->hasParam(F("slot"))) {
+            request->send(400, F("text/plain"), F("slot fehlt"));
+            return;
+        }
+
+        const String slotValue = request->getParam(F("slot"))->value();
+        const int slot = slotValue.toInt();
+        if (slot < 0 || slot >= static_cast<int>(CUSTOM_SYMBOL_COUNT)) {
+            request->send(400, F("text/plain"), F("ungueltiger slot"));
+            return;
+        }
+
+        StaticJsonDocument<384> responseDoc;
+        responseDoc["slot"] = slot;
+        responseDoc["enabled"] = customSymbolEnabled[slot] == 1;
+        responseDoc["bitmap"] = bitmapToHex(customSymbolBitmaps[slot]);
+        String responseBody;
+        serializeJson(responseDoc, responseBody);
+        request->send(200, F("application/json"), responseBody);
+    });
+
+    server.on("/api/custom-symbol", HTTP_POST, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("POST /api/custom-symbol"));
+        if (!request->hasParam(F("slot"), true) || !request->hasParam(F("bitmap"), true)) {
+            request->send(400, F("text/plain"), F("slot oder bitmap fehlt"));
+            return;
+        }
+
+        const int slot = request->getParam(F("slot"), true)->value().toInt();
+        if (slot < 0 || slot >= static_cast<int>(CUSTOM_SYMBOL_COUNT)) {
+            request->send(400, F("text/plain"), F("ungueltiger slot"));
+            return;
+        }
+
+        uint8_t parsedBitmap[SYMBOL_BITMAP_SIZE] = {};
+        if (!parseBitmapHex(request->getParam(F("bitmap"), true)->value(), parsedBitmap)) {
+            request->send(400, F("text/plain"), F("bitmap muss 256 Hex-Zeichen enthalten"));
+            return;
+        }
+
+        memcpy(customSymbolBitmaps[slot], parsedBitmap, SYMBOL_BITMAP_SIZE);
+        customSymbolEnabled[slot] =
+            request->hasParam(F("enabled"), true) && request->getParam(F("enabled"), true)->value() == F("1")
+                ? 1
+                : 0;
+        saveConfig();
+        request->send(200, F("text/plain"), F("Symbol gespeichert."));
     });
 
     server.on("/updateWiFi", HTTP_POST, [](AsyncWebServerRequest *request) {
@@ -1859,7 +2109,12 @@ void setupWebServer() {
         }
 
         char todayLetter = dailyLetters[triggerIndex][today];
-        if (todayLetter != '*' && letterData.find(todayLetter) == letterData.end()) {
+        const int customIndex = customSymbolIndexFromChar(todayLetter);
+        const bool customAvailable =
+            customIndex >= 0 &&
+            customIndex < static_cast<int>(CUSTOM_SYMBOL_COUNT) &&
+            customSymbolEnabled[customIndex] == 1;
+        if (todayLetter != '*' && !customAvailable && letterData.find(todayLetter) == letterData.end()) {
             request->send(500, "text/plain", "❌ Fehler: Kein Muster für den heutigen Buchstaben vorhanden!");
             return;
         }

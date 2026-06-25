@@ -106,7 +106,12 @@ write_windows_start_files() {
   cat > "$fat_mount/Start-RiddleMatrixWindowsManager.cmd" <<'EOF'
 @echo off
 cd /d "%~dp0"
-powershell.exe -ExecutionPolicy Bypass -File "%~dp0WindowsTool\Start-RiddleMatrixWindowsManager.ps1"
+set "EXE=%~dp0WindowsTool\RiddleMatrixWindowsManager.exe"
+if exist "%EXE%" (
+    start "" "%EXE%"
+) else (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0WindowsTool\Start-RiddleMatrixWindowsManager.ps1"
+)
 EOF
   cat > "$fat_mount/autorun.inf" <<'EOF'
 [AutoRun]

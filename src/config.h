@@ -4,7 +4,11 @@
 #include <Wire.h>
 #include <RTClib.h>
 #include <PxMatrix.h>
+#if defined(ESP32)
+#include <WiFi.h>
+#else
 #include <ESP8266WiFi.h>
+#endif
 #include <ESPAsyncWebServer.h>
 #include <EEPROM.h>
 #include <cstddef>
@@ -14,7 +18,7 @@
 #include "letters.h"
 
 // **EEPROM Speichergröße**
-#define EEPROM_SIZE 768
+#define EEPROM_SIZE 4096
 
 // **RS485 & RTC Pins**
 #define GPIO_RS485_ENABLE 10
@@ -24,6 +28,35 @@
 #define RS485_TX 1
 
 // **LED-Matrix Pins**
+#if defined(ESP32)
+#ifndef P_A
+#define P_A 19
+#endif
+#ifndef P_B
+#define P_B 23
+#endif
+#ifndef P_C
+#define P_C 18
+#endif
+#ifndef P_D
+#define P_D 5
+#endif
+#ifndef P_E
+#define P_E 15
+#endif
+#ifndef P_CLK
+#define P_CLK 14
+#endif
+#ifndef P_LAT
+#define P_LAT 4
+#endif
+#ifndef P_OE
+#define P_OE 13
+#endif
+#ifndef P_R1
+#define P_R1 25
+#endif
+#else
 #define P_A D1
 #define P_B D2
 #define P_C D8
@@ -33,12 +66,15 @@
 #define P_LAT D0
 #define P_OE D4
 #define P_R1 D7
+#endif
 
 // **Allgemeine Konstanten für Trigger und EEPROM**
 static constexpr size_t NUM_TRIGGERS = 3;
 static constexpr size_t NUM_DAYS = 7;
 static constexpr size_t COLOR_STRING_LENGTH = 8; // "#RRGGBB" + Terminator
 static constexpr size_t RANDOM_COLOR_PALETTE_SIZE = 8;
+static constexpr size_t CUSTOM_SYMBOL_COUNT = 8;
+static constexpr size_t SYMBOL_BITMAP_SIZE = 128;
 
 #if defined(RIDDLEMATRIX_HOST_TEST)
 static constexpr size_t EEPROM_SIZEOF_UNSIGNED_LONG = 4;
@@ -74,7 +110,10 @@ static constexpr uint16_t EEPROM_OFFSET_WIFI_SUBNET = EEPROM_OFFSET_WIFI_GATEWAY
 static constexpr uint16_t EEPROM_OFFSET_WIFI_DNS = EEPROM_OFFSET_WIFI_SUBNET + 16;
 static constexpr uint16_t EEPROM_OFFSET_WIFI_LOCAL_AP_SSID = EEPROM_OFFSET_WIFI_DNS + 16;
 static constexpr uint16_t EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD = EEPROM_OFFSET_WIFI_LOCAL_AP_SSID + 50;
-static constexpr uint16_t EEPROM_CONFIG_VERSION = 8;
+static constexpr uint16_t EEPROM_OFFSET_CUSTOM_SYMBOL_BITMAPS = EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD + 50;
+static constexpr size_t EEPROM_CUSTOM_SYMBOL_BITMAPS_SIZE = CUSTOM_SYMBOL_COUNT * SYMBOL_BITMAP_SIZE;
+static constexpr uint16_t EEPROM_OFFSET_CUSTOM_SYMBOL_ENABLED = EEPROM_OFFSET_CUSTOM_SYMBOL_BITMAPS + EEPROM_CUSTOM_SYMBOL_BITMAPS_SIZE;
+static constexpr uint16_t EEPROM_CONFIG_VERSION = 9;
 
 static_assert(EEPROM_OFFSET_DAILY_LETTERS + (NUM_TRIGGERS * NUM_DAYS) <= EEPROM_OFFSET_DAILY_LETTER_COLORS,
               "Letter-Block überschneidet sich mit Farb-Block");
@@ -86,6 +125,8 @@ static_assert(EEPROM_OFFSET_COLOR_PALETTE_MASK_MATRIX + EEPROM_COLOR_PALETTE_MAS
               "Activity window exceeds allocated EEPROM size");
 static_assert(EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD + 50 <= EEPROM_SIZE,
               "WiFi network extension exceeds allocated EEPROM size");
+static_assert(EEPROM_OFFSET_CUSTOM_SYMBOL_ENABLED + CUSTOM_SYMBOL_COUNT <= EEPROM_SIZE,
+              "Custom symbol block exceeds allocated EEPROM size");
 
 enum class WiFiOperationMode : uint8_t {
     TimedManager = 0,
@@ -124,6 +165,8 @@ extern char dailyLetters[NUM_TRIGGERS][NUM_DAYS];
 extern char dailyLetterColors[NUM_TRIGGERS][NUM_DAYS][COLOR_STRING_LENGTH];
 extern uint8_t dailyLetterColorModes[NUM_TRIGGERS][NUM_DAYS];
 extern uint16_t dailyLetterRandomPaletteMasks[NUM_TRIGGERS][NUM_DAYS];
+extern uint8_t customSymbolBitmaps[CUSTOM_SYMBOL_COUNT][SYMBOL_BITMAP_SIZE];
+extern uint8_t customSymbolEnabled[CUSTOM_SYMBOL_COUNT];
 
 enum class LetterColorMode : uint8_t {
     Fixed = 0,
@@ -137,7 +180,8 @@ extern const char *const randomColorPaletteLabels[RANDOM_COLOR_PALETTE_SIZE];
 // **Alle auswählbaren Buchstaben (A-Z & `*`)**
 const char availableLetters[] = {
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '*', '#', '~', '&', '?'};
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    '*', '#', '~', '&', '?', '0', '1', '2', '3', '4', '5', '6', '7'};
 
 // **Konfiguration für Buchstabenanzeige**
 extern int display_brightness;           // Standard: 100

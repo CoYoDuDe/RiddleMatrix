@@ -1,2 +1,7 @@
 @echo off
-powershell.exe -ExecutionPolicy Bypass -File "%~dp0Start-RiddleMatrixWindowsManager.ps1"
+set "EXE=%~dp0RiddleMatrixWindowsManager.exe"
+if exist "%EXE%" (
+    start "" "%EXE%"
+) else (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Start-RiddleMatrixWindowsManager.ps1"
+)

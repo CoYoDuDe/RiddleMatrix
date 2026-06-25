@@ -30,6 +30,19 @@ void syncTimeAfterWiFiConnection(const __FlashStringHelper *reason) {
         Serial.println(F("⚠️ Hinweis: NTP Synchronisierung fehlgeschlagen, wird spaeter erneut versucht."));
     }
 }
+
+void startFallbackAccessPoint() {
+    const char *fallbackSsid = wifi_local_ap_ssid[0] != '\0' ? wifi_local_ap_ssid : hostname;
+    const char *fallbackPassword = wifi_local_ap_password[0] != '\0' ? wifi_local_ap_password : wifi_password;
+    WiFi.mode(WIFI_AP_STA);
+    const bool apStarted = WiFi.softAP(fallbackSsid, fallbackPassword);
+    Serial.print(F("Fallback-Konfigurations-AP "));
+    Serial.println(apStarted ? F("gestartet.") : F("konnte nicht gestartet werden."));
+    wifiDisabled = false;
+    if (!webServerRunning) {
+        setupWebServer();
+    }
+}
 }
 
 void refreshWiFiIdleTimer(const __FlashStringHelper *reason) {
@@ -200,11 +213,8 @@ void connectWiFi() {
     } else {
         Serial.println(F("\n⛔ WiFi Timeout! Verbindung fehlgeschlagen. WiFi bleibt aus."));
         wifiConnected = false;
-        if (staWithLocalAp) {
-            wifiDisabled = false;
-            if (!webServerRunning) {
-                setupWebServer();
-            }
+        if (wifi_operation_mode != static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {
+            startFallbackAccessPoint();
             Serial.println(F("Lokaler Box-AP bleibt fuer Konfiguration aktiv."));
         } else {
             WiFi.disconnect();
@@ -223,6 +233,9 @@ void checkWiFi() {
                 Serial.println(F("WLAN-Verbindung verloren. Permanenter Modus versucht Reconnect..."));
                 lastReconnectAttempt = now;
                 WiFi.disconnect();
+                if (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::AlwaysConnected)) {
+                    startFallbackAccessPoint();
+                }
                 WiFi.begin(wifi_ssid, wifi_password);
             }
         } else if (!wifiDisabled) {

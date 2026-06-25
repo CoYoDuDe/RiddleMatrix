@@ -14,15 +14,22 @@ AsyncWebServer server(80);
 bool wifiDisabled = false;
 bool alreadyCleared = false;
 
-namespace {
 constexpr unsigned long WIFI_IDLE_TIMEOUT_MS = 300UL * 1000UL;
+
+static unsigned long getChipRandomSeed() {
+#if defined(ESP32)
+  const uint64_t chipId = ESP.getEfuseMac();
+  return static_cast<unsigned long>(chipId ^ (chipId >> 32));
+#else
+  return static_cast<unsigned long>(ESP.getChipId());
+#endif
 }
 
 void setup() {
   Serial.begin(19200);
   delay(500);
   Serial.println(F("🚀 Systemstart..."));
-  randomSeed(static_cast<unsigned long>(ESP.getChipId()) ^ micros());
+  randomSeed(getChipRandomSeed() ^ micros());
   // clearDisplay();
 
   webServerRunning = false;
