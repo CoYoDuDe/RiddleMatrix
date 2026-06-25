@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 from flask import Flask, abort, jsonify, request, send_from_directory
 from bs4 import BeautifulSoup
 import argparse
@@ -39,6 +39,7 @@ SAFE_IP_PLACEHOLDER = "0.0.0.0"
 _FIRMWARE_LETTERS = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?01234567")
 _ALLOWED_LETTERS = set(_FIRMWARE_LETTERS)
 _ALLOWED_COLOR_MODES = {"fixed", "random_selected", "random_all"}
+_SYMBOL_BITMAP_HEX_PATTERN = re.compile(r"^[0-9A-Fa-f]{256}$")
 
 MAX_HOSTNAME_LENGTH = 64
 
@@ -1573,6 +1574,56 @@ def transfer_box():
         return jsonify({"status": "❌ Fehler bei Übertragung"})
 
     return jsonify({"status": "✅ Übertragen"})
+
+@app.route("/transfer_symbol", methods=["POST"])
+def transfer_symbol():
+    payload = request.get_json(silent=True) or {}
+    raw_hostname = payload.get("hostname")
+    slot = str(payload.get("slot", "")).strip()
+    bitmap = str(payload.get("bitmap", "")).strip()
+    enabled = bool(payload.get("enabled", True))
+
+    if not raw_hostname:
+        return "Hostname fehlt", 400
+    if slot not in {str(index) for index in range(8)}:
+        return "Ungültiger Symbol-Slot", 400
+    if not _SYMBOL_BITMAP_HEX_PATTERN.fullmatch(bitmap):
+        return "Bitmap muss 256 Hex-Zeichen enthalten", 400
+
+    hostname = sanitize_hostname(raw_hostname)
+    config = load_config()
+    box = config["boxen"].get(hostname) or config["boxen"].get(raw_hostname)
+    if not box:
+        return "Box unbekannt", 404
+
+    ip = sanitize_ipv4(box.get("ip"))
+    if ip == SAFE_IP_PLACEHOLDER:
+        return "IP unbekannt", 400
+
+    try:
+        response = requests.post(
+            f"http://{ip}/api/custom-symbol",
+            data={
+                "slot": slot,
+                "enabled": "1" if enabled else "0",
+                "bitmap": bitmap,
+            },
+            timeout=3,
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        return "Box nicht erreichbar", 503
+
+    if (
+        getattr(response, "is_redirect", False)
+        or getattr(response, "is_permanent_redirect", False)
+        or 300 <= getattr(response, "status_code", 0) < 400
+    ):
+        return f"Unerwartete Weiterleitung HTTP {response.status_code}", 502
+    if not response.ok:
+        return response.text or f"Fehler HTTP {response.status_code}", response.status_code
+
+    return "Symbol übertragen", 200
 
 @app.route("/shutdown", methods=["POST"])
 def shutdown():

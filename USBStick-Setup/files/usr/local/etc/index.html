@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="UTF-8">
@@ -151,7 +151,7 @@
 <body onload="init()">
 <div id="sidebar">
   <div>
-    <h3>MÃ¤rchen</h3>
+    <h3>RiddleMatrix</h3>
     <button id="setupBtn" onclick="showSetup()">Boxen verwalten</button>
     <div id="deviceList">Lade...</div>
   </div>
@@ -160,7 +160,7 @@
     <button id="shutdown" onclick="shutdown()">Herunterfahren</button>
   </div>
 </div>
-<div id="content"><p>Willkommen im MÃ¤rchen-Manager</p></div>
+<div id="content"><p>Willkommen im RiddleMatrix Manager</p></div>
 <script>
 let knownBoxes = {};
 let connectedBoxes = [];
@@ -183,6 +183,7 @@ let localAutoScanStarted = false;
 let webspaceAuthenticated = false;
 let localSubnetCandidates = [];
 const localStorageKey = "riddlematrix.localBrowserConfig.v1";
+const symbolStorageKey = "riddlematrix.customSymbols.v1";
 const webspaceAuthStorageKey = "riddlematrix.webspaceAuth.v1";
 const managerBasePath = location.pathname.endsWith("/")
   ? location.pathname
@@ -212,6 +213,10 @@ letterOptions.push(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?01234567".split(""));
 let currentWordTrigger = 0;
 let separateWordTriggers = true;
 let separateBoxTriggers = true;
+let managerSymbolSlot = "0";
+let managerSymbolEnabled = true;
+let managerSymbolBitmap = new Array(128).fill(0);
+let managerCustomSymbols = loadManagerCustomSymbols();
 
 function managerPath(path) {
   const cleanPath = String(path || "").replace(/^\/+/, "");
@@ -263,10 +268,10 @@ async function ensureWebspaceAccess() {
     overlay.className = "auth-overlay";
     overlay.innerHTML = `
       <div class="auth-card">
-        <h2>MÃ¤rchen Manager</h2>
+        <h2>RiddleMatrix Manager</h2>
         <p>Bitte Passwort eingeben.</p>
         <input id="webspacePasswordInput" type="password" autocomplete="current-password" autofocus>
-        <button id="webspacePasswordButton" type="button">Ã–ffnen</button>
+        <button id="webspacePasswordButton" type="button">Öffnen</button>
         <p id="webspacePasswordStatus" class="status"></p>
       </div>`;
     document.body.appendChild(overlay);
@@ -322,6 +327,134 @@ function saveLocalBrowserConfig() {
     return;
   }
   window.localStorage.setItem(localStorageKey, JSON.stringify({ boxen: knownBoxes, boxOrder, localScanSubnet }));
+}
+
+function loadManagerCustomSymbols() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(symbolStorageKey) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    console.warn("Symbol-Konfiguration konnte nicht gelesen werden:", error);
+    return {};
+  }
+}
+
+function saveManagerCustomSymbols() {
+  window.localStorage.setItem(symbolStorageKey, JSON.stringify(managerCustomSymbols));
+}
+
+function emptySymbolBitmap() {
+  return new Array(128).fill(0);
+}
+
+function isValidSymbolHex(hex) {
+  return /^[0-9a-fA-F]{256}$/.test(String(hex || "").trim());
+}
+
+function symbolBitmapToHex(bitmap = managerSymbolBitmap) {
+  return bitmap.map(value => (value & 255).toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+
+function symbolHexToBitmap(hex) {
+  const clean = String(hex || "").trim();
+  if (!isValidSymbolHex(clean)) {
+    return emptySymbolBitmap();
+  }
+  const bitmap = [];
+  for (let index = 0; index < clean.length; index += 2) {
+    bitmap.push(parseInt(clean.slice(index, index + 2), 16));
+  }
+  return bitmap;
+}
+
+function managerSymbolBitIsSet(x, y) {
+  const byteIndex = y * 4 + Math.floor(x / 8);
+  return (managerSymbolBitmap[byteIndex] & (1 << (7 - (x % 8)))) !== 0;
+}
+
+function setManagerSymbolBit(x, y, enabled) {
+  const byteIndex = y * 4 + Math.floor(x / 8);
+  const mask = 1 << (7 - (x % 8));
+  if (enabled) {
+    managerSymbolBitmap[byteIndex] |= mask;
+  } else {
+    managerSymbolBitmap[byteIndex] &= ~mask;
+  }
+}
+
+function loadManagerSymbolSlot(slot = managerSymbolSlot) {
+  managerSymbolSlot = String(slot || "0");
+  const stored = managerCustomSymbols[managerSymbolSlot] || {};
+  managerSymbolEnabled = stored.enabled !== false;
+  managerSymbolBitmap = symbolHexToBitmap(stored.bitmap);
+  const slotInput = document.getElementById("managerSymbolSlot");
+  const enabledInput = document.getElementById("managerSymbolEnabled");
+  if (slotInput) slotInput.value = managerSymbolSlot;
+  if (enabledInput) enabledInput.checked = managerSymbolEnabled;
+  renderManagerSymbolEditor();
+}
+
+function persistCurrentManagerSymbol() {
+  managerCustomSymbols[managerSymbolSlot] = {
+    enabled: !!document.getElementById("managerSymbolEnabled")?.checked,
+    bitmap: symbolBitmapToHex()
+  };
+  saveManagerCustomSymbols();
+}
+
+function renderManagerSymbolEditor() {
+  const grid = document.getElementById("managerSymbolGrid");
+  if (!grid) {
+    return;
+  }
+  grid.innerHTML = "";
+  for (let y = 0; y < 32; y++) {
+    for (let x = 0; x < 32; x++) {
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "symbol-cell" + (managerSymbolBitIsSet(x, y) ? " on" : "");
+      cell.addEventListener("click", () => {
+        setManagerSymbolBit(x, y, !managerSymbolBitIsSet(x, y));
+        persistCurrentManagerSymbol();
+        renderManagerSymbolEditor();
+      });
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function clearManagerSymbol() {
+  managerSymbolBitmap = emptySymbolBitmap();
+  persistCurrentManagerSymbol();
+  renderManagerSymbolEditor();
+}
+
+function importManagerSymbolImage(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const image = new Image();
+  image.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0, 32, 32);
+    const pixels = ctx.getImageData(0, 0, 32, 32).data;
+    managerSymbolBitmap = emptySymbolBitmap();
+    for (let y = 0; y < 32; y++) {
+      for (let x = 0; x < 32; x++) {
+        const offset = (y * 32 + x) * 4;
+        const alpha = pixels[offset + 3];
+        const brightness = (pixels[offset] + pixels[offset + 1] + pixels[offset + 2]) / 3;
+        setManagerSymbolBit(x, y, alpha > 32 && brightness < 220);
+      }
+    }
+    persistCurrentManagerSymbol();
+    renderManagerSymbolEditor();
+    URL.revokeObjectURL(image.src);
+  };
+  image.onerror = () => alert("Bild konnte nicht gelesen werden.");
+  image.src = URL.createObjectURL(file);
 }
 
 function enterLocalBrowserMode(reason) {
@@ -794,7 +927,7 @@ async function scanLocalSubnet(options = {}) {
   const concurrency = 18;
   let cursor = 0;
 
-  updateLocalScanStatus(`Suche MÃ¤rchen im lokalen Netz ${subnet}.0/24...`);
+  updateLocalScanStatus(`Suche RiddleMatrix-Boxen im lokalen Netz ${subnet}.0/24...`);
 
   async function worker() {
     while (cursor < ips.length && !localScanAbortController.signal.aborted) {
@@ -810,7 +943,7 @@ async function scanLocalSubnet(options = {}) {
         saveLocalBrowserConfig();
       }
       if (checked % 10 === 0 || result) {
-        updateLocalScanStatus(`Suche MÃ¤rchen: ${checked}/${ips.length} geprÃ¼ft, ${found} gefunden.`);
+        updateLocalScanStatus(`Suche Boxen: ${checked}/${ips.length} geprüft, ${found} gefunden.`);
       }
     }
   }
@@ -832,8 +965,8 @@ async function scanLocalSubnet(options = {}) {
     showSetup();
     updateLocalScanStatus(
       aborted
-        ? `Suche abgebrochen. ${found} MÃ¤rchen gefunden.`
-        : `Suche abgeschlossen. ${found} MÃ¤rchen gefunden.`
+        ? `Suche abgebrochen. ${found} Boxen gefunden.`
+        : `Suche abgeschlossen. ${found} Boxen gefunden.`
     );
   }
 }
@@ -948,13 +1081,13 @@ async function fetchDevices() {
           enterLocalBrowserMode("Webspace-Modus aktiv: /devices ist auf dem Server nicht verfuegbar, lokale Boxen werden im Browser gespeichert.");
           return;
         }
-        let errorMessage = `âŒ Fehler beim Laden der Boxen (${res.status} ${res.statusText || ""})`;
+        let errorMessage = ` Fehler beim Laden der Boxen (${res.status} ${res.statusText || ""})`;
         try {
           const errorData = await res.json();
           if (errorData && typeof errorData === "object") {
             const details = [errorData.message, errorData.error, errorData.detail]
               .filter(part => typeof part === "string" && part.trim().length > 0)
-              .join(" â€“ ");
+              .join(" – ");
             if (details) {
               errorMessage += `: ${details}`;
             }
@@ -987,7 +1120,7 @@ async function fetchDevices() {
         normalizedIncoming[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
       });
 
-      // PrÃ¼fe auf Ã„nderungen
+      // Prüfe auf Änderungen
       const hasChanges =
         JSON.stringify(knownBoxes) !== JSON.stringify(normalizedIncoming) ||
         JSON.stringify(connectedBoxes) !== JSON.stringify(newConnectedBoxes) ||
@@ -1018,9 +1151,9 @@ async function fetchDevices() {
         enterLocalBrowserMode("Webspace-Modus aktiv: Der Server kann dein lokales WLAN nicht sehen, der Browser verwaltet die Boxen direkt.");
         return;
       }
-      console.error("Fehler beim Abrufen der GerÃ¤te:", e);
+      console.error("Fehler beim Abrufen der Geräte:", e);
       if (statusArea) {
-        const message = `âŒ Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
+        const message = ` Fehler beim Laden der Boxen: ${e && e.message ? e.message : "Unbekannter Fehler"}`;
         statusArea.innerHTML = `<div class="statusEntry status">${escapeHtml(message)}</div>`;
         statusArea.dataset.fetchError = "true";
       }
@@ -1087,16 +1220,16 @@ async function shutdown() {
       alert("Fehler beim Abschalten: " + response.statusText);
       return;
     }
-    let message = "Shutdown ausgelÃ¶st.";
+    let message = "Shutdown ausgelöst.";
     try {
       const data = await response.json();
       if (data && data.status) {
-        message = "Shutdown ausgelÃ¶st (" + data.status + ").";
+        message = "Shutdown ausgelöst (" + data.status + ").";
       }
     } catch (e) {
       // JSON optional
     }
-    alert(message + " Das GerÃ¤t kann einige Minuten zum Herunterfahren benÃ¶tigen.");
+    alert(message + " Das Gerät kann einige Minuten zum Herunterfahren benötigen.");
   } catch (error) {
     console.error(error);
     alert("Netzwerkfehler beim Abschalten. Bitte erneut versuchen.");
@@ -1113,7 +1246,7 @@ function showSetup() {
     html += '<div id="localScanStatus"></div>';
   }
 
-  html += '<div class="box-card"><h3>WÃ¶rter fÃ¼r Wochentage</h3>';
+  html += '<div class="box-card"><h3>Zeichenfolgen für Wochentage</h3>';
   html += '<div class="toggle-row">';
   html += `<label><input type="checkbox" data-live-edit="true" ${separateWordTriggers ? "checked" : ""} onchange="setSeparateWordTriggers(this.checked)"> Alle 3 Trigger separat anzeigen</label>`;
   if (separateWordTriggers) {
@@ -1150,15 +1283,36 @@ function showSetup() {
   if (separateBoxTriggers) {
     html += '<span>Alle drei Trigger werden einzeln angezeigt.</span>';
   } else {
-    html += '<span>Ã„nderungen gelten pro Tag fÃ¼r alle drei Trigger.</span>';
+    html += '<span>Änderungen gelten pro Tag für alle drei Trigger.</span>';
   }
   html += '</div></div>';
+
+  html += '<div class="box-card">';
+  html += '<h3>Zeichen/Symbole bearbeiten</h3>';
+  html += '<p>Slots 0 bis 7 sind frei editierbare 32x32-Symbole. Nach dem Speichern koennen sie in den Boxkarten als Symbol 0 bis Symbol 7 ausgewaehlt werden.</p>';
+  html += '<style>.symbol-editor{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}.symbol-grid{display:grid;grid-template-columns:repeat(32,12px);gap:1px;background:#333;padding:4px;width:max-content}.symbol-cell{width:12px;height:12px;border:0;background:#f3f3f3;padding:0;cursor:pointer}.symbol-cell.on{background:#111}.symbol-actions{display:flex;flex-direction:column;gap:8px;max-width:360px}</style>';
+  html += '<div class="symbol-editor">';
+  html += '<div id="managerSymbolGrid" class="symbol-grid"></div>';
+  html += '<div class="symbol-actions">';
+  html += '<label>Symbol-Slot: <select id="managerSymbolSlot" onchange="loadManagerSymbolSlot(this.value)">';
+  for (let symbolIndex = 0; symbolIndex < 8; symbolIndex++) {
+    html += `<option value="${symbolIndex}">Symbol ${symbolIndex}</option>`;
+  }
+  html += '</select></label>';
+  html += '<label><input id="managerSymbolEnabled" type="checkbox" onchange="persistCurrentManagerSymbol()"> Symbol aktiv</label>';
+  html += '<label>Bild importieren (PNG/JPG/BMP): <input type="file" accept="image/*,.bmp" onchange="importManagerSymbolImage(this)"></label>';
+  html += '<button type="button" onclick="persistCurrentManagerSymbol()">Symbol speichern</button>';
+  html += '<button type="button" onclick="clearManagerSymbol()">Raster leeren</button>';
+  html += '<button type="button" onclick="transferCurrentSymbolToAll()">Symbol an alle bekannten Boxen uebertragen</button>';
+  html += '</div></div>';
+  html += '<div id="symbolTransferStatus" style="margin-top:10px;"></div>';
+  html += '</div>';
 
   boxOrder.forEach((hostname, index) => {
     const box = normalizeBox(knownBoxes[hostname] || {});
     const escapedHostname = escapeHtml(hostname);
     const hostnameArgument = escapeJsString(hostname);
-    const transferMark = transferCompleted[hostname] ? '<span class="transfer-badge">âœ“ Ã¼bertragen</span>' : '';
+    const transferMark = transferCompleted[hostname] ? '<span class="transfer-badge">✓ übertragen</span>' : '';
     html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}${transferMark}</h3><div class="weekday-row">`;
     for (let i = 0; i < days.length; i++) {
       const letters = box.letters?.[days[i]] || [];
@@ -1196,7 +1350,7 @@ function showSetup() {
               <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateBoxTriggers})">
               <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateBoxTriggers})">
                 <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Fest</option>
-                <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewÃ¤hlt)</option>
+                <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewählt)</option>
                 <option value="random_all" ${colorMode === "random_all" ? "selected" : ""}>Zufall (alle)</option>
               </select>
               <div class="palette-grid">
@@ -1212,7 +1366,7 @@ function showSetup() {
                   </label>`).join("")}
               </div>
               <div class="delay-input-wrapper">
-                <span>VerzÃ¶gerung (s)</span>
+                <span>Verzögerung (s)</span>
                 <input type="number" class="delay-input" data-live-edit="true" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this, ${!separateBoxTriggers})">
               </div>
             </div>`;
@@ -1223,22 +1377,23 @@ function showSetup() {
     }
     html += `</div>
       <div class="order-buttons">
-        <button onclick="moveBoxUp(${hostnameArgument})">â†‘</button>
-        <button onclick="moveBoxDown(${hostnameArgument})">â†“</button>
-        <button onclick="removeBox(${hostnameArgument})">âŒ Entfernen</button>
+        <button onclick="moveBoxUp(${hostnameArgument})">↑</button>
+        <button onclick="moveBoxDown(${hostnameArgument})">↓</button>
+        <button onclick="removeBox(${hostnameArgument})"> Entfernen</button>
       </div></div>`;
   });
 
   html += `
   <div class="action-buttons">
-    <button onclick="transferAll()" id="transferBtn">âœ… Ãœbertragen</button>
-    <button onclick="reloadAll()" id="reloadBtn">ðŸ”„ Boxen neu lernen</button>
+    <button onclick="transferAll()" id="transferBtn">✅ Übertragen</button>
+    <button onclick="reloadAll()" id="reloadBtn">🔄 Boxen neu lernen</button>
   </div>
   <div id="statusArea"></div>
   `;
 
   document.getElementById("content").innerHTML = html;
   statusArea = document.getElementById("statusArea");
+  loadManagerSymbolSlot(managerSymbolSlot);
   renderTransferStatus();
   updateTransferButton();
 }
@@ -1246,7 +1401,7 @@ function showSetup() {
 function showAppSettings() {
   let html = '<h2>Einstellungen</h2>';
   html += '<div class="box-card">';
-  html += '<h3>Lokale MÃ¤rchen-Suche</h3>';
+  html += '<h3>Lokale Boxen-Suche</h3>';
   html += '<div class="settings-grid">';
   html += '<label for="localSubnetPrefix">IP-Bereich</label>';
   html += `<span><input id="localSubnetPrefix" type="text" list="localSubnetCandidateList" value="${escapeHtml(localScanSubnet)}" placeholder="z.B. 192.168.137">`;
@@ -1254,10 +1409,10 @@ function showAppSettings() {
   html += '<span></span><span><button type="button" onclick="detectLocalSubnetCandidates()">IP-Bereich erkennen</button> ';
   html += '<button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button></span>';
   html += '<label for="localBoxIp">Box-IP direkt</label>';
-  html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> <button type="button" onclick="learnLocalBoxFromIp()">HinzufÃ¼gen/lernen</button></span>';
+  html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> <button type="button" onclick="learnLocalBoxFromIp()">Hinzufügen/lernen</button></span>';
   html += '</div>';
   html += '<div id="localScanStatus" style="margin-top:10px;"></div>';
-  html += '<p>Die Suche Ã¼bernimmt nur GerÃ¤te, die wie RiddleMatrix-Boxen antworten. Der IP-Bereich wird automatisch vorgeschlagen und kann bei Bedarf geÃ¤ndert werden.</p>';
+  html += '<p>Die Suche übernimmt nur Geräte, die wie RiddleMatrix-Boxen antworten. Der IP-Bereich wird automatisch vorgeschlagen und kann bei Bedarf geändert werden.</p>';
   html += '</div>';
   document.getElementById("content").innerHTML = html;
   statusArea = document.getElementById("localScanStatus");
@@ -1274,7 +1429,7 @@ function updateWord(day, word, maxLength, inputElement, triggerIndex = 0, applyA
   if (inputElement) {
     inputElement.classList.add("pending");
   }
-  const sanitizedWord = (word || "").toUpperCase().replace(/[^A-Z*#~&?]/g, '').slice(0, maxLength);
+  const sanitizedWord = (word || "").toUpperCase().replace(/[^A-Z*#~&?0-7]/g, '').slice(0, maxLength);
   word = sanitizedWord;
   if (inputElement) {
     inputElement.value = sanitizedWord;
@@ -1362,20 +1517,20 @@ function saveField(hostname, day, triggerIndex, value, fieldType = 'letter', upd
     body: JSON.stringify(payload)
   }).then(response => {
     if (!response.ok) {
-      statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichen.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status"> Fehler beim Speichen.</div>';
       if (inputElement) inputElement.classList.remove("pending");
     } else {
       if (inputElement) {
         inputElement.classList.remove("pending");
         inputElement.classList.add("saved");
         setTimeout(() => inputElement.classList.remove("saved"), 1000);
-        statusArea.innerHTML = '<div class="statusEntry status">âœ… Ã„nderung gespeichert.</div>';
+        statusArea.innerHTML = '<div class="statusEntry status">✅ Änderung gespeichert.</div>';
       }
     if (updateUI) showSetup();
     }
   }).catch(e => {
     console.error("Fehler beim Speichern:", e);
-    statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern.</div>';
+    statusArea.innerHTML = '<div class="statusEntry status"> Fehler beim Speichern.</div>';
     if (inputElement) inputElement.classList.remove("pending");
   });
 }
@@ -1415,14 +1570,14 @@ function savePalette(hostname, day, triggerIndex, applyAllTriggers = false) {
     body: JSON.stringify({ hostname, day, triggerIndex: Number(triggerIndex), colorPaletteMask: mask, applyAllTriggers })
   }).then(response => {
     if (!response.ok) {
-      statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern der Zufallspalette.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status"> Fehler beim Speichern der Zufallspalette.</div>';
     } else {
-      statusArea.innerHTML = '<div class="statusEntry status">âœ… Zufallspalette gespeichert.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status">✅ Zufallspalette gespeichert.</div>';
       showSetup();
     }
   }).catch(error => {
     console.error("Fehler beim Speichern der Zufallspalette:", error);
-    statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern der Zufallspalette.</div>';
+    statusArea.innerHTML = '<div class="statusEntry status"> Fehler beim Speichern der Zufallspalette.</div>';
   });
 }
 
@@ -1477,13 +1632,13 @@ function saveBoxOrder() {
     body: JSON.stringify({ boxOrder })
   }).then(response => {
     if (!response.ok) {
-      statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern der Reihenfolge.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status"> Fehler beim Speichern der Reihenfolge.</div>';
     } else {
       showSetup();
     }
   }).catch(e => {
     console.error("Fehler beim Speichern der Reihenfolge:", e);
-    statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Speichern der Reihenfolge.</div>';
+    statusArea.innerHTML = '<div class="statusEntry status"> Fehler beim Speichern der Reihenfolge.</div>';
   });
 }
 
@@ -1504,13 +1659,13 @@ function removeBox(hostname) {
     body: JSON.stringify({ hostname })
   }).then(response => {
     if (!response.ok) {
-      statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Entfernen.</div>';
+      statusArea.innerHTML = '<div class="statusEntry status"> Fehler beim Entfernen.</div>';
     } else {
       showSetup();
     }
   }).catch(e => {
     console.error("Fehler beim Entfernen:", e);
-    statusArea.innerHTML = '<div class="statusEntry status">âŒ Fehler beim Entfernen.</div>';
+    statusArea.innerHTML = '<div class="statusEntry status"> Fehler beim Entfernen.</div>';
   });
 }
 
@@ -1523,7 +1678,7 @@ function updateTransferButton() {
     const remaining = Object.keys(transferPending).length;
     transferBtn.innerText = `Abbrechen (${remaining} offen)`;
   } else {
-    transferBtn.innerText = "âœ“ Ãœbertragen";
+    transferBtn.innerText = "✓ Übertragen";
   }
 }
 
@@ -1546,7 +1701,7 @@ function renderTransferStatus() {
 
 function isTransferSuccess(statusText) {
   return typeof statusText === "string" && (
-    statusText.includes("Ãœbertragen") ||
+    statusText.includes("Übertragen") ||
     statusText.includes("Uebertragen") ||
     statusText.includes("Bereits aktuell")
   );
@@ -1555,7 +1710,7 @@ function isTransferSuccess(statusText) {
 async function transferBox(hostname) {
   const headers = { "Content-Type": "application/json" };
 
-  let statusText = "âŒ Unbekannter Fehler";
+  let statusText = " Unbekannter Fehler";
 
   if (localBrowserMode) {
     statusText = "Unbekannter Fehler";
@@ -1597,18 +1752,62 @@ async function transferBox(hostname) {
     });
 
     if (!response.ok) {
-      statusText = `âŒ Fehler (${response.status})`;
+      statusText = ` Fehler (${response.status})`;
     } else {
       const data = await response.json();
-      statusText = data.status || "âŒ Unerwartete Antwort";
+      statusText = data.status || " Unerwartete Antwort";
     }
   } catch (error) {
-    console.error("Fehler beim Ãœbertragen:", error);
-    statusText = "âŒ Netzwerkfehler";
+    console.error("Fehler beim Übertragen:", error);
+    statusText = " Netzwerkfehler";
   }
 
   appendTransferStatus(`${hostname}: ${statusText}`);
   return statusText;
+}
+
+async function transferCurrentSymbolToAll() {
+  persistCurrentManagerSymbol();
+  const status = document.getElementById("symbolTransferStatus") || statusArea;
+  const slot = managerSymbolSlot;
+  const symbol = managerCustomSymbols[slot] || { enabled: false, bitmap: symbolBitmapToHex(emptySymbolBitmap()) };
+  const targets = boxOrder.filter(hostname => knownBoxes[hostname]?.ip && knownBoxes[hostname].ip !== "0.0.0.0");
+  if (targets.length === 0) {
+    if (status) status.innerHTML = '<div class="statusEntry status">Keine Box mit bekannter IP gefunden.</div>';
+    return;
+  }
+
+  const lines = [];
+  if (status) {
+    status.innerHTML = `<div class="statusEntry status">Uebertrage Symbol ${escapeHtml(slot)} an ${targets.length} Box(en)...</div>`;
+  }
+
+  for (const hostname of targets) {
+    const box = knownBoxes[hostname];
+    try {
+      let response;
+      if (localBrowserMode) {
+        const form = new FormData();
+        form.append("slot", slot);
+        form.append("enabled", symbol.enabled ? "1" : "0");
+        form.append("bitmap", symbol.bitmap);
+        response = await fetch(`http://${box.ip}/api/custom-symbol`, { method: "POST", mode: "cors", body: form });
+      } else {
+        response = await fetch(managerPath("/transfer_symbol"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hostname, slot, enabled: symbol.enabled, bitmap: symbol.bitmap })
+        });
+      }
+      const text = await response.text();
+      lines.push(`${response.ok ? "" : ""} ${hostname}: ${text || response.statusText}`);
+    } catch (error) {
+      lines.push(` ${hostname}: ${error.message || error}`);
+    }
+    if (status) {
+      status.innerHTML = lines.map(line => `<div class="statusEntry">${escapeHtml(line)}</div>`).join("");
+    }
+  }
 }
 
 async function runTransferLoop() {
@@ -1644,9 +1843,9 @@ async function runTransferLoop() {
   transferCancelled = false;
   updateTransferButton();
   if (wasCancelled) {
-    appendTransferStatus("Ãœbertragung abgebrochen.");
+    appendTransferStatus("Übertragung abgebrochen.");
   } else {
-    appendTransferStatus("Ãœbertragung abgeschlossen.");
+    appendTransferStatus("Übertragung abgeschlossen.");
   }
 }
 
@@ -1677,7 +1876,7 @@ async function reloadAll() {
   const originalLabel = reloadButton ? reloadButton.textContent : "";
   if (reloadButton) {
     reloadButton.disabled = true;
-    reloadButton.textContent = "Lade GerÃ¤te...";
+    reloadButton.textContent = "Lade Geräte...";
   }
 
   try {
@@ -1693,7 +1892,7 @@ async function reloadAll() {
     alert("Netzwerkfehler beim Neu-Laden. Bitte erneut versuchen.");
   } finally {
     if (reloadButton) {
-      reloadButton.textContent = originalLabel || "ðŸ”„ Boxen neu lernen";
+      reloadButton.textContent = originalLabel || "🔄 Boxen neu lernen";
       reloadButton.disabled = false;
     }
   }
