@@ -22,9 +22,6 @@ Diese Datei beschreibt den aktuellen Projektstand und die noch offenen Arbeiten.
 - [x] Windows-Manager als Standalone-EXE.
 - [x] Windows-Manager mit AP-Start, vorhandene WLAN-Verbindung vorher abfragen, Manager-only und Stoppen.
 - [x] USB-Image mit Legacy-BIOS- und UEFI-Boot, Linux-Kiosk, Windows-Dateien und Grow-Root-Service.
-- [x] Webspace-Manager unter `/trl/` mit Basic Auth, HTTPS-Port-Redirect ohne `:8444`.
-- [x] Server-Webroot auf aktuelle Zielartefakte bereinigt.
-- [x] Zentrale Datei fuer Defaults und Zugaenge auf dem Server erstellt.
 - [x] Alte Shutdown-Absicherung entfernt; Shutdown bleibt nur im gebooteten USB-Stick-Kontext sichtbar.
 - [x] CI/Testabdeckung fuer Webserver- und EEPROM-Layouts erweitert.
 
