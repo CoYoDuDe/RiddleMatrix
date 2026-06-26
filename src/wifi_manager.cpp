@@ -155,6 +155,23 @@ void disableWiFiAndServer() {
 void connectWiFi() {
     Serial.println(F("🌐 Verbinde mit WiFi..."));
     WiFi.persistent(false);
+
+    if (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {
+        WiFi.mode(WIFI_AP);
+        const bool apStarted = WiFi.softAP(wifi_ssid, wifi_password);
+        Serial.print(F("Manager-Hotspot "));
+        Serial.println(apStarted ? F("gestartet.") : F("konnte nicht gestartet werden."));
+        wifiConnected = apStarted;
+        wifiDisabled = !apStarted;
+        if (apStarted) {
+            Serial.print(F("AP-IP-Adresse: "));
+            Serial.println(WiFi.softAPIP());
+            drawWiFiSymbol();
+            setupWebServer();
+            refreshWiFiIdleTimer(F("connectWiFi AP"));
+        }
+        return;
+    }
     const bool staWithLocalAp = (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp));
     WiFi.mode(staWithLocalAp ? WIFI_AP_STA : WIFI_STA);
     if (staWithLocalAp) {
@@ -224,6 +241,10 @@ void connectWiFi() {
 }
 
 void checkWiFi() {
+    if (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {
+        return;
+    }
+
     if (WiFi.status() != WL_CONNECTED) {
         const bool persistentMode = (wifi_operation_mode != static_cast<uint8_t>(WiFiOperationMode::TimedManager));
         if (persistentMode && !wifiDisabled) {
