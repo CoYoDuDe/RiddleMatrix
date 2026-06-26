@@ -54,6 +54,9 @@
     }
     #deviceList { flex-grow: 1; overflow-y: auto; }
     .device { padding: 8px; cursor: pointer; border-bottom: 1px solid #555; }
+    .device strong { display: block; font-size: 14px; }
+    .device small { display: block; margin-top: 2px; color: #d1d5db; font-size: 12px; }
+    .device.offline { opacity: .65; }
     .device:hover { background: #444; }
     #shutdown, #setupBtn, #settingsBtn {
       margin-top: 10px; padding: 10px; font-size: 14px; cursor: pointer;
@@ -395,6 +398,17 @@ function saveLocalBrowserConfig() {
   window.localStorage.setItem(localStorageKey, JSON.stringify({ boxen: knownBoxes, boxOrder, localScanSubnet }));
 }
 
+function getDefaultSymbolName(value) {
+  const key = String(value ?? "");
+  if (Object.prototype.hasOwnProperty.call(fixedSymbolLabels, key)) {
+    return fixedSymbolLabels[key];
+  }
+  if (customSymbolSlots.includes(key)) {
+    return `Zeichen ${key}`;
+  }
+  return key;
+}
+
 function loadManagerCustomSymbols() {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(symbolStorageKey) || "{}");
@@ -404,7 +418,7 @@ function loadManagerCustomSymbols() {
     const normalized = {};
     editableSymbolKeys.forEach(slot => {
       const stored = parsed[slot] && typeof parsed[slot] === "object" ? parsed[slot] : {};
-      const defaultName = customSymbolSlots.includes(slot) ? `Freies Zusatzzeichen ${slot}` : getLetterLabel(slot);
+      const defaultName = getDefaultSymbolName(slot);
       const defaultBitmap = symbolPresets[slot] || symbolPresets[defaultName] || symbolBitmapToHex(emptySymbolBitmap());
       normalized[slot] = {
         name: typeof stored.name === "string" && stored.name.trim()
@@ -452,8 +466,7 @@ function symbolHexToBitmap(hex) {
 function getManagerCustomSymbol(slot) {
   const normalizedSlot = String(slot || "0");
   const stored = managerCustomSymbols[normalizedSlot] || {};
-  const isCustomSlot = customSymbolSlots.includes(normalizedSlot);
-  const defaultName = isCustomSlot ? `Freies Zusatzzeichen ${normalizedSlot}` : getLetterLabel(normalizedSlot);
+  const defaultName = getDefaultSymbolName(normalizedSlot);
   const defaultBitmap = symbolPresets[normalizedSlot] || symbolPresets[defaultName] || symbolBitmapToHex(emptySymbolBitmap());
   return {
     name: typeof stored.name === "string" && stored.name.trim()
@@ -480,8 +493,9 @@ function renderSymbolSlotOptions(selectedSlot = managerSymbolSlot) {
   return editableSymbolKeys.map(slot => {
     const symbol = getManagerCustomSymbol(slot);
     const selected = String(selectedSlot) === slot ? "selected" : "";
-    const prefix = customSymbolSlots.includes(slot) ? "Freies Zusatzzeichen" : "Bearbeitbares Standardzeichen";
-    return `<option value="${escapeHtml(slot)}" ${selected}>${escapeHtml(prefix + " " + slot + " - " + symbol.name)}</option>`;
+    const name = String(symbol.name || getLetterLabel(slot)).trim() || getLetterLabel(slot);
+    const label = name.toUpperCase() === slot.toUpperCase() ? slot : `${slot} - ${name}`;
+    return `<option value="${escapeHtml(slot)}" ${selected}>${escapeHtml(label)}</option>`;
   }).join("");
 }
 
@@ -1288,16 +1302,42 @@ async function fetchDevices() {
       Object.entries(newKnownBoxes).forEach(([hostname, box]) => {
         normalizedIncoming[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
       });
+      const mergedKnownBoxes = {};
+      Object.entries(knownBoxes || {}).forEach(([hostname, box]) => {
+        mergedKnownBoxes[hostname] = normalizeBox(JSON.parse(JSON.stringify(box || {})));
+      });
+      Object.entries(normalizedIncoming).forEach(([hostname, box]) => {
+        mergedKnownBoxes[hostname] = normalizeBox({
+          ...(mergedKnownBoxes[hostname] || {}),
+          ...box,
+          ip: box.ip || mergedKnownBoxes[hostname]?.ip
+        });
+      });
+      (newConnectedBoxes || []).forEach(box => {
+        if (!box?.hostname || !box?.ip) {
+          return;
+        }
+        mergedKnownBoxes[box.hostname] = normalizeBox({
+          ...(mergedKnownBoxes[box.hostname] || {}),
+          ip: box.ip
+        });
+      });
+      const mergedBoxOrder = [];
+      [...boxOrder, ...newBoxOrder, ...Object.keys(mergedKnownBoxes)].forEach(hostname => {
+        if (hostname && mergedKnownBoxes[hostname] && !mergedBoxOrder.includes(hostname)) {
+          mergedBoxOrder.push(hostname);
+        }
+      });
 
-      // Prüfe auf Änderungen
+      // Pruefe auf Aenderungen
       const hasChanges =
-        JSON.stringify(knownBoxes) !== JSON.stringify(normalizedIncoming) ||
+        JSON.stringify(knownBoxes) !== JSON.stringify(mergedKnownBoxes) ||
         JSON.stringify(connectedBoxes) !== JSON.stringify(newConnectedBoxes) ||
-        JSON.stringify(boxOrder) !== JSON.stringify(newBoxOrder);
+        JSON.stringify(boxOrder) !== JSON.stringify(mergedBoxOrder);
 
-      knownBoxes = normalizedIncoming;
+      knownBoxes = mergedKnownBoxes;
       connectedBoxes = newConnectedBoxes;
-      boxOrder = newBoxOrder;
+      boxOrder = mergedBoxOrder;
 
       if (statusArea && statusArea.dataset.fetchError === "true") {
         statusArea.innerHTML = "";
@@ -1339,14 +1379,30 @@ async function fetchDevices() {
 
 function renderDeviceList() {
   const list = document.getElementById("deviceList");
-  const visibleBoxes = localBrowserMode
-    ? boxOrder.map(hostname => ({ hostname, ip: knownBoxes[hostname]?.ip })).filter(box => box.ip)
-    : connectedBoxes;
+  const onlineBoxes = new Map((connectedBoxes || []).map(box => [box.hostname, box]));
+  const visibleBoxes = boxOrder
+    .map(hostname => {
+      const known = knownBoxes[hostname] || {};
+      const online = onlineBoxes.get(hostname);
+      const ip = online?.ip || known.ip;
+      return ip ? { hostname, ip, online: localBrowserMode || !!online } : null;
+    })
+    .filter(Boolean);
+  (connectedBoxes || []).forEach(box => {
+    if (box?.hostname && box?.ip && !visibleBoxes.some(entry => entry.hostname === box.hostname)) {
+      visibleBoxes.push({ hostname: box.hostname, ip: box.ip, online: true });
+    }
+  });
   list.innerHTML = visibleBoxes.length ? "" : "Keine verbundenen Boxen";
-  visibleBoxes.forEach(({ hostname, ip }) => {
+  visibleBoxes.forEach(({ hostname, ip, online }) => {
     const div = document.createElement("div");
-    div.className = "device";
-    div.innerText = `${hostname} (${ip})`;
+    div.className = "device" + (online ? "" : " offline");
+    const title = document.createElement("strong");
+    title.textContent = hostname;
+    const detail = document.createElement("small");
+    detail.textContent = online ? `(${ip})` : `(${ip}) zuletzt bekannt`;
+    div.appendChild(title);
+    div.appendChild(detail);
     div.onclick = () => openBox(ip);
     list.appendChild(div);
   });
@@ -1464,7 +1520,7 @@ function showSetup() {
       .join("");
     html += '<div class="box-card">';
     html += '<h3>Zeichen/Symbole bearbeiten</h3>';
-    html += '<p>Alle vorhandenen Zeichen/Symbole sind bearbeitbar. A-Z sowie Sun, WIFI, Rad und Riddler ersetzen nach dem Speichern den eingebauten Standard auf der Box. Die Zusatzzeichen 0 bis 7 sind acht weitere frei benennbare Zeichen; mehr Zusatzzeichen sind auf den kleinen Boxen wegen Speicher und Firmware-Groesse bewusst nicht vorgesehen.</p>';
+    html += '<p>Alle Zeichen/Symbole sind bearbeitbar. A-Z sowie Sun, WIFI, Rad und Riddler koennen direkt ersetzt werden. Die Ausloesewerte 0 bis 7 sind acht weitere frei benennbare Zeichen; mehr zusaetzliche Ausloesewerte sind auf den kleinen Boxen wegen Speicher und Firmware-Groesse bewusst nicht vorgesehen.</p>';
     html += '<div class="symbol-editor">';
     html += '<div id="managerSymbolGrid" class="symbol-grid"></div>';
     html += '<div class="symbol-actions">';
@@ -1475,7 +1531,7 @@ function showSetup() {
     html += '<button type="button" onclick="loadSymbolPreset(document.getElementById(\'symbolPresetSelect\').value)">Vorlage in aktuelles Zeichen laden</button>';
     html += '<label>Bild importieren (PNG/JPG/BMP): <input type="file" accept="image/*,.bmp" onchange="importManagerSymbolImage(this)"></label>';
     html += '<button type="button" onclick="persistCurrentManagerSymbol()">Zeichen/Symbol speichern</button>';
-    html += '<button type="button" onclick="resetManagerSymbolToDefault()">Eingebauten Default laden</button>';
+    html += '<button type="button" onclick="resetManagerSymbolToDefault()">Standard laden</button>';
     html += '<button type="button" onclick="clearManagerSymbol()">Raster leeren</button>';
     html += '<button id="symbolTransferBtn" type="button" onclick="transferAllSymbols()">Alle Zeichen/Symbole an alle bekannten Boxen übertragen</button>';
     html += '</div></div>';

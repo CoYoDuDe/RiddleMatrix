@@ -379,7 +379,7 @@ String getColorModeOptionLabel(uint8_t mode) {
     }
 }
 
-static_assert(NUM_DAYS == 7, "Erwartete sieben Wochentage für die JSON-Abbildung");
+static_assert(NUM_DAYS == 7, "Erwartete sieben Wochentage fuer die JSON-Abbildung");
 
 constexpr const char *const DAY_KEYS[NUM_DAYS] = {
     "so", "mo", "di", "mi", "do", "fr", "sa",
@@ -388,14 +388,36 @@ constexpr const char *const DAY_KEYS[NUM_DAYS] = {
 } // namespace
 
 const char scriptJS[] PROGMEM = R"rawliteral(
+    function updateRtcInputs(timeText) {
+        const text = String(timeText || '');
+        const match = text.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}:\d{2}(?::\d{2})?)/);
+        const dateField = document.querySelector("input[name='date']");
+        const timeField = document.querySelector("input[name='time']");
+        const weekdayField = document.getElementById('rtcWeekday');
+        if (weekdayField) {
+            const weekday = text.split(',')[0].trim();
+            weekdayField.innerText = weekday && !/\d/.test(weekday) ? weekday : '-';
+        }
+        if (!match || !dateField || !timeField) {
+            return;
+        }
+        if (document.activeElement !== dateField) {
+            dateField.value = match[1] + '-' + match[2] + '-' + match[3];
+        }
+        if (document.activeElement !== timeField) {
+            timeField.value = match[4].length === 5 ? match[4] + ':00' : match[4];
+        }
+    }
+
     // 🕒 Aktuelle Uhrzeit abrufen
     function fetchRTC() {
         fetch('/getTime')
             .then(response => response.text())
             .then(time => {
                 document.getElementById('rtcTime').innerText = time;
+                updateRtcInputs(time);
             })
-            .catch(error => console.error('❌ Fehler:', error));
+            .catch(error => console.error('Fehler:', error));
     }
 
     // 📝 Freien RAM abrufen
@@ -405,7 +427,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             .then(memory => {
                 document.getElementById('memoryUsage').innerText = memory + ' bytes';
             })
-            .catch(error => console.error('❌ Fehler:', error));
+            .catch(error => console.error('Fehler:', error));
     }
 
     // 🕒 RTC-Zeit setzen
@@ -414,7 +436,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         fetch('/setTime', { method: 'POST', body: form })
             .then(response => response.text())
             .then(alert)
-            .catch(error => alert('❌ Fehler: ' + error));
+            .catch(error => alert('Fehler: ' + error));
     }
 
     // 🌐 Zeit per NTP synchronisieren
@@ -424,17 +446,17 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             .then(result => {
                 const text = result.message && result.message.trim() !== ''
                     ? result.message
-                    : (result.ok ? '✅ NTP Synchronisierung erfolgreich!' : '❌ Fehler bei der NTP Synchronisierung.');
+                    : (result.ok ? 'NTP Synchronisierung erfolgreich!' : 'Fehler bei der NTP Synchronisierung.');
                 if (!result.ok) {
-                    console.warn('❌ Serverfehler:', text);
+                    console.warn('Serverfehler:', text);
                 } else {
                     console.log('ℹ️ Serverantwort:', text);
                 }
                 alert(text);
             })
             .catch(error => {
-                console.error('❌ Fehler:', error);
-                alert('❌ Fehler: ' + error);
+                console.error('Fehler:', error);
+                alert('Fehler: ' + error);
             });
     }
 
@@ -862,7 +884,9 @@ void setupWebServer() {
             request->send(507, "text/plain", "Nicht genug Speicher fuer die Weboberflaeche.");
             return;
         }
-        html = "<h1>RiddleMatrix Einstellungen</h1>";
+        html = "<!doctype html><html lang='de'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>";
+        html += "<style>body{font-family:sans-serif;max-width:980px;margin:0 auto;padding:12px;line-height:1.35}fieldset{margin:8px 0}input,select,button{margin:3px 2px;padding:4px}table{border-collapse:collapse;width:100%}td,th{padding:4px;border:1px solid #bbb}h1,h2{margin-bottom:6px}.muted{color:#555;font-size:.92em}</style>";
+        html += "</head><body><h1>RiddleMatrix Einstellungen</h1>";
 
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
@@ -912,18 +936,18 @@ void setupWebServer() {
         // **Anzeige-Einstellungen**
         html += "<h2>Anzeige-Einstellungen</h2>";
         html += "<form id='displayForm'>";
-        html += "Helligkeit (1–255): <input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'><br>";
-        html += "Zeichen-Anzeigezeit (Sekunden, 1–60): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
-        html += "Automodus-Intervall (Sekunden, 30–600): <input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'><br>";
+        html += "Helligkeit (1-255): <input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'><br>";
+        html += "Zeichen-Anzeigezeit (Sekunden, 1-60): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
+        html += "Automodus-Intervall (Sekunden, 30-600): <input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'><br>";
         html += "Zufalls-Zeichen bei *: <input type='text' name='random_symbol_pool' maxlength='39' value='" + escapeHtml(String(random_symbol_pool)) + "'><br>";
         html += "Standalone aktiv von: <input type='time' name='active_start' value='" + escapeHtml(formatMinutesAsTime(standalone_active_start_minutes)) + "'><br>";
         html += "Standalone aktiv bis: <input type='time' name='active_end' value='" + escapeHtml(formatMinutesAsTime(standalone_active_end_minutes)) + "'><br>";
         html += "<label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> Automodus aktivieren</label>";
-        html += "<p style='margin-top:4px;'>Zulässige Werte: Helligkeit 1–255, Anzeigezeit 1–60&nbsp;s, Automodus-Intervall 30–600&nbsp;s. Aktivzeiten im Format HH:MM; gleicher Start- und Endwert bedeutet 24-Stunden-Betrieb.</p>";
+        html += "<p class='muted'>Zulaessige Werte: Helligkeit 1-255, Anzeigezeit 1-60&nbsp;s, Automodus-Intervall 30-600&nbsp;s. Aktivzeiten im Format HH:MM; gleicher Start- und Endwert bedeutet 24-Stunden-Betrieb.</p>";
         html += "<br><button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
         html += "</form>";
 
-        html += "<h2>Trigger-Verzögerungen pro Wochentag</h2>";
+        html += "<h2>Trigger-Verzoegerungen pro Wochentag</h2>";
         html += "<label><input type='checkbox' id='separate_trigger_editing' onchange='applyTriggerEditMode()'> Trigger 2 und 3 separat bearbeiten</label>";
         html += "<p style='margin-top:4px;'>Ohne Haken werden die Werte von Trigger 1 beim Speichern auf alle Trigger kopiert.</p>";
         html += "<form id='delaysForm'>";
@@ -949,12 +973,13 @@ void setupWebServer() {
         }
 
         html += "</table>";
-        html += "<br><button type='button' onclick='saveTriggerDelays()'>Verzögerungen speichern</button>";
+        html += "<br><button type='button' onclick='saveTriggerDelays()'>Verzoegerungen speichern</button>";
         html += "</form>";
 
         // **RTC-Zeit anzeigen & ändern**
         html += "<h2>Datum & Uhrzeit setzen</h2>";
         html += "<p>Aktuelle Zeit: <span id='rtcTime'>Laden...</span></p>";
+        html += "<p>Wochentag: <span id='rtcWeekday'>-</span></p>";
         html += "<p>Freier RAM: <span id='memoryUsage'>Laden...</span></p>";
         html += "<form id='rtcForm'>";
         html += "Datum (YYYY-MM-DD): <input type='date' name='date'><br>";
@@ -969,8 +994,8 @@ void setupWebServer() {
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
             html += "<button type='button' style='margin-right:8px;' onclick='triggerLetter(" + String(trigger) + ")'>Trigger " + String(trigger + 1) + " ausloesen</button>";
         }
-        html += "<script src='/script.js'></script>";
-        request->send(200, "text/html", html);
+        html += "<script src='/script.js'></script></body></html>";
+        request->send(200, "text/html; charset=utf-8", html);
         return;
 
 #if 0
@@ -1071,7 +1096,7 @@ void setupWebServer() {
 
     server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /script.js"));
-        request->send_P(200, "text/javascript", scriptJS);
+        request->send_P(200, "text/javascript; charset=utf-8", scriptJS);
     });
 
     server.on("/scanWiFi", HTTP_GET, [](AsyncWebServerRequest *request) {
