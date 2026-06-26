@@ -13,6 +13,7 @@ volatile bool cachedWeekdayValid = false;
 constexpr unsigned long WEEKDAY_CACHE_MAX_AGE_MS = 5000UL;
 constexpr unsigned long SERIAL_IDLE_CHECK_DELAY_MS = 2UL;
 constexpr unsigned long SERIAL_IDLE_MAX_WAIT_MS = 20UL;
+constexpr const char *NTP_TIMEZONE_EUROPE_BERLIN = "CET-1CEST,M3.5.0,M10.5.0/3";
 
 void storeWeekdayInCache(int weekday) {
   if (weekday >= 0 && weekday < static_cast<int>(NUM_DAYS)) {
@@ -136,7 +137,7 @@ bool setRTCFromWeb(const String &date, const String &time) {
     const int parsedDate = sscanf(date.c_str(), "%d-%d-%d", &year, &month, &day);
     const int parsedTime = sscanf(time.c_str(), "%d:%d:%d", &hour, &minute, &second);
 
-    if (parsedDate != 3 || parsedTime != 3) {
+    if (parsedDate != 3 || (parsedTime != 2 && parsedTime != 3)) {
         Serial.println(F("❌ Fehler: Ungültiges Datums- oder Zeitformat übermittelt."));
         enableRS485();
         return false;
@@ -188,7 +189,7 @@ bool setRTCFromWeb(const String &date, const String &time) {
 
 bool syncTimeWithNTP() {
     Serial.println(F("🔄 Synchronisiere Zeit mit NTP..."));
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+    configTzTime(NTP_TIMEZONE_EUROPE_BERLIN, "pool.ntp.org", "time.nist.gov");
 
     struct tm timeinfo;
     if (!getLocalTime(&timeinfo, 10000)) {
