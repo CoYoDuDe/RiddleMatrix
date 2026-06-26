@@ -705,6 +705,14 @@ function addSubnetCandidate(candidate, candidates = localSubnetCandidates) {
   return candidates;
 }
 
+function addFallbackSubnetCandidates(candidates = localSubnetCandidates) {
+  addSubnetCandidate("192.168.137", candidates);
+  addSubnetCandidate("192.168.178", candidates);
+  addSubnetCandidate("192.168.1", candidates);
+  addSubnetCandidate("192.168.0", candidates);
+  return candidates;
+}
+
 function collectKnownSubnetCandidates(candidates = []) {
   Object.values(knownBoxes || {}).forEach(box => {
     addSubnetCandidate(subnetPrefixFromIp(box?.ip), candidates);
@@ -783,19 +791,18 @@ async function detectWebRtcSubnetCandidates(candidates) {
 }
 
 async function detectLocalSubnetCandidates({ apply = true, silent = false } = {}) {
-  const candidates = [];
-  collectKnownSubnetCandidates(candidates);
-  await detectServerSubnetCandidates(candidates);
-  await detectWebRtcSubnetCandidates(candidates);
+  const detectedCandidates = [];
+  collectKnownSubnetCandidates(detectedCandidates);
+  await detectServerSubnetCandidates(detectedCandidates);
+  await detectWebRtcSubnetCandidates(detectedCandidates);
+
+  const candidates = [...detectedCandidates];
   addSubnetCandidate(localScanSubnet, candidates);
-  addSubnetCandidate("192.168.137", candidates);
-  addSubnetCandidate("192.168.178", candidates);
-  addSubnetCandidate("192.168.1", candidates);
-  addSubnetCandidate("192.168.0", candidates);
+  addFallbackSubnetCandidates(candidates);
 
   localSubnetCandidates = candidates;
-  if (apply && candidates.length > 0) {
-    localScanSubnet = candidates[0];
+  if (apply && detectedCandidates.length > 0) {
+    localScanSubnet = detectedCandidates[0];
     const input = document.getElementById("localSubnetPrefix");
     if (input) {
       input.value = localScanSubnet;
@@ -805,12 +812,12 @@ async function detectLocalSubnetCandidates({ apply = true, silent = false } = {}
   updateSubnetCandidateUi();
   if (!silent) {
     updateLocalScanStatus(
-      candidates.length > 0
-        ? `IP-Bereich erkannt: ${candidates[0]}.0/24`
-        : "IP-Bereich konnte nicht automatisch erkannt werden. Bitte manuell eintragen."
+      detectedCandidates.length > 0
+        ? `IP-Bereich erkannt: ${detectedCandidates[0]}.0/24`
+        : "IP-Bereich konnte im Browser nicht sicher erkannt werden. Bitte den Router-/LAN-Bereich eintragen oder einen Vorschlag aus der Liste waehlen."
     );
   }
-  return candidates;
+  return detectedCandidates;
 }
 
 function fetchWithTimeout(url, options = {}, timeoutMs = 900) {
@@ -1463,7 +1470,7 @@ function showSetup() {
     html += '<div class="symbol-actions">';
     html += `<label>Zeichen/Symbol: <select id="managerSymbolSlot" onchange="loadManagerSymbolSlot(this.value)">${renderSymbolSlotOptions(managerSymbolSlot)}</select></label>`;
     html += '<label>Name: <input id="managerSymbolName" type="text" maxlength="32" onchange="persistCurrentManagerSymbol()" placeholder="z.B. Krone, Stern, Schloss"></label>';
-    html += '<label><input id="managerSymbolEnabled" type="checkbox" onchange="persistCurrentManagerSymbol()"> Override/Zusatz-Zeichen aktiv</label>';
+    html += '<label><input id="managerSymbolEnabled" type="checkbox" onchange="persistCurrentManagerSymbol()"> Dieses Zeichen verwenden</label>';
     html += `<label>Vorlage laden: <select id="symbolPresetSelect"><option value="">Vorlage wählen...</option>${presetOptions}</select></label>`;
     html += '<button type="button" onclick="loadSymbolPreset(document.getElementById(\'symbolPresetSelect\').value)">Vorlage in aktuelles Zeichen laden</button>';
     html += '<label>Bild importieren (PNG/JPG/BMP): <input type="file" accept="image/*,.bmp" onchange="importManagerSymbolImage(this)"></label>';

@@ -7,7 +7,7 @@ Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
 ## Aktueller Funktionsumfang
 
-- Firmware-Builds sind fuer `nodemcuv2` (ESP8266) und `esp32dev` (ESP32) konfiguriert. Bei ESP32 muessen die Matrix-/RTC-/RS485-Pins je nach echter Hardware in `src/config.h` angepasst werden.
+- Firmware-Builds sind fuer `nodemcu` (NodeMCU 0.9 / ESP-12), `nodemcuv2` (NodeMCU 1.0 / ESP-12E) und `esp32dev` (ESP32) konfiguriert. Bei ESP32 muessen die Matrix-/RTC-/RS485-Pins je nach echter Hardware in `src/config.h` angepasst werden.
 - Die Verwaltung nutzt Zeichen/Symbole statt nur Buchstaben: A-Z, Standard-Symbole und acht zusaetzliche Zeichen `0` bis `7`.
 - A-Z und die Standard-Symbole sind direkt bearbeitbar; intern werden editierbare Overrides gespeichert. Die Zusatzzeichen `0` bis `7` sind acht weitere frei benennbare Zeichen. Mehr Zusatzzeichen sind wegen Speicher und Firmware-Groesse auf den kleinen Boxen bewusst nicht vorgesehen.
 - Zeichen/Symbole koennen im zentralen Manager benannt, aus vorhandenen Firmware-Vorlagen oder Bilddateien erstellt, als 32x32-Raster bearbeitet und an die Boxen uebertragen werden.

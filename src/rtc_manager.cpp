@@ -250,12 +250,12 @@ bool setRTCFromWeb(const String &date, const String &time) {
     return true;
 }
 bool syncTimeWithNTP() {
-    Serial.println(F("ðŸ”„ Synchronisiere Zeit mit NTP..."));
+    Serial.println(F("Synchronisiere Zeit mit NTP..."));
     configTzTime(NTP_TIMEZONE_EUROPE_BERLIN, "pool.ntp.org", "time.nist.gov");
 
     struct tm timeinfo;
     if (!getSystemLocalTime(timeinfo, 10000)) {
-        Serial.println(F("âŒ NTP Zeit konnte nicht abgerufen werden!"));
+        Serial.println(F("NTP Zeit konnte nicht abgerufen werden!"));
         return false;
     }
 
@@ -273,7 +273,7 @@ bool syncTimeWithNTP() {
     rtc.adjust(ntpDateTime);
     storeWeekdayInCache(ntpDateTime.dayOfTheWeek());
     enableRS485();
-    Serial.println(F("âœ… NTP Synchronisierung erfolgreich!"));
+    Serial.println(F("NTP Synchronisierung erfolgreich!"));
     return true;
 }
 

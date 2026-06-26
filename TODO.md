@@ -4,7 +4,7 @@ Diese Datei beschreibt den aktuellen Projektstand und die noch offenen Arbeiten.
 
 ## Erledigt
 
-- [x] Firmware-Builds fuer ESP8266/NodeMCU und ESP32.
+- [x] Firmware-Builds fuer NodeMCU 0.9 (`nodemcu`), NodeMCU 1.0 (`nodemcuv2`) und ESP32 (`esp32dev`).
 - [x] Weboberflaeche fuer Netzwerk, Anzeige, Trigger, Farben, RTC-Zeit und Aktivzeitfenster.
 - [x] RS485-Trigger mit tagesabhaengigen Zeichen/Symbolen und Verzogerungen.
 - [x] Mehrspurige Tageskonfiguration fuer bis zu drei Trigger.
