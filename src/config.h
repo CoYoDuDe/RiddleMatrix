@@ -17,6 +17,30 @@
 #include <Ticker.h>
 #include "letters.h"
 
+#if __has_include("private_defaults.h")
+#include "private_defaults.h"
+#endif
+
+#ifndef RIDDLEMATRIX_DEFAULT_WIFI_SSID
+#define RIDDLEMATRIX_DEFAULT_WIFI_SSID "RiddleMatrix_AP"
+#endif
+
+#ifndef RIDDLEMATRIX_DEFAULT_WIFI_PASSWORD
+#define RIDDLEMATRIX_DEFAULT_WIFI_PASSWORD "RiddleMatrix-Setup!"
+#endif
+
+#ifndef RIDDLEMATRIX_DEFAULT_INFRA_WIFI_SSID
+#define RIDDLEMATRIX_DEFAULT_INFRA_WIFI_SSID "RiddleMatrix_WLAN"
+#endif
+
+#ifndef RIDDLEMATRIX_DEFAULT_INFRA_WIFI_PASSWORD
+#define RIDDLEMATRIX_DEFAULT_INFRA_WIFI_PASSWORD "ChangeMe-RiddleMatrix!"
+#endif
+
+#ifndef RIDDLEMATRIX_DEFAULT_LOCAL_AP_PASSWORD
+#define RIDDLEMATRIX_DEFAULT_LOCAL_AP_PASSWORD RIDDLEMATRIX_DEFAULT_WIFI_PASSWORD
+#endif
+
 // **EEPROM Speichergröße**
 #define EEPROM_SIZE 4096
 

@@ -1420,7 +1420,7 @@ void setupWebServer() {
             }
 
             if (requestedMode != static_cast<uint8_t>(WiFiOperationMode::TimedManager) &&
-                sanitizedSsid == F("RiddleMatrix_AP") &&
+                sanitizedSsid == String(RIDDLEMATRIX_DEFAULT_WIFI_SSID) &&
                 !applyPassword) {
                 copyWithTermination(String(DEFAULT_INFRA_WIFI_SSID), wifi_ssid, sizeof(wifi_ssid));
                 copyWithTermination(String(DEFAULT_INFRA_WIFI_PASSWORD), wifi_password, sizeof(wifi_password));
@@ -1468,7 +1468,7 @@ void setupWebServer() {
             }
 
             if (appliedInfraDefaults) {
-                response += " Hinweis: Ziel-WLAN wurde auf RiddleMatrix_WLAN / ChangeMe-RiddleMatrix! gesetzt.";
+                response += " Hinweis: Ziel-WLAN wurde auf " + String(DEFAULT_INFRA_WIFI_SSID) + " / " + String(DEFAULT_INFRA_WIFI_PASSWORD) + " gesetzt.";
             }
 
             if (requestedMode == static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {

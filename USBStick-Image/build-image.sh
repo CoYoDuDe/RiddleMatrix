@@ -92,12 +92,14 @@ parse_args() {
 
 write_public_ap_env() {
   local output=$1
+  local ssid=${RIDDLEMATRIX_PUBLIC_AP_SSID:-RiddleMatrix_AP}
+  local passphrase=${RIDDLEMATRIX_PUBLIC_AP_PASSWORD:-RiddleMatrix-Setup!}
   mkdir -p "$(dirname "$output")"
-  cat > "$output" <<'EOF'
+  cat > "$output" <<EOF
 # RiddleMatrix Hotspot-Konfiguration
 # Diese Datei kann unter Windows mit dem RiddleMatrix Windows Manager angepasst werden.
-SSID='RiddleMatrix_AP'
-WPA_PASSPHRASE='RiddleMatrix-Setup!'
+SSID='$ssid'
+WPA_PASSPHRASE='$passphrase'
 EOF
 }
 
