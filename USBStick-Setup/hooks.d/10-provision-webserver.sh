@@ -135,7 +135,15 @@ ensure_system_packages() {
     firmware-linux-nonfree
     firmware-iwlwifi
     firmware-realtek
+    firmware-atheros
+    firmware-brcm80211
+    firmware-libertas
+    firmware-zd1211
     firmware-misc-nonfree
+    iw
+    wireless-tools
+    wpasupplicant
+    usb-modeswitch
     libffi-dev
     libssl-dev
     build-essential

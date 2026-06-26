@@ -34,6 +34,8 @@ sudo IMAGE_SIZE_MIB=12288 ./USBStick-Image/build-image.sh --output ./RiddleMatri
 
 Der Standard ist 8192 MiB, weil Debian, Firefox, X11 und WLAN-Firmware sonst nicht zuverlaessig in das Image passen. Der Builder erzeugt zusaetzlich `RiddleMatrix-usb.img.xz`. Diese komprimierte Datei ist fuer Ablage/Download gedacht. Zum Schreiben mit Win32DiskImager muss sie vorher entpackt werden.
 
+Das Image installiert bewusst mehrere gaengige WLAN-Firmwarepakete fuer Intel, Realtek, Broadcom, Atheros und typische USB-WLAN-Sticks. Komplett garantieren laesst sich WLAN-AP-Betrieb trotzdem nicht, weil manche Notebook-Treiber oder Chipsaetze keinen Access-Point-Modus unter Linux unterstuetzen.
+
 ## Auf USB-Stick schreiben
 
 Windows:
