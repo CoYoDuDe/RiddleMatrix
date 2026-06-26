@@ -208,7 +208,7 @@ const devicesPollIntervalMs = 1000;
 let localBrowserMode = false;
 let localScanInFlight = false;
 let localScanAbortController = null;
-let localScanSubnet = "192.168.137";
+let localScanSubnet = "";
 let localAutoScanStarted = false;
 let webspaceAuthenticated = false;
 let localSubnetCandidates = [];
@@ -380,7 +380,7 @@ function loadLocalBrowserConfig() {
     return {
       boxen: parsed.boxen && typeof parsed.boxen === "object" ? parsed.boxen : {},
       boxOrder: Array.isArray(parsed.boxOrder) ? parsed.boxOrder : Object.keys(parsed.boxen || {}),
-      localScanSubnet: typeof parsed.localScanSubnet === "string" ? parsed.localScanSubnet : "192.168.137"
+      localScanSubnet: typeof parsed.localScanSubnet === "string" ? parsed.localScanSubnet : ""
     };
   } catch (error) {
     console.warn("Lokale Browser-Konfiguration konnte nicht gelesen werden:", error);
@@ -1464,7 +1464,7 @@ function showSetup() {
       .join("");
     html += '<div class="box-card">';
     html += '<h3>Zeichen/Symbole bearbeiten</h3>';
-    html += '<p>Alle vorhandenen Zeichen/Symbole sind bearbeitbar. A-Z sowie Sun, WIFI, Rad und Riddler werden als Overrides gespeichert. Die Zusatzzeichen 0 bis 7 sind acht weitere frei benennbare Zeichen; mehr Zusatzzeichen sind auf den kleinen Boxen wegen Speicher und Firmware-Groesse bewusst nicht vorgesehen.</p>';
+    html += '<p>Alle vorhandenen Zeichen/Symbole sind bearbeitbar. A-Z sowie Sun, WIFI, Rad und Riddler ersetzen nach dem Speichern den eingebauten Standard auf der Box. Die Zusatzzeichen 0 bis 7 sind acht weitere frei benennbare Zeichen; mehr Zusatzzeichen sind auf den kleinen Boxen wegen Speicher und Firmware-Groesse bewusst nicht vorgesehen.</p>';
     html += '<div class="symbol-editor">';
     html += '<div id="managerSymbolGrid" class="symbol-grid"></div>';
     html += '<div class="symbol-actions">';
@@ -1592,19 +1592,19 @@ function showAppSettings() {
   html += '<h3>Lokale Boxen-Suche</h3>';
   html += '<div class="settings-grid">';
   html += '<label for="localSubnetPrefix">IP-Bereich</label>';
-  html += `<span><input id="localSubnetPrefix" type="text" list="localSubnetCandidateList" value="${escapeHtml(localScanSubnet)}" placeholder="z.B. 192.168.137">`;
+  html += `<span><input id="localSubnetPrefix" type="text" list="localSubnetCandidateList" value="${escapeHtml(localScanSubnet)}" placeholder="z.B. 192.168.1">`;
   html += '<datalist id="localSubnetCandidateList"></datalist></span>';
   html += '<span></span><span><button type="button" onclick="detectLocalSubnetCandidates()">IP-Bereich erkennen</button> ';
   html += '<button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button></span>';
   html += '<label for="localBoxIp">Box-IP direkt</label>';
-  html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.137.50"> <button type="button" onclick="learnLocalBoxFromIp()">Hinzufügen/lernen</button></span>';
+  html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.1.50"> <button type="button" onclick="learnLocalBoxFromIp()">Hinzufügen/lernen</button></span>';
   html += '</div>';
   html += '<div id="localScanStatus" style="margin-top:10px;"></div>';
-  html += '<p>Die Suche übernimmt nur Geräte, die wie RiddleMatrix-Boxen antworten. Der IP-Bereich wird automatisch vorgeschlagen und kann bei Bedarf geändert werden.</p>';
+  html += '<p>Die Suche übernimmt nur Geräte, die wie RiddleMatrix-Boxen antworten. Der IP-Bereich wird automatisch vorgeschlagen, wenn Browser oder Manager ihn sicher erkennen können; sonst bitte Router-/LAN-Bereich eintragen.</p>';
   html += '</div>';
   document.getElementById("content").innerHTML = html;
   statusArea = document.getElementById("localScanStatus");
-  detectLocalSubnetCandidates({ apply: false, silent: true }).then(updateSubnetCandidateUi);
+  detectLocalSubnetCandidates({ apply: true, silent: false }).then(updateSubnetCandidateUi);
 }
 
 function handleKeydown(event, day, word, maxLength, inputElement, triggerIndex = 0, applyAllTriggers = false) {
