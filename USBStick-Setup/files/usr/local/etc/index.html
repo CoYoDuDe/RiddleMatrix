@@ -475,7 +475,7 @@ function renderSymbolSlotOptions(selectedSlot = managerSymbolSlot) {
   return editableSymbolKeys.map(slot => {
     const symbol = getManagerCustomSymbol(slot);
     const selected = String(selectedSlot) === slot ? "selected" : "";
-    const prefix = customSymbolSlots.includes(slot) ? "Zusatz" : "Fest";
+    const prefix = customSymbolSlots.includes(slot) ? "Zusatz" : "Standard";
     return `<option value="${escapeHtml(slot)}" ${selected}>${escapeHtml(prefix + " " + slot + " - " + symbol.name)}</option>`;
   }).join("");
 }
@@ -1452,7 +1452,7 @@ function showSetup() {
       .join("");
     html += '<div class="box-card">';
     html += '<h3>Zeichen/Symbole bearbeiten</h3>';
-    html += '<p>A-Z und die festen Symbole sind in der Firmware eingebaut und koennen hier als Overrides bearbeitet werden. Die Zusatz-Zeichen 0 bis 7 bleiben als frei benennbare Speicherplaetze erhalten.</p>';
+    html += '<p>Alle Standard-Zeichen/Symbole sind direkt bearbeitbar. Beim Speichern wird ein editierbarer Override an die Box uebertragen; die Zusatz-Zeichen 0 bis 7 bleiben als frei benennbare Speicherplaetze erhalten.</p>';
     html += '<div class="symbol-editor">';
     html += '<div id="managerSymbolGrid" class="symbol-grid"></div>';
     html += '<div class="symbol-actions">';
@@ -1520,7 +1520,7 @@ function showSetup() {
                 </select>
                 <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateBoxTriggers})">
                 <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateBoxTriggers})">
-                  <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Fest</option>
+                  <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Fixe Farbe</option>
                   <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewählt)</option>
                   <option value="random_all" ${colorMode === "random_all" ? "selected" : ""}>Zufall (alle)</option>
                 </select>

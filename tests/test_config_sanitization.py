@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 
 def _build_test_binary(tmp_path: Path) -> Path:
@@ -29,5 +32,8 @@ def _build_test_binary(tmp_path: Path) -> Path:
 
 
 def test_load_config_recovers_from_ff(tmp_path) -> None:
+    if shutil.which("g++") is None:
+        pytest.skip("g++ is required for the host-side config harness")
+
     binary = _build_test_binary(Path(tmp_path))
     subprocess.run([str(binary)], check=True, cwd=Path.cwd())

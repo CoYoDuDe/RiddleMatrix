@@ -375,7 +375,7 @@ String getColorModeOptionLabel(uint8_t mode) {
             return F("Zufall (alle)");
         case LetterColorMode::Fixed:
         default:
-            return F("Fest");
+            return F("Fixe Farbe");
     }
 }
 
@@ -623,8 +623,8 @@ const char scriptJS[] PROGMEM = R"rawliteral(
                 const mode = document.getElementById('symbolEditorMode');
                 if (mode) {
                     mode.textContent = data.builtin
-                        ? 'Festes Zeichen: Override aktivieren, um den eingebauten Default zu überschreiben.'
-                        : 'Zusatz-Zeichen: wird im EEPROM gespeichert und kann direkt ausgewählt werden.';
+                        ? 'Standard-Zeichen: beim Speichern wird der eingebaute Default ueberschrieben.'
+                        : 'Zusatz-Zeichen: wird im Speicher abgelegt und kann direkt ausgewaehlt werden.';
                 }
             })
             .catch(error => alert('Symbol konnte nicht geladen werden: ' + error));
@@ -1040,7 +1040,7 @@ void setupWebServer() {
         html += "</form>";
 
         html += "<h2>Zeichen/Symbole bearbeiten</h2>";
-        html += "<p>A-Z und die festen Symbole sind in der Firmware eingebaut und koennen hier mit editierbaren Overrides ueberschrieben werden. Die Zusatz-Zeichen 0 bis 7 bleiben als EEPROM-Speicherplaetze erhalten.</p>";
+        html += "<p>Alle Standard-Zeichen/Symbole sind direkt bearbeitbar. Beim Speichern wird ein editierbarer Override im Speicher der Box abgelegt. Die Zusatz-Zeichen 0 bis 7 bleiben als frei benennbare Speicherplaetze erhalten.</p>";
         html += "<style>.symbol-editor{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}.symbol-grid{display:grid;grid-template-columns:repeat(32,12px);gap:1px;background:#333;padding:4px;width:max-content}.symbol-cell{width:12px;height:12px;border:0;background:#f3f3f3;padding:0;cursor:pointer}.symbol-cell.on{background:#111}.symbol-actions{display:flex;flex-direction:column;gap:8px;max-width:320px}</style>";
         html += "<div class='symbol-editor'>";
         html += "<div id='symbolGrid' class='symbol-grid'></div>";
@@ -1054,7 +1054,7 @@ void setupWebServer() {
             html += "<option value='" + escapeHtml(String(optionChar)) + "'>" + escapeHtml(getLetterOptionLabel(optionChar)) + "</option>";
         }
         html += "</select></label>";
-        html += "<p id='symbolEditorMode' style='margin:0;color:#555;'>Festes Zeichen: Override aktivieren, um den eingebauten Default zu ueberschreiben.</p>";
+        html += "<p id='symbolEditorMode' style='margin:0;color:#555;'>Standard-Zeichen: beim Speichern wird der eingebaute Default ueberschrieben.</p>";
         html += "<label><input id='symbolEnabled' type='checkbox'> Override/Zusatz-Zeichen aktiv</label>";
         html += "<label>Bild importieren (PNG/JPG/BMP): <input type='file' accept='image/*,.bmp' onchange='importSymbolImage(this)'></label>";
         html += "<button type='button' onclick='saveCustomSymbol()'>Zeichen/Symbol speichern</button>";

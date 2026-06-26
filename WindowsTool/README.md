@@ -20,6 +20,7 @@ Der USB-Stick bleibt als Backup erhalten. Die Windows-App schreibt nur dann auf 
 
 Per Doppelklick:
 
+- `RiddleMatrixWindowsManager.exe`
 - `Start-RiddleMatrixWindowsManager.cmd`
 
 Oder direkt in PowerShell:
@@ -29,6 +30,8 @@ powershell -ExecutionPolicy Bypass -File .\Start-RiddleMatrixWindowsManager.ps1
 ```
 
 Beim ersten Start legt das Tool automatisch eine lokale Python-Umgebung unter `%AppData%\RiddleMatrixWindowsManager\venv` an und installiert `Flask`, `beautifulsoup4` und `requests`.
+
+Die EXE ist als Standalone-Launcher gebaut. Wenn sie ohne den restlichen Ordner gestartet wird, entpackt sie die benoetigten Manager-Dateien automatisch nach `%AppData%\RiddleMatrixWindowsManager\StandalonePayload` und nutzt weiter dieselben gespeicherten Einstellungen.
 
 ## Ablauf
 
