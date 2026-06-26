@@ -267,7 +267,7 @@ cleanup() {
   chroot "$root_mount" systemctl enable bootlocal.service webserver.service kiosk-startx.service riddlematrix-grow-root.service
 
   log "Installiere GRUB fuer Legacy-BIOS und UEFI."
-  chroot "$root_mount" grub-install --target=i386-pc "$loop_device"
+  grub-install --target=i386-pc --boot-directory="$root_mount/boot" "$loop_device"
   chroot "$root_mount" grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=RiddleMatrix --removable --recheck
   chroot "$root_mount" update-grub
 
