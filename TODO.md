@@ -25,7 +25,7 @@ Diese Datei beschreibt den aktuellen Projektstand und die noch offenen Arbeiten.
 - [x] Webspace-Manager unter `/trl/` mit Basic Auth, HTTPS-Port-Redirect ohne `:8444`.
 - [x] Server-Webroot auf aktuelle Zielartefakte bereinigt.
 - [x] Zentrale Datei fuer Defaults und Zugaenge auf dem Server erstellt.
-- [x] Shutdown-Token entfernt; Shutdown bleibt nur im gebooteten USB-Stick-Kontext sichtbar.
+- [x] Alte Shutdown-Absicherung entfernt; Shutdown bleibt nur im gebooteten USB-Stick-Kontext sichtbar.
 - [x] CI/Testabdeckung fuer Webserver- und EEPROM-Layouts erweitert.
 
 ## Noch offen
@@ -44,5 +44,5 @@ Diese Datei beschreibt den aktuellen Projektstand und die noch offenen Arbeiten.
 
 ## Bewusst begrenzt
 
-- [ ] Mehr als acht Zusatzzeichen werden aktuell nicht eingeplant. A-Z und Standardsymbole sind bereits bearbeitbar; die Zusatzzeichen 0 bis 7 sind zusaetzliche Speicherplaetze. Mehr permanente Zusatzzeichen wuerden auf ESP8266 unnoetig Flash/RAM und EEPROM-Layout belasten.
+- [ ] Mehr als acht Zusatzzeichen werden aktuell nicht eingeplant. A-Z und Standardsymbole sind bereits bearbeitbar; die Zusatzzeichen 0 bis 7 sind zusaetzliche frei benennbare Zeichen. Mehr permanente Zusatzzeichen wuerden auf ESP8266 unnoetig Flash/RAM und EEPROM-Layout belasten.
 - [ ] Browser vom externen Webspace kann den lokalen LAN-IP-Bereich nicht verlaesslich automatisch erkennen. Der Manager schlaegt Kandidaten vor und scannt nur Geraete, die wie RiddleMatrix-Boxen antworten.

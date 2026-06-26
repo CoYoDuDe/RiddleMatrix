@@ -366,7 +366,7 @@ main() {
     USE_CHROOT=1
   fi
   log_dry_run_banner
-  VENV_DIR="$TARGET_ROOT/usr/local/venv/maerchen"
+  VENV_DIR="$TARGET_ROOT/usr/local/venv/riddlematrix"
   ensure_system_packages
   ensure_virtualenv
   install_python_dependencies
