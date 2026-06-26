@@ -194,6 +194,11 @@ let transferCompleted = {};
 let transferCancelled = false;
 let transferStatusLines = [];
 let transferring = false;
+let symbolTransferPending = {};
+let symbolTransferCompleted = {};
+let symbolTransferCancelled = false;
+let symbolTransferring = false;
+let symbolTransferStatusLines = [];
 let statusArea;
 let boxOrder = [];
 let devicesPollInFlight = false;
@@ -475,7 +480,7 @@ function renderSymbolSlotOptions(selectedSlot = managerSymbolSlot) {
   return editableSymbolKeys.map(slot => {
     const symbol = getManagerCustomSymbol(slot);
     const selected = String(selectedSlot) === slot ? "selected" : "";
-    const prefix = customSymbolSlots.includes(slot) ? "Zusatz" : "Standard";
+    const prefix = customSymbolSlots.includes(slot) ? "Zusatzzeichen" : "Bearbeitbar";
     return `<option value="${escapeHtml(slot)}" ${selected}>${escapeHtml(prefix + " " + slot + " - " + symbol.name)}</option>`;
   }).join("");
 }
@@ -1452,7 +1457,7 @@ function showSetup() {
       .join("");
     html += '<div class="box-card">';
     html += '<h3>Zeichen/Symbole bearbeiten</h3>';
-    html += '<p>Alle Standard-Zeichen/Symbole sind direkt bearbeitbar. Beim Speichern wird ein editierbarer Override an die Box uebertragen; die Zusatz-Zeichen 0 bis 7 bleiben als frei benennbare Speicherplaetze erhalten.</p>';
+    html += '<p>Alle vorhandenen Zeichen/Symbole sind bearbeitbar. A-Z sowie Sun, WIFI, Rad und Riddler werden als Overrides gespeichert. Die Zusatzzeichen 0 bis 7 sind acht weitere frei benennbare Zeichen; mehr Zusatzzeichen sind auf den kleinen Boxen wegen Speicher und Firmware-Groesse bewusst nicht vorgesehen.</p>';
     html += '<div class="symbol-editor">';
     html += '<div id="managerSymbolGrid" class="symbol-grid"></div>';
     html += '<div class="symbol-actions">';
@@ -1465,7 +1470,7 @@ function showSetup() {
     html += '<button type="button" onclick="persistCurrentManagerSymbol()">Zeichen/Symbol speichern</button>';
     html += '<button type="button" onclick="resetManagerSymbolToDefault()">Eingebauten Default laden</button>';
     html += '<button type="button" onclick="clearManagerSymbol()">Raster leeren</button>';
-    html += '<button type="button" onclick="transferCurrentSymbolToAll()">Aktuelles Zeichen an alle bekannten Boxen übertragen</button>';
+    html += '<button id="symbolTransferBtn" type="button" onclick="transferAllSymbols()">Alle Zeichen/Symbole an alle bekannten Boxen übertragen</button>';
     html += '</div></div>';
     html += '<div id="symbolTransferStatus" style="margin-top:10px;"></div>';
     html += '</div>';
@@ -1485,8 +1490,9 @@ function showSetup() {
       const box = normalizeBox(knownBoxes[hostname] || {});
       const escapedHostname = escapeHtml(hostname);
       const hostnameArgument = escapeJsString(hostname);
-      const transferMark = transferCompleted[hostname] ? '<span class="transfer-badge">✓ übertragen</span>' : '';
-      html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}${transferMark}</h3><div class="weekday-row">`;
+      const transferMark = transferCompleted[hostname] ? '<span class="transfer-badge">✓ Einstellungen übertragen</span>' : '';
+      const symbolTransferMark = symbolTransferCompleted[hostname] ? '<span class="transfer-badge">✓ Zeichen/Symbole übertragen</span>' : '';
+      html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}${transferMark}${symbolTransferMark}</h3><div class="weekday-row">`;
       for (let i = 0; i < days.length; i++) {
         const letters = box.letters?.[days[i]] || [];
         const colors = box.colors?.[days[i]] || [];
@@ -1520,7 +1526,7 @@ function showSetup() {
                 </select>
                 <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateBoxTriggers})">
                 <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateBoxTriggers})">
-                  <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Fixe Farbe</option>
+                  <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Einfarbig</option>
                   <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewählt)</option>
                   <option value="random_all" ${colorMode === "random_all" ? "selected" : ""}>Zufall (alle)</option>
                 </select>
@@ -1569,6 +1575,8 @@ function showSetup() {
   }
   renderTransferStatus();
   updateTransferButton();
+  renderSymbolTransferStatus();
+  updateSymbolTransferButton();
 }
 
 function showAppSettings() {
@@ -1939,55 +1947,150 @@ async function transferBox(hostname) {
   return statusText;
 }
 
-async function transferCurrentSymbolToAll() {
-  persistCurrentManagerSymbol();
+function updateSymbolTransferButton() {
+  const button = document.getElementById("symbolTransferBtn");
+  if (!button) {
+    return;
+  }
+  if (symbolTransferring) {
+    const remaining = Object.keys(symbolTransferPending).length;
+    button.textContent = `Symbol-Übertragung abbrechen (${remaining} offen)`;
+  } else {
+    button.textContent = "Alle Zeichen/Symbole an alle bekannten Boxen übertragen";
+  }
+}
+
+function appendSymbolTransferStatus(message) {
+  symbolTransferStatusLines.push(message);
+  if (symbolTransferStatusLines.length > 30) {
+    symbolTransferStatusLines.shift();
+  }
+  renderSymbolTransferStatus();
+}
+
+function renderSymbolTransferStatus() {
   const status = document.getElementById("symbolTransferStatus") || statusArea;
-  const selectedSymbol = managerSymbolSlot;
-  const symbol = getManagerCustomSymbol(selectedSymbol);
-  const targets = boxOrder.filter(hostname => knownBoxes[hostname]?.ip && knownBoxes[hostname].ip !== "0.0.0.0");
-  if (targets.length === 0) {
-    if (status) status.innerHTML = '<div class="statusEntry status">Keine Box mit bekannter IP gefunden.</div>';
+  if (!status || symbolTransferStatusLines.length === 0) {
+    return;
+  }
+  status.innerHTML = symbolTransferStatusLines
+    .map(message => `<div class="statusEntry">${escapeHtml(message)}</div>`)
+    .join("");
+}
+
+async function transferSymbolToBox(hostname, symbolKey) {
+  const symbol = getManagerCustomSymbol(symbolKey);
+  const box = knownBoxes[hostname];
+  const ip = validateIpAddress(box?.ip);
+
+  if (!box || !ip) {
+    return "Keine gueltige lokale IP hinterlegt";
+  }
+
+  try {
+    let response;
+    if (localBrowserMode) {
+      const form = new FormData();
+      form.append("char", symbolKey);
+      form.append("enabled", symbol.enabled ? "1" : "0");
+      form.append("bitmap", symbol.bitmap);
+      response = await fetch(`http://${ip}/api/symbol-bitmap`, { method: "POST", mode: "cors", body: form });
+      if (!response.ok && customSymbolSlots.includes(symbolKey)) {
+        const fallbackForm = new FormData();
+        fallbackForm.append("slot", symbolKey);
+        fallbackForm.append("enabled", symbol.enabled ? "1" : "0");
+        fallbackForm.append("bitmap", symbol.bitmap);
+        response = await fetch(`http://${ip}/api/custom-symbol`, { method: "POST", mode: "cors", body: fallbackForm });
+      }
+    } else {
+      response = await fetch(managerPath("/transfer_symbol"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostname, char: symbolKey, slot: symbolKey, enabled: symbol.enabled, bitmap: symbol.bitmap })
+      });
+    }
+
+    const text = await response.text();
+    return response.ok ? "uebertragen" : (text || `Fehler ${response.status}`);
+  } catch (error) {
+    return error.message || String(error);
+  }
+}
+
+async function transferAllSymbolsForBox(hostname) {
+  let transferred = 0;
+  for (const symbolKey of editableSymbolKeys) {
+    if (symbolTransferCancelled) {
+      return "abgebrochen";
+    }
+    const result = await transferSymbolToBox(hostname, symbolKey);
+    if (result !== "uebertragen") {
+      return `${symbolKey}: ${result}`;
+    }
+    transferred += 1;
+  }
+  return `${transferred} Zeichen/Symbole uebertragen`;
+}
+
+async function runSymbolTransferLoop() {
+  while (symbolTransferring && !symbolTransferCancelled && Object.keys(symbolTransferPending).length > 0) {
+    await fetchDevices();
+
+    for (const hostname of Object.keys(symbolTransferPending)) {
+      if (symbolTransferCancelled) {
+        break;
+      }
+
+      const result = await transferAllSymbolsForBox(hostname);
+      if (result.includes("uebertragen")) {
+        delete symbolTransferPending[hostname];
+        symbolTransferCompleted[hostname] = true;
+        appendSymbolTransferStatus(`✓ ${hostname}: ${result}`);
+        showSetup();
+      } else if (result !== "abgebrochen") {
+        appendSymbolTransferStatus(`${hostname}: ${result}`);
+      }
+      updateSymbolTransferButton();
+    }
+
+    if (Object.keys(symbolTransferPending).length > 0 && !symbolTransferCancelled) {
+      appendSymbolTransferStatus(`Warte auf ${Object.keys(symbolTransferPending).length} Box(en), die noch nicht alle Zeichen/Symbole bekommen haben...`);
+      await new Promise(resolve => setTimeout(resolve, 2500));
+    }
+  }
+
+  const wasCancelled = symbolTransferCancelled;
+  symbolTransferring = false;
+  symbolTransferCancelled = false;
+  updateSymbolTransferButton();
+  appendSymbolTransferStatus(wasCancelled ? "Symbol-Übertragung abgebrochen." : "Symbol-Übertragung abgeschlossen.");
+}
+
+function transferAllSymbols() {
+  persistCurrentManagerSymbol();
+
+  if (symbolTransferring) {
+    symbolTransferCancelled = true;
     return;
   }
 
-  const lines = [];
-  if (status) {
-    status.innerHTML = `<div class="statusEntry status">Uebertrage Zeichen/Symbol ${escapeHtml(selectedSymbol)} an ${targets.length} Box(en)...</div>`;
+  symbolTransferPending = {};
+  symbolTransferCompleted = {};
+  boxOrder.forEach(hostname => {
+    symbolTransferPending[hostname] = true;
+  });
+  symbolTransferStatusLines = [];
+
+  if (Object.keys(symbolTransferPending).length === 0) {
+    appendSymbolTransferStatus("Keine bekannte Box vorhanden.");
+    return;
   }
 
-  for (const hostname of targets) {
-    const box = knownBoxes[hostname];
-    try {
-      let response;
-      if (localBrowserMode) {
-        const form = new FormData();
-        form.append("char", selectedSymbol);
-        form.append("enabled", symbol.enabled ? "1" : "0");
-        form.append("bitmap", symbol.bitmap);
-        response = await fetch(`http://${box.ip}/api/symbol-bitmap`, { method: "POST", mode: "cors", body: form });
-        if (!response.ok && customSymbolSlots.includes(selectedSymbol)) {
-          const fallbackForm = new FormData();
-          fallbackForm.append("slot", selectedSymbol);
-          fallbackForm.append("enabled", symbol.enabled ? "1" : "0");
-          fallbackForm.append("bitmap", symbol.bitmap);
-          response = await fetch(`http://${box.ip}/api/custom-symbol`, { method: "POST", mode: "cors", body: fallbackForm });
-        }
-      } else {
-        response = await fetch(managerPath("/transfer_symbol"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ hostname, char: selectedSymbol, slot: selectedSymbol, enabled: symbol.enabled, bitmap: symbol.bitmap })
-        });
-      }
-      const text = await response.text();
-      lines.push(`${response.ok ? "" : ""} ${hostname}: ${text || response.statusText}`);
-    } catch (error) {
-      lines.push(` ${hostname}: ${error.message || error}`);
-    }
-    if (status) {
-      status.innerHTML = lines.map(line => `<div class="statusEntry">${escapeHtml(line)}</div>`).join("");
-    }
-  }
+  symbolTransferring = true;
+  symbolTransferCancelled = false;
+  showSetup();
+  appendSymbolTransferStatus(`${editableSymbolKeys.length} Zeichen/Symbole werden an ${Object.keys(symbolTransferPending).length} bekannte Box(en) uebertragen.`);
+  runSymbolTransferLoop();
 }
 
 async function runTransferLoop() {

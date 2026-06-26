@@ -14,7 +14,7 @@ AsyncWebServer server(80);
 bool wifiDisabled = false;
 bool alreadyCleared = false;
 
-constexpr unsigned long WIFI_IDLE_TIMEOUT_MS = 10UL * 60UL * 1000UL;
+constexpr unsigned long WIFI_IDLE_TIMEOUT_MS = 5UL * 60UL * 1000UL;
 
 static unsigned long getChipRandomSeed() {
 #if defined(ESP32)

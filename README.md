@@ -9,9 +9,10 @@ Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 
 - Firmware-Builds sind fuer `nodemcuv2` (ESP8266) und `esp32dev` (ESP32) konfiguriert. Bei ESP32 muessen die Matrix-/RTC-/RS485-Pins je nach echter Hardware in `src/config.h` angepasst werden.
 - Die Verwaltung nutzt Zeichen/Symbole statt nur Buchstaben: A-Z, Standard-Symbole und acht zusaetzliche Zeichen `0` bis `7`.
-- A-Z und die Standard-Symbole sind direkt bearbeitbar; intern werden editierbare Overrides gespeichert. Die Zusatz-Zeichen `0` bis `7` bleiben als frei benennbare Speicherplaetze erhalten.
+- A-Z und die Standard-Symbole sind direkt bearbeitbar; intern werden editierbare Overrides gespeichert. Die Zusatzzeichen `0` bis `7` sind acht weitere frei benennbare Zeichen. Mehr Zusatzzeichen sind wegen Speicher und Firmware-Groesse auf den kleinen Boxen bewusst nicht vorgesehen.
 - Zeichen/Symbole koennen im zentralen Manager benannt, aus vorhandenen Firmware-Vorlagen oder Bilddateien erstellt, als 32x32-Raster bearbeitet und an die Boxen uebertragen werden.
 - Im dauerhaften WLAN oder AP+STA-Modus zeigt die Box kein WiFi-Symbol auf der Matrix. Wenn das Ziel-WLAN nicht erreichbar ist, bleibt ein lokaler Konfigurations-AP als Fallback aktiv.
+- Standardmaessig zeigt die Box Zeichen/Symbole nur zwischen 10:00 und 18:05 Uhr; ausserhalb dieses Aktivfensters bleibt sie im Standby. Das Aktivfenster ist in der Weboberflaeche aenderbar.
 - Zeit/Datum werden bei Internetverbindung per NTP gesetzt; bei Reconnects und periodisch wird die Synchronisierung erneut versucht.
 
 ## Hardware-Voraussetzungen
@@ -33,7 +34,7 @@ Diese Werte sind in `src/config.cpp` als `DEFAULT_WIFI_SSID` und `DEFAULT_WIFI_P
 
 Die Weboberflaeche bietet drei WLAN-Modi:
 
-- `Standard`: Die Box verbindet sich wie bisher nur zum Manager-Hotspot, zeigt dabei optional das WiFi-Symbol und schaltet WLAN nach 10 Minuten Inaktivitaet wieder ab.
+- `Standard`: Die Box verbindet sich wie bisher nur zum Manager-Hotspot, zeigt dabei optional das WiFi-Symbol und schaltet WLAN nach 5 Minuten Inaktivitaet wieder ab.
 - `Dauerhaftes WLAN`: Die Box bleibt in einem bestehenden WLAN online, reconnectet automatisch, nutzt wahlweise DHCP oder eine feste IP und zeigt kein WiFi-Symbol auf der Matrix.
 - `AP+STA/Mesh-Kopie`: Die Box verbindet sich mit dem bestehenden WLAN und startet parallel einen lokalen Box-AP. Wenn keine lokalen AP-Daten eingetragen werden, uebernimmt der lokale AP dieselbe SSID und dasselbe Passwort wie das Ziel-WLAN.
 

@@ -91,8 +91,8 @@ constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_ACTIVITY_WINDOW = 6;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_COLOR_MODES = 7;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_WIFI_MODES = 8;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_EDITABLE_SYMBOLS = 9;
-constexpr uint16_t DEFAULT_ACTIVE_START_MINUTES = 0;
-constexpr uint16_t DEFAULT_ACTIVE_END_MINUTES = 1439;
+constexpr uint16_t DEFAULT_ACTIVE_START_MINUTES = 10 * 60;
+constexpr uint16_t DEFAULT_ACTIVE_END_MINUTES = (18 * 60) + 5;
 constexpr char DEFAULT_RANDOM_SYMBOL_POOL[] = "#&";
 
 constexpr size_t LEGACY_AUTH_TOKEN_MAX_LENGTH = 64;
@@ -634,7 +634,7 @@ void loadConfig() {
         loadConfigFromVersion7Layout();
         migratedLegacyLayout = true;
     } else if (storedVersion == EEPROM_CONFIG_VERSION_WITH_ACTIVITY_WINDOW) {
-        Serial.println(F("ℹ️ Konfiguration ohne Farbmodi erkannt – feste Farben werden übernommen."));
+        Serial.println(F("ℹ️ Konfiguration ohne Farbmodi erkannt – einfarbige Farben werden übernommen."));
         loadConfigFromVersion6Layout();
         migratedLegacyLayout = true;
     } else if (storedVersion == EEPROM_CONFIG_VERSION_WITHOUT_ACTIVITY_WINDOW) {
@@ -751,7 +751,7 @@ void loadConfig() {
             }
 
             if (!isValidColorModeValue(dailyLetterColorModes[trigger][day])) {
-                Serial.println(F("⚠️ Ungültiger Farbmodus entdeckt! Setze feste Farbe."));
+                Serial.println(F("⚠️ Ungültiger Farbmodus entdeckt! Setze einfarbige Farbe."));
                 dailyLetterColorModes[trigger][day] = static_cast<uint8_t>(LetterColorMode::Fixed);
                 eepromUpdated = true;
             }
@@ -759,7 +759,7 @@ void loadConfig() {
             dailyLetterRandomPaletteMasks[trigger][day] &= getFullRandomPaletteMask();
             if (dailyLetterColorModes[trigger][day] == static_cast<uint8_t>(LetterColorMode::RandomSelected) &&
                 !hasSelectedRandomPaletteColor(dailyLetterRandomPaletteMasks[trigger][day])) {
-                Serial.println(F("⚠️ Zufallspalette ohne Auswahl entdeckt! Setze feste Farbe."));
+                Serial.println(F("⚠️ Zufallspalette ohne Auswahl entdeckt! Setze einfarbige Farbe."));
                 dailyLetterColorModes[trigger][day] = static_cast<uint8_t>(LetterColorMode::Fixed);
                 dailyLetterRandomPaletteMasks[trigger][day] = getFullRandomPaletteMask();
                 eepromUpdated = true;

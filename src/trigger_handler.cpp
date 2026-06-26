@@ -527,6 +527,12 @@ void handleTrigger(char triggerType, bool isAutoMode, bool fromWeb) {
     }
 
     if (validDay) {
+        if (!fromWeb && !isWithinStandaloneActiveWindow()) {
+            Serial.println(F("🌙 Standby aktiv – Zeichen/Symbol wird außerhalb des Aktivfensters nicht angezeigt."));
+            activeDisplayManagedBySchedule = false;
+            return;
+        }
+
         char letter = dailyLetters[triggerIndex][today];
         Serial.print(F("📅 Heute ist "));
         Serial.print(daysOfTheWeek[today]);

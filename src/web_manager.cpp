@@ -375,7 +375,7 @@ String getColorModeOptionLabel(uint8_t mode) {
             return F("Zufall (alle)");
         case LetterColorMode::Fixed:
         default:
-            return F("Fixe Farbe");
+            return F("Einfarbig");
     }
 }
 
@@ -1040,7 +1040,7 @@ void setupWebServer() {
         html += "</form>";
 
         html += "<h2>Zeichen/Symbole bearbeiten</h2>";
-        html += "<p>Alle Standard-Zeichen/Symbole sind direkt bearbeitbar. Beim Speichern wird ein editierbarer Override im Speicher der Box abgelegt. Die Zusatz-Zeichen 0 bis 7 bleiben als frei benennbare Speicherplaetze erhalten.</p>";
+        html += "<p>Alle vorhandenen Zeichen/Symbole sind bearbeitbar. A-Z sowie Sun, WIFI, Rad und Riddler werden als Overrides gespeichert. Die Zusatzzeichen 0 bis 7 sind acht weitere frei benennbare Zeichen; mehr Zusatzzeichen sind auf den kleinen Boxen wegen Speicher und Firmware-Groesse bewusst nicht vorgesehen.</p>";
         html += "<style>.symbol-editor{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}.symbol-grid{display:grid;grid-template-columns:repeat(32,12px);gap:1px;background:#333;padding:4px;width:max-content}.symbol-cell{width:12px;height:12px;border:0;background:#f3f3f3;padding:0;cursor:pointer}.symbol-cell.on{background:#111}.symbol-actions{display:flex;flex-direction:column;gap:8px;max-width:320px}</style>";
         html += "<div class='symbol-editor'>";
         html += "<div id='symbolGrid' class='symbol-grid'></div>";
