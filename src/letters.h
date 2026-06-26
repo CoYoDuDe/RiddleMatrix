@@ -1023,7 +1023,7 @@ const uint8_t letter_RIESENRAD[128] PROGMEM = {
     0b00000000, 0b00100000, 0b00000010, 0b00000000,   //           █           █         
 };
 
-const uint8_t letter_SUNPLUSRAD[128] PROGMEM = {
+const uint8_t letter_LEGACY_COMBINED_RANDOM[128] PROGMEM = {
     0b00000000, 0b00000000, 0b00000000, 0b00000000,   //
     0b00000000, 0b00000000, 0b00000000, 0b00000000,   //
     0b00000000, 0b00000001, 0b11000000, 0b00000000,   //                ███
