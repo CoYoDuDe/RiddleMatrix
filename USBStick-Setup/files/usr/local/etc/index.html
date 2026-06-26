@@ -246,7 +246,7 @@ const symbolPresets = {
 let currentWordTrigger = 0;
 let separateWordTriggers = true;
 let separateBoxTriggers = true;
-let setupTab = "words";
+let setupTab = "boxes";
 let managerSymbolSlot = "0";
 let managerSymbolEnabled = true;
 let managerSymbolName = "Symbol 0";
@@ -1353,7 +1353,7 @@ async function shutdown() {
 }
 
 function setSetupTab(tab) {
-  setupTab = ["words", "boxes", "symbols"].includes(tab) ? tab : "words";
+  setupTab = ["boxes", "symbols"].includes(tab) ? tab : "boxes";
   showSetup();
 }
 
@@ -1364,12 +1364,11 @@ function showSetup() {
     html += '<div id="localScanStatus"></div>';
   }
   html += '<div class="setup-tabs">';
-  html += `<button type="button" class="${setupTab === "words" ? "active" : ""}" onclick="setSetupTab('words')">Zeichenfolgen</button>`;
-  html += `<button type="button" class="${setupTab === "boxes" ? "active" : ""}" onclick="setSetupTab('boxes')">Boxen</button>`;
+  html += `<button type="button" class="${setupTab === "boxes" ? "active" : ""}" onclick="setSetupTab('boxes')">Boxen verwalten</button>`;
   html += `<button type="button" class="${setupTab === "symbols" ? "active" : ""}" onclick="setSetupTab('symbols')">Zeichen/Symbole</button>`;
   html += '</div>';
 
-  if (setupTab === "words") {
+  if (setupTab === "boxes") {
     html += '<div class="box-card"><h3>Zeichenfolgen für Wochentage</h3>';
     html += '<div class="toggle-row">';
     html += `<label><input type="checkbox" data-live-edit="true" ${separateWordTriggers ? "checked" : ""} onchange="setSeparateWordTriggers(this.checked)"> Alle 3 Trigger separat anzeigen</label>`;
