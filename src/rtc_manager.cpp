@@ -2,6 +2,7 @@
 
 #include "config.h"
 
+#include <sys/time.h>
 #include <time.h>
 
 namespace {
@@ -23,6 +24,39 @@ void storeWeekdayInCache(int weekday) {
   } else {
     cachedWeekdayValid = false;
   }
+}
+
+bool getSystemLocalTime(struct tm &timeinfo, uint32_t timeoutMs = 0) {
+  if (!getLocalTime(&timeinfo, timeoutMs)) {
+    return false;
+  }
+  return (timeinfo.tm_year + 1900) >= 2020;
+}
+
+bool setSystemLocalTime(int year, int month, int day, int hour, int minute, int second) {
+  struct tm localTime = {};
+  localTime.tm_year = year - 1900;
+  localTime.tm_mon = month - 1;
+  localTime.tm_mday = day;
+  localTime.tm_hour = hour;
+  localTime.tm_min = minute;
+  localTime.tm_sec = second;
+  localTime.tm_isdst = -1;
+
+  const time_t epoch = mktime(&localTime);
+  if (epoch <= 0) {
+    return false;
+  }
+
+  timeval now = {};
+  now.tv_sec = epoch;
+  now.tv_usec = 0;
+  if (settimeofday(&now, nullptr) != 0) {
+    return false;
+  }
+
+  storeWeekdayInCache(localTime.tm_wday);
+  return true;
 }
 
 } // namespace
@@ -56,6 +90,11 @@ void invalidateWeekdayCache() {
 
 bool updateCachedWeekday(bool waitForIdle) {
   if (!rtc_ok) {
+    struct tm timeinfo = {};
+    if (getSystemLocalTime(timeinfo)) {
+      storeWeekdayInCache(timeinfo.tm_wday);
+      return true;
+    }
     cachedWeekdayValid = false;
     return false;
   }
@@ -90,7 +129,13 @@ bool updateCachedWeekday(bool waitForIdle) {
 
 bool getRTCMinutesOfDay(uint16_t &minutesOfDay) {
   if (!rtc_ok) {
-    return false;
+    struct tm timeinfo = {};
+    if (!getSystemLocalTime(timeinfo)) {
+      return false;
+    }
+    storeWeekdayInCache(timeinfo.tm_wday);
+    minutesOfDay = static_cast<uint16_t>((timeinfo.tm_hour * 60) + timeinfo.tm_min);
+    return true;
   }
 
   enableRTC();
@@ -104,7 +149,17 @@ bool getRTCMinutesOfDay(uint16_t &minutesOfDay) {
 
 String getRTCTime() {
     if (!rtc_ok) {
-        return String(F("RTC nicht verfuegbar"));
+        struct tm timeinfo = {};
+        if (!getSystemLocalTime(timeinfo)) {
+            return String(F("Keine gueltige Zeit verfuegbar"));
+        }
+
+        storeWeekdayInCache(timeinfo.tm_wday);
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "%s, %04d-%02d-%02d %02d:%02d:%02d (System/NTP)",
+                 daysOfTheWeek[timeinfo.tm_wday], timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        return String(buffer);
     }
 
     enableRTC();
@@ -129,13 +184,6 @@ int getRTCWeekday() {
 }
 
 bool setRTCFromWeb(const String &date, const String &time) {
-    if (!rtc_ok) {
-        Serial.println(F("RTC nicht verfuegbar, Zeit wurde nicht gesetzt."));
-        return false;
-    }
-
-    enableRTC();
-
     int year = 0;
     int month = 0;
     int day = 0;
@@ -147,8 +195,7 @@ bool setRTCFromWeb(const String &date, const String &time) {
     const int parsedTime = sscanf(time.c_str(), "%d:%d:%d", &hour, &minute, &second);
 
     if (parsedDate != 3 || (parsedTime != 2 && parsedTime != 3)) {
-        Serial.println(F("❌ Fehler: Ungültiges Datums- oder Zeitformat übermittelt."));
-        enableRS485();
+        Serial.println(F("Fehler: Ungueltiges Datums- oder Zeitformat uebermittelt."));
         return false;
     }
 
@@ -170,44 +217,52 @@ bool setRTCFromWeb(const String &date, const String &time) {
     };
 
     if (year < 2000 || year > 2099) {
-        Serial.println(F("❌ Fehler: Jahr außerhalb des gültigen Bereichs (2000-2099)."));
-        enableRS485();
+        Serial.println(F("Fehler: Jahr ausserhalb des gueltigen Bereichs (2000-2099)."));
         return false;
     }
 
     const int maxDay = daysInMonth(year, month);
     if (maxDay == 0 || day < 1 || day > maxDay) {
-        Serial.println(F("❌ Fehler: Ungültiges Datum übermittelt."));
-        enableRS485();
+        Serial.println(F("Fehler: Ungueltiges Datum uebermittelt."));
         return false;
     }
 
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
-        Serial.println(F("❌ Fehler: Ungültige Uhrzeit übermittelt."));
-        enableRS485();
+        Serial.println(F("Fehler: Ungueltige Uhrzeit uebermittelt."));
         return false;
     }
 
     const DateTime newDateTime(year, month, day, hour, minute, second);
-    rtc.adjust(newDateTime);
-    storeWeekdayInCache(newDateTime.dayOfTheWeek());
-    enableRS485();
-    Serial.println(F("🕒 RTC wurde aktualisiert!"));
-    return true;
-}
-
-bool syncTimeWithNTP() {
-    Serial.println(F("🔄 Synchronisiere Zeit mit NTP..."));
-    configTzTime(NTP_TIMEZONE_EUROPE_BERLIN, "pool.ntp.org", "time.nist.gov");
-
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo, 10000)) {
-        Serial.println(F("❌ NTP Zeit konnte nicht abgerufen werden!"));
+    if (!setSystemLocalTime(year, month, day, hour, minute, second)) {
+        Serial.println(F("Fehler: Systemzeit konnte nicht gesetzt werden."));
         return false;
     }
 
+    if (rtc_ok) {
+        enableRTC();
+        rtc.adjust(newDateTime);
+        storeWeekdayInCache(newDateTime.dayOfTheWeek());
+        enableRS485();
+        Serial.println(F("RTC und Systemzeit wurden aktualisiert."));
+    } else {
+        Serial.println(F("Systemzeit wurde aktualisiert; keine RTC zum Speichern verfuegbar."));
+    }
+    return true;
+}
+bool syncTimeWithNTP() {
+    Serial.println(F("ðŸ”„ Synchronisiere Zeit mit NTP..."));
+    configTzTime(NTP_TIMEZONE_EUROPE_BERLIN, "pool.ntp.org", "time.nist.gov");
+
+    struct tm timeinfo;
+    if (!getSystemLocalTime(timeinfo, 10000)) {
+        Serial.println(F("âŒ NTP Zeit konnte nicht abgerufen werden!"));
+        return false;
+    }
+
+    storeWeekdayInCache(timeinfo.tm_wday);
+
     if (!rtc_ok) {
-        Serial.println(F("NTP Zeit abgerufen, aber keine RTC zum Speichern verfuegbar."));
+        Serial.println(F("NTP Zeit als Systemzeit aktiv; keine RTC zum Speichern verfuegbar."));
         return true;
     }
 
@@ -218,6 +273,7 @@ bool syncTimeWithNTP() {
     rtc.adjust(ntpDateTime);
     storeWeekdayInCache(ntpDateTime.dayOfTheWeek());
     enableRS485();
-    Serial.println(F("✅ NTP Synchronisierung erfolgreich!"));
+    Serial.println(F("âœ… NTP Synchronisierung erfolgreich!"));
     return true;
 }
+
