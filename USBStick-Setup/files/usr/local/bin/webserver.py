@@ -1579,14 +1579,14 @@ def transfer_box():
 def transfer_symbol():
     payload = request.get_json(silent=True) or {}
     raw_hostname = payload.get("hostname")
-    slot = str(payload.get("slot", "")).strip()
+    symbol = str(payload.get("char") or payload.get("slot", "")).strip()
     bitmap = str(payload.get("bitmap", "")).strip()
     enabled = bool(payload.get("enabled", True))
 
     if not raw_hostname:
         return "Hostname fehlt", 400
-    if slot not in {str(index) for index in range(8)}:
-        return "Ungültiger Symbol-Slot", 400
+    if len(symbol) != 1 or symbol not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?01234567":
+        return "Ungültiges Zeichen/Symbol", 400
     if not _SYMBOL_BITMAP_HEX_PATTERN.fullmatch(bitmap):
         return "Bitmap muss 256 Hex-Zeichen enthalten", 400
 
@@ -1602,15 +1602,26 @@ def transfer_symbol():
 
     try:
         response = requests.post(
-            f"http://{ip}/api/custom-symbol",
+            f"http://{ip}/api/symbol-bitmap",
             data={
-                "slot": slot,
+                "char": symbol,
                 "enabled": "1" if enabled else "0",
                 "bitmap": bitmap,
             },
             timeout=3,
             allow_redirects=False,
         )
+        if not response.ok and symbol in "01234567":
+            response = requests.post(
+                f"http://{ip}/api/custom-symbol",
+                data={
+                    "slot": symbol,
+                    "enabled": "1" if enabled else "0",
+                    "bitmap": bitmap,
+                },
+                timeout=3,
+                allow_redirects=False,
+            )
     except requests.RequestException:
         return "Box nicht erreichbar", 503
 

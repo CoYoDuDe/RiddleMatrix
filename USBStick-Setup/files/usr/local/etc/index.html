@@ -236,7 +236,34 @@ const fixedSymbolLabels = {"": "Leer", "*": "Sun+Rad", "#": "Sun", "~": "WIFI", 
 const letterOptions = [""];
 letterOptions.push(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?01234567".split(""));
 const customSymbolSlots = "01234567".split("");
+const editableSymbolKeys = "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?01234567".split("");
 const symbolPresets = {
+  "A": "00000000000000000007E0000007F000000FF000000FF000000F7800001E7800001E7800001C3C00003C3C00003C3C0000781E0000781E0000781F0000F00F0000F00F0000F0078001E0078001FFFF8001FFFFC003FFFFC003C003E007C001E0078001E0078001F00F0000F00F0000F00F0000F81E0000780000000000000000",
+  "B": "000000000000000003FFFE0003FFFF0003FFFF8003C00F8003C007C003C003C003C003C003C003C003C0078003C0078003C01E0003FFFC0003FFFF0003FFFFC003E0FFE003C003F003C001F003C000F003C000F003C000F003C000F003C000F003C000F003C001E003C007E003FFFFC003FFFF8003FFFE000000000000000000",
+  "C": "000000000003FE00001FFFC0003FFFF000FFFFF000FC00F001F0003003E0001003C0000007C000000780000007800000078000000F0000000F0000000F0000000F0000000F0000000F0000000F800000078000000780000007C0000003C0000003E0001001F0003001FC00F000FFFFF0003FFFF0001FFFC00003FE0000000000",
+  "D": "00000000000000000FFFF0000FFFFC000FFFFF000F007F800F001FC00F0007E00F0003E00F0001F00F0000F00F0000F00F0000780F0000780F0000780F0000780F0000780F0000780F0000780F0000780F0000F00F0000F00F0001F00F0003E00F0007E00F000FC00F007F800FFFFF000FFFFC000FFFF0000000000000000000",
+  "E": "000000000000000001FFFFC001FFFFC001FFFFC001E0000001E0000001E0000001E0000001E0000001E0000001E0000001E0000001FFFFC001FFFFC001FFFFC001E0000001E0000001E0000001E0000001E0000001E0000001E0000001E0000001E0000001E0000001E0000001FFFFC001FFFFC001FFFFC00000000000000000",
+  "F": "000000000000000000FFFFE000FFFFE000FFFFE000F8000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F8000000FFFF8000FFFF8000FFFF8000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000000000",
+  "G": "000000000007FE00001FFFC0007FFFF801FFFFF803F801F807E0003807C000180F8000000F0000001F0000001F0000001E0000001E0000001E0000001E0000001E007FF81E007FF81E007FF81E0000F81F0000781F0000780F0000780F80007807C0007807E0007803F800F801FFFFF800FFFFF0003FFFC00007FC0000000000",
+  "H": "0000000000000000078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E007FFFFE007FFFFE007FFFFE0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E0078001E00000000000000000",
+  "I": "0000000000000000003FFC00003FFC000007C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000007C000003FFC00003FFC000000000000000000",
+  "J": "00000000000FFC00000FFC00000FFC0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000007C0000C0F80000FFF00000FFF00000FFC0000000000000000000",
+  "K": "000000000000000003C001F003C003E003C007C003C00F8003C01F0003C03E0003C07C0003C0F80003C0F00003C1E00003C3C00003C7800003CF000003DF000003FF800003FFC00003F7E00003E3F00003C1F80003C0F80003C07C0003C03E0003C01F0003C00F8003C007C003C003E003C003F003C001F00000000000000000",
+  "L": "000000000000000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000FFFFE000FFFFE000FFFFE00000000000000000",
+  "M": "00000000000000001F8001F81FC001F81FC003F81FE003F81FE007F81EF007F81EF007781E780F781E780E781E3C1E781E3C1C781E1E3C781E1E38781E0F78781E0F70781E07F0781E07E0781E03E0781E03C0781E03C0781E0000781E0000781E0000781E0000781E0000781E0000781E0000781E0000780000000000000000",
+  "N": "000000000000000007E001E007F001E007F801E007F801E007FC01E007BC01E007BE01E0079E01E0078F01E0078F01E0078781E0078781E00783C1E00783C1E00781E1E00781E1E00780F1E00780F9E0078079E007807DE007803DE007801FE007801FE007801FE007800FE0078007E0078007E0078003E00000000000000000",
+  "O": "00000000000FF000007FFC0001FFFF0003FFFF8007E00FC007C007E00F8001F00F0001F01F0000F01E0000F81E0000783E0000783C0000783C0000783C0000783C0000783C0000783C0000781E0000781E0000781E0000F81F0000F00F0001F00F8001E007C007E007F00FC003FFFF8001FFFF00007FFE00001FF00000000000",
+  "P": "000000000000000000FFF00000FFFE0000FFFF0000F0FF8000F007C000F003E000F003E000F001E000F001E000F001E000F001E000F003E000F003C000F00FC000F1FF8000FFFF0000FFFC0000FFF00000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000F0000000000000",
+  "Q": "00000000000FF000003FFC0000FFFE0001F01F0001E0078003C00380038003C0078001C0078001C0070001E0070001E0070001E0070001E0070001E0070001E0070001E0078001C0038003C003C003C003C0078001E00F0000F83F00007FFC00001FF80000007000000078000000380000003FE000001FE000000FE000000000",
+  "R": "000000000000000003FFF00003FFFC0003FFFF0003C03F0003C00F0003C0078003C0078003C0078003C0078003C0078003C00F0003C00F0003C01E0003C7FE0003FFF80003FFF00003FFF00003C1F80003C0780003C07C0003C03E0003C01F0003C00F8003C007C003C007C003C003E003C001F003C000F80000000000000000",
+  "S": "00000000000FF800007FFF8000FFFFC001FFFFC003E003C007C000C00780000007800000078000000780000007C0000007E0000003FC000001FFE00000FFFE00003FFF000003FFC000001FC0000007E0000003E0000001E0000001E0000001E0040001E0060003C007C00FC007FFFF8007FFFF0003FFFC00003FF00000000000",
+  "T": "00000000000000000FFFFFF00FFFFFF00FFFFFF00003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000000000000000000",
+  "U": "00000000000000000F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E00F0001E0070001E0078001E0078003E0078003C007C003C003C007C003F00F8001FFFF8000FFFF00007FFC00001FF00000000000",
+  "V": "00000000000000001E0000701E0000F00F0000F00F0001E00F8001E0078001E0078003C007C003C003C003C003C0078001E0078001E0078001E00F0000F00F0000F00E0000F01E0000781E0000783C00007C3C00003C3C00003C7800003E7800001E7800001EF000000FF000000FE000000FE0000007E0000000000000000000",
+  "W": "00000000000000000000000000000000000000007003C00E7003C01E7807C01C7807C01C3807E01C3806E03C3C06E0381C0E70381C0E70381C0C70781E1C70700E1C38700E1C38700E1838F00F3838E0073818E007381CE007301DE007B01DC003F00FC003F00FC003E00F8001E00F8001E00780000000000000000000000000",
+  "X": "00000000000000000F8001F0078003E007C003C003E0078001E00F8000F00F0000F81E0000783C00003C3C00003E7800001EF800000FF000000FE0000007C0000007E000000FE000000FF000001EF800003C7800007C7C0000783E0000F01E0000F01F0001E00F8003C0078007C007C0078003E00F0001F00000000000000000",
+  "Y": "00000000000000000F0001F00F8001E007C003E003C003C003E0078001E00F8001F00F0000F81E0000783E00007C3C00003C7C00001E7800001FF000000FF000000FE0000007C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C0000003C00000000000",
+  "Z": "000000000000000007FFFFE007FFFFE007FFFFE0000003C00000078000000F8000001F0000003E0000003C00000078000000F0000000F0000001E0000003C00000078000000F0000001E0000003E0000003C00000078000000F0000001F0000001E0000003C00000078000000FFFFFE00FFFFFE00FFFFFE00000000000000000",
   "Sun": "00000000000000000001800000018000000180000003C0000303C0C003C003C001E0078001CFF380009FF900003FFC00007FFE00007FFE00067FFE603E7FFE7C3E7FFE7C067FFE60007FFE00007FFE00003FFC00009FF90001CFF38001E0078003C003C00303C0C00003C0000001800000018000000180000000000000000000",
   "WIFI": "FFF00FFFFFC003FFFF0000FFFC00003FF81FF81FF07FFE0FE0FFFF07E1FE7F87C3E007C387C003E18F0000F11E07E0781C1FF838B83FFC1DF87FFE1FF0F81F0FF1E0078FF3C003CFF38181CFFF07E0FFFF0FF0FFFE1FF87FFE3FFC7FFE3FFC7FFFFE7FFFFFFC3FFFFFF81FFFFFF81FFFFFF81FFFFFF81FFFFFFC3FFFFFFE7FFF",
   "Sun+Rad": "00000000000000000001C000000FFE000063E3000183C0800383C1C007C083E007E087D009CFF38808BFFD08103FFC04107FFE04107FFE041E7FFE6C3E7FFE7C3FFFFFFE1E7FFE7C187FFE0C107FFE04103FFC0410BFFD0409CFF3880BE2A7C807C2A3F00387D1E00107D0C00089C880006BEB00001FFC000010840000200200",
@@ -371,14 +398,16 @@ function loadManagerCustomSymbols() {
       return {};
     }
     const normalized = {};
-    customSymbolSlots.forEach(slot => {
+    editableSymbolKeys.forEach(slot => {
       const stored = parsed[slot] && typeof parsed[slot] === "object" ? parsed[slot] : {};
+      const defaultName = customSymbolSlots.includes(slot) ? `Symbol ${slot}` : getLetterLabel(slot);
+      const defaultBitmap = symbolPresets[slot] || symbolPresets[defaultName] || symbolBitmapToHex(emptySymbolBitmap());
       normalized[slot] = {
         name: typeof stored.name === "string" && stored.name.trim()
           ? stored.name.trim().slice(0, 32)
-          : `Symbol ${slot}`,
+          : defaultName,
         enabled: stored.enabled !== false,
-        bitmap: isValidSymbolHex(stored.bitmap) ? String(stored.bitmap).trim().toUpperCase() : symbolBitmapToHex(emptySymbolBitmap())
+        bitmap: isValidSymbolHex(stored.bitmap) ? String(stored.bitmap).trim().toUpperCase() : defaultBitmap
       };
     });
     return normalized;
@@ -419,12 +448,15 @@ function symbolHexToBitmap(hex) {
 function getManagerCustomSymbol(slot) {
   const normalizedSlot = String(slot || "0");
   const stored = managerCustomSymbols[normalizedSlot] || {};
+  const isCustomSlot = customSymbolSlots.includes(normalizedSlot);
+  const defaultName = isCustomSlot ? `Symbol ${normalizedSlot}` : getLetterLabel(normalizedSlot);
+  const defaultBitmap = symbolPresets[normalizedSlot] || symbolPresets[defaultName] || symbolBitmapToHex(emptySymbolBitmap());
   return {
     name: typeof stored.name === "string" && stored.name.trim()
       ? stored.name.trim().slice(0, 32)
-      : `Symbol ${normalizedSlot}`,
+      : defaultName,
     enabled: stored.enabled !== false,
-    bitmap: isValidSymbolHex(stored.bitmap) ? String(stored.bitmap).trim().toUpperCase() : symbolBitmapToHex(emptySymbolBitmap())
+    bitmap: isValidSymbolHex(stored.bitmap) ? String(stored.bitmap).trim().toUpperCase() : defaultBitmap
   };
 }
 
@@ -441,10 +473,11 @@ function getLetterLabel(value) {
 }
 
 function renderSymbolSlotOptions(selectedSlot = managerSymbolSlot) {
-  return customSymbolSlots.map(slot => {
+  return editableSymbolKeys.map(slot => {
     const symbol = getManagerCustomSymbol(slot);
     const selected = String(selectedSlot) === slot ? "selected" : "";
-    return `<option value="${slot}" ${selected}>${escapeHtml(slot + " - " + symbol.name)}</option>`;
+    const prefix = customSymbolSlots.includes(slot) ? "Zusatz" : "Fest";
+    return `<option value="${escapeHtml(slot)}" ${selected}>${escapeHtml(prefix + " " + slot + " - " + symbol.name)}</option>`;
   }).join("");
 }
 
@@ -490,7 +523,7 @@ function loadManagerSymbolSlot(slot = managerSymbolSlot) {
 function persistCurrentManagerSymbol() {
   const nameInput = document.getElementById("managerSymbolName");
   const enabledInput = document.getElementById("managerSymbolEnabled");
-  managerSymbolName = (nameInput?.value || `Symbol ${managerSymbolSlot}`).trim().slice(0, 32) || `Symbol ${managerSymbolSlot}`;
+  managerSymbolName = (nameInput?.value || getLetterLabel(managerSymbolSlot)).trim().slice(0, 32) || getLetterLabel(managerSymbolSlot);
   managerSymbolEnabled = !!enabledInput?.checked;
   managerCustomSymbols[managerSymbolSlot] = {
     name: managerSymbolName,
@@ -524,6 +557,18 @@ function renderManagerSymbolEditor() {
 
 function clearManagerSymbol() {
   managerSymbolBitmap = emptySymbolBitmap();
+  persistCurrentManagerSymbol();
+  renderManagerSymbolEditor();
+}
+
+function resetManagerSymbolToDefault() {
+  const stored = getManagerCustomSymbol(managerSymbolSlot);
+  const bitmap = symbolPresets[managerSymbolSlot] || symbolPresets[getLetterLabel(managerSymbolSlot)] || symbolBitmapToHex(emptySymbolBitmap());
+  managerSymbolBitmap = symbolHexToBitmap(bitmap);
+  const nameInput = document.getElementById("managerSymbolName");
+  if (nameInput) {
+    nameInput.value = customSymbolSlots.includes(managerSymbolSlot) ? stored.name : getLetterLabel(managerSymbolSlot);
+  }
   persistCurrentManagerSymbol();
   renderManagerSymbolEditor();
 }
@@ -1408,19 +1453,20 @@ function showSetup() {
       .join("");
     html += '<div class="box-card">';
     html += '<h3>Zeichen/Symbole bearbeiten</h3>';
-    html += '<p>Die Firmware hat feste Zeichen A-Z sowie Sun, WIFI, Rad, Riddler und Sun+Rad. Zusätzlich gibt es 8 frei editierbare 32x32-Slots, die du hier benennen, bearbeiten und an die Boxen übertragen kannst.</p>';
+    html += '<p>A-Z und die festen Symbole sind in der Firmware eingebaut und koennen hier als Overrides bearbeitet werden. Die Zusatz-Zeichen 0 bis 7 bleiben als frei benennbare Speicherplaetze erhalten.</p>';
     html += '<div class="symbol-editor">';
     html += '<div id="managerSymbolGrid" class="symbol-grid"></div>';
     html += '<div class="symbol-actions">';
-    html += `<label>Slot: <select id="managerSymbolSlot" onchange="loadManagerSymbolSlot(this.value)">${renderSymbolSlotOptions(managerSymbolSlot)}</select></label>`;
+    html += `<label>Zeichen/Symbol: <select id="managerSymbolSlot" onchange="loadManagerSymbolSlot(this.value)">${renderSymbolSlotOptions(managerSymbolSlot)}</select></label>`;
     html += '<label>Name: <input id="managerSymbolName" type="text" maxlength="32" onchange="persistCurrentManagerSymbol()" placeholder="z.B. Krone, Stern, Schloss"></label>';
-    html += '<label><input id="managerSymbolEnabled" type="checkbox" onchange="persistCurrentManagerSymbol()"> Symbol in Auswahl aktiv</label>';
-    html += `<label>Vorhandenes Symbol laden: <select id="symbolPresetSelect"><option value="">Preset wählen...</option>${presetOptions}</select></label>`;
-    html += '<button type="button" onclick="loadSymbolPreset(document.getElementById(\'symbolPresetSelect\').value)">Preset in aktuellen Slot laden</button>';
+    html += '<label><input id="managerSymbolEnabled" type="checkbox" onchange="persistCurrentManagerSymbol()"> Override/Zusatz-Zeichen aktiv</label>';
+    html += `<label>Vorlage laden: <select id="symbolPresetSelect"><option value="">Vorlage wählen...</option>${presetOptions}</select></label>`;
+    html += '<button type="button" onclick="loadSymbolPreset(document.getElementById(\'symbolPresetSelect\').value)">Vorlage in aktuelles Zeichen laden</button>';
     html += '<label>Bild importieren (PNG/JPG/BMP): <input type="file" accept="image/*,.bmp" onchange="importManagerSymbolImage(this)"></label>';
-    html += '<button type="button" onclick="persistCurrentManagerSymbol()">Symbol speichern</button>';
+    html += '<button type="button" onclick="persistCurrentManagerSymbol()">Zeichen/Symbol speichern</button>';
+    html += '<button type="button" onclick="resetManagerSymbolToDefault()">Eingebauten Default laden</button>';
     html += '<button type="button" onclick="clearManagerSymbol()">Raster leeren</button>';
-    html += '<button type="button" onclick="transferCurrentSymbolToAll()">Aktuellen Slot an alle bekannten Boxen Übertragen</button>';
+    html += '<button type="button" onclick="transferCurrentSymbolToAll()">Aktuelles Zeichen an alle bekannten Boxen übertragen</button>';
     html += '</div></div>';
     html += '<div id="symbolTransferStatus" style="margin-top:10px;"></div>';
     html += '</div>';
@@ -1897,8 +1943,8 @@ async function transferBox(hostname) {
 async function transferCurrentSymbolToAll() {
   persistCurrentManagerSymbol();
   const status = document.getElementById("symbolTransferStatus") || statusArea;
-  const slot = managerSymbolSlot;
-  const symbol = managerCustomSymbols[slot] || { enabled: false, bitmap: symbolBitmapToHex(emptySymbolBitmap()) };
+  const selectedSymbol = managerSymbolSlot;
+  const symbol = getManagerCustomSymbol(selectedSymbol);
   const targets = boxOrder.filter(hostname => knownBoxes[hostname]?.ip && knownBoxes[hostname].ip !== "0.0.0.0");
   if (targets.length === 0) {
     if (status) status.innerHTML = '<div class="statusEntry status">Keine Box mit bekannter IP gefunden.</div>';
@@ -1907,7 +1953,7 @@ async function transferCurrentSymbolToAll() {
 
   const lines = [];
   if (status) {
-    status.innerHTML = `<div class="statusEntry status">Übertrage Symbol ${escapeHtml(slot)} an ${targets.length} Box(en)...</div>`;
+    status.innerHTML = `<div class="statusEntry status">Uebertrage Zeichen/Symbol ${escapeHtml(selectedSymbol)} an ${targets.length} Box(en)...</div>`;
   }
 
   for (const hostname of targets) {
@@ -1916,15 +1962,22 @@ async function transferCurrentSymbolToAll() {
       let response;
       if (localBrowserMode) {
         const form = new FormData();
-        form.append("slot", slot);
+        form.append("char", selectedSymbol);
         form.append("enabled", symbol.enabled ? "1" : "0");
         form.append("bitmap", symbol.bitmap);
-        response = await fetch(`http://${box.ip}/api/custom-symbol`, { method: "POST", mode: "cors", body: form });
+        response = await fetch(`http://${box.ip}/api/symbol-bitmap`, { method: "POST", mode: "cors", body: form });
+        if (!response.ok && customSymbolSlots.includes(selectedSymbol)) {
+          const fallbackForm = new FormData();
+          fallbackForm.append("slot", selectedSymbol);
+          fallbackForm.append("enabled", symbol.enabled ? "1" : "0");
+          fallbackForm.append("bitmap", symbol.bitmap);
+          response = await fetch(`http://${box.ip}/api/custom-symbol`, { method: "POST", mode: "cors", body: fallbackForm });
+        }
       } else {
         response = await fetch(managerPath("/transfer_symbol"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ hostname, slot, enabled: symbol.enabled, bitmap: symbol.bitmap })
+          body: JSON.stringify({ hostname, char: selectedSymbol, slot: selectedSymbol, enabled: symbol.enabled, bitmap: symbol.bitmap })
         });
       }
       const text = await response.text();

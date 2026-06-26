@@ -74,6 +74,7 @@ static constexpr size_t NUM_DAYS = 7;
 static constexpr size_t COLOR_STRING_LENGTH = 8; // "#RRGGBB" + Terminator
 static constexpr size_t RANDOM_COLOR_PALETTE_SIZE = 8;
 static constexpr size_t CUSTOM_SYMBOL_COUNT = 8;
+static constexpr size_t EDITABLE_BUILTIN_SYMBOL_COUNT = 31;
 static constexpr size_t SYMBOL_BITMAP_SIZE = 128;
 
 #if defined(RIDDLEMATRIX_HOST_TEST)
@@ -167,6 +168,8 @@ extern uint8_t dailyLetterColorModes[NUM_TRIGGERS][NUM_DAYS];
 extern uint16_t dailyLetterRandomPaletteMasks[NUM_TRIGGERS][NUM_DAYS];
 extern uint8_t customSymbolBitmaps[CUSTOM_SYMBOL_COUNT][SYMBOL_BITMAP_SIZE];
 extern uint8_t customSymbolEnabled[CUSTOM_SYMBOL_COUNT];
+extern uint8_t editableBuiltinSymbolBitmaps[EDITABLE_BUILTIN_SYMBOL_COUNT][SYMBOL_BITMAP_SIZE];
+extern uint8_t editableBuiltinSymbolEnabled[EDITABLE_BUILTIN_SYMBOL_COUNT];
 
 enum class LetterColorMode : uint8_t {
     Fixed = 0,
@@ -182,6 +185,11 @@ const char availableLetters[] = {
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
     'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
     '*', '#', '~', '&', '?', '0', '1', '2', '3', '4', '5', '6', '7'};
+
+const char editableBuiltinSymbols[] = {
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    '*', '#', '~', '&', '?'};
 
 // **Konfiguration für Zeichen-/Symbolanzeige**
 extern int display_brightness;           // Standard: 100
@@ -226,6 +234,14 @@ void saveConfig();
 
 // **📂 Einstellungen aus EEPROM laden**
 void loadConfig();
+
+bool initEditableSymbolStore();
+int editableBuiltinSymbolIndexFromChar(char symbol);
+bool isEditableBuiltinSymbol(char symbol);
+bool getDefaultBuiltinSymbolBitmap(char symbol, uint8_t *target);
+bool getEditableBuiltinSymbolBitmap(char symbol, uint8_t *target);
+bool saveEditableBuiltinSymbol(char symbol, const uint8_t *bitmap, bool enabled);
+bool clearEditableBuiltinSymbol(char symbol);
 
 
 void IRAM_ATTR display_updater();

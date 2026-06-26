@@ -386,6 +386,9 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
 
     uint16_t letterColor = color565FromHex(selectedColor);
 
+    uint8_t builtinOverrideBitmap[SYMBOL_BITMAP_SIZE] = {};
+    const bool useBuiltinOverride = getEditableBuiltinSymbolBitmap(letter, builtinOverrideBitmap);
+
     int customSymbolIndex = -1;
     if (letter >= '0' && letter <= '7') {
         customSymbolIndex = letter - '0';
@@ -395,7 +398,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         customSymbolIndex < static_cast<int>(CUSTOM_SYMBOL_COUNT) &&
         customSymbolEnabled[customSymbolIndex] == 1;
 
-    if (!useCustomSymbol && letterData.find(letter) == letterData.end()) {
+    if (!useBuiltinOverride && !useCustomSymbol && letterData.find(letter) == letterData.end()) {
         Serial.println(F("⚠️ Fehler: Zeichen/Symbol nicht gefunden!"));
         triggerActive = false;
         lastDisplayLetterError = DisplayLetterError::LetterNotFound;
@@ -403,7 +406,9 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         return false;
     }
 
-    const uint8_t* bitmap = useCustomSymbol ? customSymbolBitmaps[customSymbolIndex] : letterData[letter];
+    const uint8_t* bitmap = useBuiltinOverride
+        ? builtinOverrideBitmap
+        : (useCustomSymbol ? customSymbolBitmaps[customSymbolIndex] : letterData[letter]);
 
     wifiSymbolVisible = false;
     display.fillScreen(display.color565(0, 0, 0));
@@ -413,7 +418,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
     Serial.println(F("🖊️ Beginne Zeichnung..."));
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {
-            uint8_t rowValue = useCustomSymbol
+            uint8_t rowValue = (useBuiltinOverride || useCustomSymbol)
                 ? bitmap[y * 4 + (x / 8)]
                 : pgm_read_byte(&bitmap[y * 4 + (x / 8)]);
             if (rowValue & (1 << (7 - (x % 8)))) {

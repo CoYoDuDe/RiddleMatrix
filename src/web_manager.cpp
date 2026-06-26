@@ -610,8 +610,8 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     }
 
     function loadCustomSymbol() {
-        const slot = document.getElementById('symbolSlot')?.value || '0';
-        fetch('/api/custom-symbol?slot=' + encodeURIComponent(slot))
+        const symbol = document.getElementById('symbolSlot')?.value || 'A';
+        fetch('/api/symbol-bitmap?char=' + encodeURIComponent(symbol))
             .then(response => response.json())
             .then(data => {
                 loadSymbolFromHex(data.bitmap || '');
@@ -619,19 +619,38 @@ const char scriptJS[] PROGMEM = R"rawliteral(
                 if (enabled) {
                     enabled.checked = !!data.enabled;
                 }
+                const mode = document.getElementById('symbolEditorMode');
+                if (mode) {
+                    mode.textContent = data.builtin
+                        ? 'Festes Zeichen: Override aktivieren, um den eingebauten Default zu überschreiben.'
+                        : 'Zusatz-Zeichen: wird im EEPROM gespeichert und kann direkt ausgewählt werden.';
+                }
             })
             .catch(error => alert('Symbol konnte nicht geladen werden: ' + error));
     }
 
     function saveCustomSymbol() {
         const form = new FormData();
-        form.append('slot', document.getElementById('symbolSlot')?.value || '0');
+        form.append('char', document.getElementById('symbolSlot')?.value || 'A');
         form.append('enabled', document.getElementById('symbolEnabled')?.checked ? '1' : '0');
         form.append('bitmap', symbolBitmapToHex());
-        fetch('/api/custom-symbol', { method: 'POST', body: form })
+        fetch('/api/symbol-bitmap', { method: 'POST', body: form })
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => alert(result.message || (result.ok ? 'Symbol gespeichert.' : 'Symbol konnte nicht gespeichert werden.')))
             .catch(error => alert('Symbol konnte nicht gespeichert werden: ' + error));
+    }
+
+    function resetSymbolToDefault() {
+        const form = new FormData();
+        form.append('char', document.getElementById('symbolSlot')?.value || 'A');
+        form.append('clear', '1');
+        fetch('/api/symbol-bitmap', { method: 'POST', body: form })
+            .then(response => response.text().then(message => ({ ok: response.ok, message })))
+            .then(result => {
+                alert(result.message || (result.ok ? 'Default wiederhergestellt.' : 'Default konnte nicht wiederhergestellt werden.'));
+                loadCustomSymbol();
+            })
+            .catch(error => alert('Default konnte nicht wiederhergestellt werden: ' + error));
     }
 
     function clearCustomSymbol() {
@@ -1019,24 +1038,26 @@ void setupWebServer() {
         html += "</form>";
 
         html += "<h2>Zeichen/Symbole bearbeiten</h2>";
-        html += "<p>Slots 0 bis 7 sind frei editierbare 32x32-Symbole. Danach koennen sie oben wie normale Zeichen ausgewaehlt werden.</p>";
+        html += "<p>A-Z und die festen Symbole sind in der Firmware eingebaut und koennen hier mit editierbaren Overrides ueberschrieben werden. Die Zusatz-Zeichen 0 bis 7 bleiben als EEPROM-Speicherplaetze erhalten.</p>";
         html += "<style>.symbol-editor{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}.symbol-grid{display:grid;grid-template-columns:repeat(32,12px);gap:1px;background:#333;padding:4px;width:max-content}.symbol-cell{width:12px;height:12px;border:0;background:#f3f3f3;padding:0;cursor:pointer}.symbol-cell.on{background:#111}.symbol-actions{display:flex;flex-direction:column;gap:8px;max-width:320px}</style>";
         html += "<div class='symbol-editor'>";
         html += "<div id='symbolGrid' class='symbol-grid'></div>";
         html += "<div class='symbol-actions'>";
-        html += "<label>Symbol-Slot: <select id='symbolSlot' onchange='loadCustomSymbol()'>";
-        for (size_t symbolIndex = 0; symbolIndex < CUSTOM_SYMBOL_COUNT; ++symbolIndex) {
-            html += "<option value='" + String(symbolIndex) + "'>Symbol " + String(symbolIndex) + " (" + String(static_cast<char>('0' + symbolIndex)) + ")</option>";
+        html += "<label>Zeichen/Symbol: <select id='symbolSlot' onchange='loadCustomSymbol()'>";
+        for (size_t idx = 0; idx < sizeof(availableLetters); ++idx) {
+            char optionChar = availableLetters[idx];
+            html += "<option value='" + escapeHtml(String(optionChar)) + "'>" + escapeHtml(getLetterOptionLabel(optionChar)) + "</option>";
         }
         html += "</select></label>";
-        html += "<label><input id='symbolEnabled' type='checkbox'> Symbol aktiv</label>";
+        html += "<p id='symbolEditorMode' style='margin:0;color:#555;'>Festes Zeichen: Override aktivieren, um den eingebauten Default zu ueberschreiben.</p>";
+        html += "<label><input id='symbolEnabled' type='checkbox'> Override/Zusatz-Zeichen aktiv</label>";
         html += "<label>Bild importieren (PNG/JPG/BMP): <input type='file' accept='image/*,.bmp' onchange='importSymbolImage(this)'></label>";
-        html += "<button type='button' onclick='saveCustomSymbol()'>Symbol speichern</button>";
+        html += "<button type='button' onclick='saveCustomSymbol()'>Zeichen/Symbol speichern</button>";
+        html += "<button type='button' onclick='resetSymbolToDefault()'>Eingebauten Default wiederherstellen</button>";
         html += "<button type='button' onclick='clearCustomSymbol()'>Raster leeren</button>";
-        html += "<button type='button' onclick='displayLetter(0, document.getElementById(\"symbolSlot\").value)'>Symbol anzeigen</button>";
+        html += "<button type='button' onclick='displayLetter(0, document.getElementById(\"symbolSlot\").value)'>Zeichen/Symbol anzeigen</button>";
         html += "</div></div>";
         html += "<script>setTimeout(loadCustomSymbol, 100);</script>";
-
         // **Manuellen Trigger starten**
         html += "<h2>Manueller Trigger</h2>";
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
@@ -1061,7 +1082,7 @@ void setupWebServer() {
         }
 
         const int networkCount = WiFi.scanNetworks();
-        StaticJsonDocument<1024> responseDoc;
+        StaticJsonDocument<1536> responseDoc;
         JsonArray networks = responseDoc.to<JsonArray>();
         for (int index = 0; index < networkCount && index < 20; ++index) {
             JsonObject network = networks.createNestedObject();
@@ -1100,6 +1121,115 @@ void setupWebServer() {
         String responseBody;
         serializeJson(responseDoc, responseBody);
         request->send(200, F("application/json"), responseBody);
+    });
+
+    server.on("/api/symbol-bitmap", HTTP_GET, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("GET /api/symbol-bitmap"));
+        if (!request->hasParam(F("char"))) {
+            request->send(400, F("text/plain"), F("char fehlt"));
+            return;
+        }
+
+        const String charValue = request->getParam(F("char"))->value();
+        if (charValue.length() != 1 || !isSupportedLetter(charValue[0])) {
+            request->send(400, F("text/plain"), F("ungueltiges Zeichen/Symbol"));
+            return;
+        }
+
+        const char symbol = charValue[0];
+        StaticJsonDocument<1536> responseDoc;
+        responseDoc["char"] = charValue;
+        responseDoc["label"] = getLetterOptionLabel(symbol);
+
+        const int customSlot = customSymbolIndexFromChar(symbol);
+        if (customSlot >= 0) {
+            responseDoc["builtin"] = false;
+            responseDoc["enabled"] = customSymbolEnabled[customSlot] == 1;
+            responseDoc["bitmap"] = bitmapToHex(customSymbolBitmaps[customSlot]);
+        } else {
+            uint8_t bitmap[SYMBOL_BITMAP_SIZE] = {};
+            const int builtinIndex = editableBuiltinSymbolIndexFromChar(symbol);
+            const bool overrideEnabled =
+                builtinIndex >= 0 && editableBuiltinSymbolEnabled[builtinIndex] == 1 &&
+                getEditableBuiltinSymbolBitmap(symbol, bitmap);
+            if (!overrideEnabled && !getDefaultBuiltinSymbolBitmap(symbol, bitmap)) {
+                request->send(404, F("text/plain"), F("kein Bitmap-Default gefunden"));
+                return;
+            }
+            uint8_t defaultBitmap[SYMBOL_BITMAP_SIZE] = {};
+            getDefaultBuiltinSymbolBitmap(symbol, defaultBitmap);
+            responseDoc["builtin"] = true;
+            responseDoc["enabled"] = overrideEnabled;
+            responseDoc["bitmap"] = bitmapToHex(bitmap);
+            responseDoc["defaultBitmap"] = bitmapToHex(defaultBitmap);
+        }
+
+        String responseBody;
+        serializeJson(responseDoc, responseBody);
+        request->send(200, F("application/json"), responseBody);
+    });
+
+    server.on("/api/symbol-bitmap", HTTP_POST, [](AsyncWebServerRequest *request) {
+        refreshWiFiIdleTimer(F("POST /api/symbol-bitmap"));
+        if (!request->hasParam(F("char"), true)) {
+            request->send(400, F("text/plain"), F("char fehlt"));
+            return;
+        }
+
+        const String charValue = request->getParam(F("char"), true)->value();
+        if (charValue.length() != 1 || !isSupportedLetter(charValue[0])) {
+            request->send(400, F("text/plain"), F("ungueltiges Zeichen/Symbol"));
+            return;
+        }
+
+        const char symbol = charValue[0];
+        const bool clearRequested =
+            request->hasParam(F("clear"), true) && request->getParam(F("clear"), true)->value() == F("1");
+        const int customSlot = customSymbolIndexFromChar(symbol);
+
+        if (clearRequested) {
+            if (customSlot >= 0) {
+                memset(customSymbolBitmaps[customSlot], 0, SYMBOL_BITMAP_SIZE);
+                customSymbolEnabled[customSlot] = 0;
+                saveConfig();
+                request->send(200, F("text/plain"), F("Zusatz-Zeichen geleert."));
+                return;
+            }
+            if (!clearEditableBuiltinSymbol(symbol)) {
+                request->send(500, F("text/plain"), F("Default konnte nicht wiederhergestellt werden."));
+                return;
+            }
+            request->send(200, F("text/plain"), F("Eingebauter Default wiederhergestellt."));
+            return;
+        }
+
+        if (!request->hasParam(F("bitmap"), true)) {
+            request->send(400, F("text/plain"), F("bitmap fehlt"));
+            return;
+        }
+
+        uint8_t parsedBitmap[SYMBOL_BITMAP_SIZE] = {};
+        if (!parseBitmapHex(request->getParam(F("bitmap"), true)->value(), parsedBitmap)) {
+            request->send(400, F("text/plain"), F("bitmap muss 256 Hex-Zeichen enthalten"));
+            return;
+        }
+
+        const bool enabled =
+            request->hasParam(F("enabled"), true) && request->getParam(F("enabled"), true)->value() == F("1");
+
+        if (customSlot >= 0) {
+            memcpy(customSymbolBitmaps[customSlot], parsedBitmap, SYMBOL_BITMAP_SIZE);
+            customSymbolEnabled[customSlot] = enabled ? 1 : 0;
+            saveConfig();
+            request->send(200, F("text/plain"), F("Zusatz-Zeichen gespeichert."));
+            return;
+        }
+
+        if (!saveEditableBuiltinSymbol(symbol, parsedBitmap, enabled)) {
+            request->send(500, F("text/plain"), F("Zeichen/Symbol konnte nicht gespeichert werden."));
+            return;
+        }
+        request->send(200, F("text/plain"), F("Zeichen/Symbol gespeichert."));
     });
 
     server.on("/api/custom-symbol", HTTP_POST, [](AsyncWebServerRequest *request) {

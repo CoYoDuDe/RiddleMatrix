@@ -8,8 +8,9 @@ Siehe [TODO.md](TODO.md) für den Projektfahrplan.
 ## Aktueller Funktionsumfang
 
 - Firmware-Builds sind fuer `nodemcuv2` (ESP8266) und `esp32dev` (ESP32) konfiguriert. Bei ESP32 muessen die Matrix-/RTC-/RS485-Pins je nach echter Hardware in `src/config.h` angepasst werden.
-- Die Verwaltung nutzt Zeichen/Symbole statt nur Buchstaben: A-Z, feste Symbole und acht editierbare Symbol-Slots `0` bis `7`.
-- Die editierbaren Symbol-Slots koennen im zentralen Manager benannt, aus vorhandenen Presets oder Bilddateien erstellt, als 32x32-Raster bearbeitet und an die Boxen übertragen werden.
+- Die Verwaltung nutzt Zeichen/Symbole statt nur Buchstaben: A-Z, feste Symbole und acht zusaetzliche Zeichen `0` bis `7`.
+- A-Z und die festen Symbole bleiben als Firmware-Defaults erhalten und koennen mit editierbaren Overrides ueberschrieben werden; die Zusatz-Zeichen `0` bis `7` bleiben als frei benennbare Speicherplaetze erhalten.
+- Zeichen/Symbole koennen im zentralen Manager benannt, aus vorhandenen Firmware-Vorlagen oder Bilddateien erstellt, als 32x32-Raster bearbeitet und an die Boxen uebertragen werden.
 - Im dauerhaften WLAN oder AP+STA-Modus zeigt die Box kein WiFi-Symbol auf der Matrix. Wenn das Ziel-WLAN nicht erreichbar ist, bleibt ein lokaler Konfigurations-AP als Fallback aktiv.
 - Zeit/Datum werden bei Internetverbindung per NTP gesetzt; bei Reconnects und periodisch wird die Synchronisierung erneut versucht.
 

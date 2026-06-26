@@ -52,6 +52,7 @@ void setup() {
 
   setupMatrix();
   loadLetterData();
+  initEditableSymbolStore();
   checkMemoryUsage();
 
   connectWiFi();
