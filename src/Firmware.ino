@@ -51,7 +51,6 @@ void setup() {
   enableRS485();
 
   setupMatrix();
-  loadLetterData();
   initEditableSymbolStore();
   checkMemoryUsage();
 

@@ -2,7 +2,7 @@
 #define TRIGGER_HANDLER_H
 
 #include "config.h"
-#include "letters.h"
+#include "symbol_defaults.h"
 
 extern bool alreadyCleared;
 

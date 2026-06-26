@@ -25,7 +25,7 @@ bool customSymbolIsAvailable(char letter) {
 }
 
 bool displaySymbolIsAvailable(char letter) {
-    return customSymbolIsAvailable(letter) || letterData.find(letter) != letterData.end();
+    return customSymbolIsAvailable(letter) || factorySymbolExists(letter);
 }
 
 char resolveRandomSymbolSelection() {
@@ -448,7 +448,8 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
         customSymbolIndex < static_cast<int>(CUSTOM_SYMBOL_COUNT) &&
         customSymbolEnabled[customSymbolIndex] == 1;
 
-    if (!useBuiltinOverride && !useCustomSymbol && letterData.find(letter) == letterData.end()) {
+    const uint8_t *factoryBitmap = getFactorySymbolBitmap(letter);
+    if (!useBuiltinOverride && !useCustomSymbol && factoryBitmap == nullptr) {
         Serial.println(F("⚠️ Fehler: Zeichen/Symbol nicht gefunden!"));
         triggerActive = false;
         lastDisplayLetterError = DisplayLetterError::LetterNotFound;
@@ -458,7 +459,7 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
 
     const uint8_t* bitmap = useBuiltinOverride
         ? builtinOverrideBitmap
-        : (useCustomSymbol ? customSymbolBitmaps[customSymbolIndex] : letterData[letter]);
+        : (useCustomSymbol ? customSymbolBitmaps[customSymbolIndex] : factoryBitmap);
 
     wifiSymbolVisible = false;
     display.fillScreen(display.color565(0, 0, 0));

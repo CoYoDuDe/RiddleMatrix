@@ -1,4 +1,4 @@
-#include "letters.h"
+#include "symbol_defaults.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -16,19 +16,18 @@ bool hasVisiblePixels(const uint8_t *bitmap) {
 }
 
 int main() {
-    loadLetterData();
-
-    if (letterData.count('*') != 0) {
+    if (factorySymbolExists('*')) {
         std::cerr << "'*' darf keine feste Bitmap haben, sondern muss Zufallsauswahl bleiben" << std::endl;
         return 1;
     }
 
     for (char symbol : {'#', '&'}) {
-        if (letterData.count(symbol) != 1) {
+        const uint8_t *bitmap = getFactorySymbolBitmap(symbol);
+        if (bitmap == nullptr) {
             std::cerr << "Erwartete Symbolzuordnung fehlt: " << symbol << std::endl;
             return 1;
         }
-        if (!hasVisiblePixels(letterData[symbol])) {
+        if (!hasVisiblePixels(bitmap)) {
             std::cerr << "Symbol hat keine gesetzten Pixel: " << symbol << std::endl;
             return 1;
         }

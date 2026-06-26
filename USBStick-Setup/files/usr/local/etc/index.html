@@ -404,7 +404,7 @@ function loadManagerCustomSymbols() {
     const normalized = {};
     editableSymbolKeys.forEach(slot => {
       const stored = parsed[slot] && typeof parsed[slot] === "object" ? parsed[slot] : {};
-      const defaultName = customSymbolSlots.includes(slot) ? `Symbol ${slot}` : getLetterLabel(slot);
+      const defaultName = customSymbolSlots.includes(slot) ? `Freies Zusatzzeichen ${slot}` : getLetterLabel(slot);
       const defaultBitmap = symbolPresets[slot] || symbolPresets[defaultName] || symbolBitmapToHex(emptySymbolBitmap());
       normalized[slot] = {
         name: typeof stored.name === "string" && stored.name.trim()
@@ -453,7 +453,7 @@ function getManagerCustomSymbol(slot) {
   const normalizedSlot = String(slot || "0");
   const stored = managerCustomSymbols[normalizedSlot] || {};
   const isCustomSlot = customSymbolSlots.includes(normalizedSlot);
-  const defaultName = isCustomSlot ? `Symbol ${normalizedSlot}` : getLetterLabel(normalizedSlot);
+  const defaultName = isCustomSlot ? `Freies Zusatzzeichen ${normalizedSlot}` : getLetterLabel(normalizedSlot);
   const defaultBitmap = symbolPresets[normalizedSlot] || symbolPresets[defaultName] || symbolBitmapToHex(emptySymbolBitmap());
   return {
     name: typeof stored.name === "string" && stored.name.trim()
@@ -480,7 +480,7 @@ function renderSymbolSlotOptions(selectedSlot = managerSymbolSlot) {
   return editableSymbolKeys.map(slot => {
     const symbol = getManagerCustomSymbol(slot);
     const selected = String(selectedSlot) === slot ? "selected" : "";
-    const prefix = customSymbolSlots.includes(slot) ? "Zusatzzeichen" : "Bearbeitbar";
+    const prefix = customSymbolSlots.includes(slot) ? "Freies Zusatzzeichen" : "Bearbeitbares Standardzeichen";
     return `<option value="${escapeHtml(slot)}" ${selected}>${escapeHtml(prefix + " " + slot + " - " + symbol.name)}</option>`;
   }).join("");
 }

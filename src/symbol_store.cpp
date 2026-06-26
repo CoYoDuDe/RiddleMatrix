@@ -1,5 +1,5 @@
 #include "config.h"
-#include "letters.h"
+#include "symbol_defaults.h"
 
 #include <Arduino.h>
 #include <cstring>
@@ -102,10 +102,10 @@ bool initEditableSymbolStore() {
 }
 
 bool getDefaultBuiltinSymbolBitmap(char symbol, uint8_t *target) {
-    if (target == nullptr || letterData.find(symbol) == letterData.end()) {
+    const uint8_t *source = getFactorySymbolBitmap(symbol);
+    if (target == nullptr || source == nullptr) {
         return false;
     }
-    const uint8_t *source = letterData[symbol];
     for (size_t index = 0; index < SYMBOL_BITMAP_SIZE; ++index) {
         target[index] = pgm_read_byte(&source[index]);
     }

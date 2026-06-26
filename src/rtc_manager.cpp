@@ -103,6 +103,10 @@ bool getRTCMinutesOfDay(uint16_t &minutesOfDay) {
 }
 
 String getRTCTime() {
+    if (!rtc_ok) {
+        return String(F("RTC nicht verfuegbar"));
+    }
+
     enableRTC();
     DateTime now = rtc.now();
     enableRS485();
@@ -125,6 +129,11 @@ int getRTCWeekday() {
 }
 
 bool setRTCFromWeb(const String &date, const String &time) {
+    if (!rtc_ok) {
+        Serial.println(F("RTC nicht verfuegbar, Zeit wurde nicht gesetzt."));
+        return false;
+    }
+
     enableRTC();
 
     int year = 0;
@@ -195,6 +204,11 @@ bool syncTimeWithNTP() {
     if (!getLocalTime(&timeinfo, 10000)) {
         Serial.println(F("❌ NTP Zeit konnte nicht abgerufen werden!"));
         return false;
+    }
+
+    if (!rtc_ok) {
+        Serial.println(F("NTP Zeit abgerufen, aber keine RTC zum Speichern verfuegbar."));
+        return true;
     }
 
     enableRTC();

@@ -13,9 +13,8 @@
 #include <EEPROM.h>
 #include <cstddef>
 #include <cstring>
-#include <map>
 #include <Ticker.h>
-#include "letters.h"
+#include "symbol_defaults.h"
 
 #if __has_include("private_defaults.h")
 #include "private_defaults.h"

@@ -74,6 +74,13 @@ void clearWiFiSymbol() {
 #define SCALE_FACTOR 2
 
 void drawWiFiSymbol() {
+    const uint8_t *wifiBitmap = getFactorySymbolBitmap('~');
+    if (wifiBitmap == nullptr) {
+        Serial.println(F("WiFi-Symbol ist nicht verfuegbar."));
+        wifiSymbolVisible = false;
+        return;
+    }
+
     if (!wifi_status_symbol_enabled ||
         wifi_operation_mode != static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {
         Serial.println(F("WiFi-Symbol ist fuer diesen WLAN-Modus deaktiviert."));
@@ -113,7 +120,7 @@ void drawWiFiSymbol() {
 
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {
-            uint8_t rowValue = pgm_read_byte(&letterData['~'][y * 4 + (x / 8)]);
+            uint8_t rowValue = pgm_read_byte(&wifiBitmap[y * 4 + (x / 8)]);
             if (rowValue & (1 << (7 - (x % 8)))) {
                 display.fillRect(x_pos + x * SCALE_FACTOR, y_pos + y * SCALE_FACTOR, SCALE_FACTOR, SCALE_FACTOR, display.color565(0, 0, 0));
             }

@@ -857,7 +857,12 @@ void setupWebServer() {
     //             zurückgesetzt wird.
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         refreshWiFiIdleTimer(F("GET /"));
-        String html = "<h1>RiddleMatrix Einstellungen</h1>";
+        String html;
+        if (!html.reserve(24576)) {
+            request->send(507, "text/plain", "Nicht genug Speicher fuer die Weboberflaeche.");
+            return;
+        }
+        html = "<h1>RiddleMatrix Einstellungen</h1>";
 
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
@@ -958,6 +963,17 @@ void setupWebServer() {
         html += "</form>";
         html += "<button type='button' onclick='syncNTP()'>Zeit mit NTP synchronisieren</button>";
 
+        html += "<h2>Trigger, Zeichen &amp; Symbole</h2>";
+        html += "<p>Die komplette Bearbeitung von Tageswerten, Farben, Trigger-Verzoegerungen und Zeichen/Symbolen erfolgt im RiddleMatrix-Manager. Die Firmware-Endpunkte zum Uebernehmen, Speichern und Anzeigen bleiben aktiv.</p>";
+        html += "<h2>Manueller Trigger</h2>";
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            html += "<button type='button' style='margin-right:8px;' onclick='triggerLetter(" + String(trigger) + ")'>Trigger " + String(trigger + 1) + " ausloesen</button>";
+        }
+        html += "<script src='/script.js'></script>";
+        request->send(200, "text/html", html);
+        return;
+
+#if 0
         // **Zeichen-/Symbolauswahl pro Wochentag**
         html += "<h2>Zeichen/Symbole pro Wochentag &amp; Trigger</h2>";
         html += "<form id='lettersForm'>";
@@ -1040,29 +1056,7 @@ void setupWebServer() {
         html += "</form>";
 
         html += "<h2>Zeichen/Symbole bearbeiten</h2>";
-        html += "<p>Alle vorhandenen Zeichen/Symbole sind bearbeitbar. A-Z sowie Sun, WIFI, Rad und Riddler werden als Overrides gespeichert. Die Zusatzzeichen 0 bis 7 sind acht weitere frei benennbare Zeichen; mehr Zusatzzeichen sind auf den kleinen Boxen wegen Speicher und Firmware-Groesse bewusst nicht vorgesehen.</p>";
-        html += "<style>.symbol-editor{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}.symbol-grid{display:grid;grid-template-columns:repeat(32,12px);gap:1px;background:#333;padding:4px;width:max-content}.symbol-cell{width:12px;height:12px;border:0;background:#f3f3f3;padding:0;cursor:pointer}.symbol-cell.on{background:#111}.symbol-actions{display:flex;flex-direction:column;gap:8px;max-width:320px}</style>";
-        html += "<div class='symbol-editor'>";
-        html += "<div id='symbolGrid' class='symbol-grid'></div>";
-        html += "<div class='symbol-actions'>";
-        html += "<label>Zeichen/Symbol: <select id='symbolSlot' onchange='loadCustomSymbol()'>";
-        for (size_t idx = 0; idx < sizeof(availableLetters); ++idx) {
-            char optionChar = availableLetters[idx];
-            if (optionChar == '*') {
-                continue;
-            }
-            html += "<option value='" + escapeHtml(String(optionChar)) + "'>" + escapeHtml(getLetterOptionLabel(optionChar)) + "</option>";
-        }
-        html += "</select></label>";
-        html += "<p id='symbolEditorMode' style='margin:0;color:#555;'>Standard-Zeichen: beim Speichern wird der eingebaute Default ueberschrieben.</p>";
-        html += "<label><input id='symbolEnabled' type='checkbox'> Override/Zusatz-Zeichen aktiv</label>";
-        html += "<label>Bild importieren (PNG/JPG/BMP): <input type='file' accept='image/*,.bmp' onchange='importSymbolImage(this)'></label>";
-        html += "<button type='button' onclick='saveCustomSymbol()'>Zeichen/Symbol speichern</button>";
-        html += "<button type='button' onclick='resetSymbolToDefault()'>Eingebauten Default wiederherstellen</button>";
-        html += "<button type='button' onclick='clearCustomSymbol()'>Raster leeren</button>";
-        html += "<button type='button' onclick='displayLetter(0, document.getElementById(\"symbolSlot\").value)'>Zeichen/Symbol anzeigen</button>";
-        html += "</div></div>";
-        html += "<script>setTimeout(loadCustomSymbol, 100);</script>";
+        html += "<p>Der grosse Zeichen-/Symbol-Editor laeuft im RiddleMatrix-Manager. Die Box-Firmware stellt hier nur die kompakten Anzeige- und Triggerfunktionen bereit, damit die Weboberflaeche auch auf ESP8266 stabil bleibt.</p>";
         // **Manuellen Trigger starten**
         html += "<h2>Manueller Trigger</h2>";
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
@@ -1072,6 +1066,7 @@ void setupWebServer() {
         // **JavaScript-Datei einbinden**
         html += "<script src='/script.js'></script>";
         request->send(200, "text/html", html);
+#endif
     });
 
     server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -2280,7 +2275,7 @@ void setupWebServer() {
             customIndex >= 0 &&
             customIndex < static_cast<int>(CUSTOM_SYMBOL_COUNT) &&
             customSymbolEnabled[customIndex] == 1;
-        if (todayLetter != '*' && !customAvailable && letterData.find(todayLetter) == letterData.end()) {
+        if (todayLetter != '*' && !customAvailable && !factorySymbolExists(todayLetter)) {
             request->send(500, "text/plain", "❌ Fehler: Kein Muster für das heutige Zeichen/Symbol vorhanden!");
             return;
         }
