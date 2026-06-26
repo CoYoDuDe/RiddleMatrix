@@ -73,8 +73,9 @@ static constexpr size_t NUM_TRIGGERS = 3;
 static constexpr size_t NUM_DAYS = 7;
 static constexpr size_t COLOR_STRING_LENGTH = 8; // "#RRGGBB" + Terminator
 static constexpr size_t RANDOM_COLOR_PALETTE_SIZE = 8;
+static constexpr size_t RANDOM_SYMBOL_POOL_LENGTH = 40;
 static constexpr size_t CUSTOM_SYMBOL_COUNT = 8;
-static constexpr size_t EDITABLE_BUILTIN_SYMBOL_COUNT = 31;
+static constexpr size_t EDITABLE_BUILTIN_SYMBOL_COUNT = 30;
 static constexpr size_t SYMBOL_BITMAP_SIZE = 128;
 
 #if defined(RIDDLEMATRIX_HOST_TEST)
@@ -114,7 +115,8 @@ static constexpr uint16_t EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD = EEPROM_OFFSET_W
 static constexpr uint16_t EEPROM_OFFSET_CUSTOM_SYMBOL_BITMAPS = EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD + 50;
 static constexpr size_t EEPROM_CUSTOM_SYMBOL_BITMAPS_SIZE = CUSTOM_SYMBOL_COUNT * SYMBOL_BITMAP_SIZE;
 static constexpr uint16_t EEPROM_OFFSET_CUSTOM_SYMBOL_ENABLED = EEPROM_OFFSET_CUSTOM_SYMBOL_BITMAPS + EEPROM_CUSTOM_SYMBOL_BITMAPS_SIZE;
-static constexpr uint16_t EEPROM_CONFIG_VERSION = 9;
+static constexpr uint16_t EEPROM_OFFSET_RANDOM_SYMBOL_POOL = EEPROM_OFFSET_CUSTOM_SYMBOL_ENABLED + CUSTOM_SYMBOL_COUNT;
+static constexpr uint16_t EEPROM_CONFIG_VERSION = 10;
 
 static_assert(EEPROM_OFFSET_DAILY_LETTERS + (NUM_TRIGGERS * NUM_DAYS) <= EEPROM_OFFSET_DAILY_LETTER_COLORS,
               "Letter-Block überschneidet sich mit Farb-Block");
@@ -128,6 +130,8 @@ static_assert(EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD + 50 <= EEPROM_SIZE,
               "WiFi network extension exceeds allocated EEPROM size");
 static_assert(EEPROM_OFFSET_CUSTOM_SYMBOL_ENABLED + CUSTOM_SYMBOL_COUNT <= EEPROM_SIZE,
               "Custom symbol block exceeds allocated EEPROM size");
+static_assert(EEPROM_OFFSET_RANDOM_SYMBOL_POOL + RANDOM_SYMBOL_POOL_LENGTH <= EEPROM_SIZE,
+              "Random symbol pool exceeds allocated EEPROM size");
 
 enum class WiFiOperationMode : uint8_t {
     TimedManager = 0,
@@ -170,6 +174,7 @@ extern uint8_t customSymbolBitmaps[CUSTOM_SYMBOL_COUNT][SYMBOL_BITMAP_SIZE];
 extern uint8_t customSymbolEnabled[CUSTOM_SYMBOL_COUNT];
 extern uint8_t editableBuiltinSymbolBitmaps[EDITABLE_BUILTIN_SYMBOL_COUNT][SYMBOL_BITMAP_SIZE];
 extern uint8_t editableBuiltinSymbolEnabled[EDITABLE_BUILTIN_SYMBOL_COUNT];
+extern char random_symbol_pool[RANDOM_SYMBOL_POOL_LENGTH];
 
 enum class LetterColorMode : uint8_t {
     Fixed = 0,
@@ -189,7 +194,7 @@ const char availableLetters[] = {
 const char editableBuiltinSymbols[] = {
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
     'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-    '*', '#', '~', '&', '?'};
+    '#', '~', '&', '?'};
 
 // **Konfiguration für Zeichen-/Symbolanzeige**
 extern int display_brightness;           // Standard: 100

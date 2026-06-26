@@ -141,7 +141,7 @@ Die HTTP-Endpunkte `/displayLetter` und `/triggerLetter` akzeptieren optional de
 
 ### Zusatzglyphen
 
-Neben den Großbuchstaben stehen mehrere vordefinierte Symbole zur Verfügung. `'#'` rendert die Sonne, `'~'` zeigt ein Funksignal, `'&'` das Riesenrad und `'?'` den Riddler. Neu hinzugekommen ist `'*'` für das kombinierte „Sun+Rad“-Glyph, das Sonne und Riesenrad zu einem 32×32-Pixelmotiv verschmilzt.
+Neben den Grossbuchstaben stehen mehrere vordefinierte Symbole zur Verfuegung. `'#'` rendert die Sonne, `'~'` zeigt ein Funksignal, `'&'` das Riesenrad und `'?'` den Riddler. `'*'` ist kein eigenes Bitmap-Symbol, sondern eine Zufallsauswahl. Standardmaessig waehlt `'*'` zufaellig zwischen Sonne (`#`) und Riesenrad (`&`); die Zufallsliste kann in den Anzeige-Einstellungen der Box geaendert werden.
 
 ### Verzögerungsmatrix pro Trigger & Tag
 

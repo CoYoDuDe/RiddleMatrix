@@ -14,6 +14,49 @@ constexpr unsigned long WEEKDAY_CACHE_RETRY_DELAY_MS = 5UL;
 PendingTrigger pendingQueue[MAX_PENDING_TRIGGERS];
 size_t pendingTriggerCount = 0;
 
+bool customSymbolIsAvailable(char letter) {
+    if (letter < '0' || letter > '7') {
+        return false;
+    }
+    const int index = letter - '0';
+    return index >= 0 &&
+        index < static_cast<int>(CUSTOM_SYMBOL_COUNT) &&
+        customSymbolEnabled[index] == 1;
+}
+
+bool displaySymbolIsAvailable(char letter) {
+    return customSymbolIsAvailable(letter) || letterData.find(letter) != letterData.end();
+}
+
+char resolveRandomSymbolSelection() {
+    char candidates[RANDOM_SYMBOL_POOL_LENGTH] = {};
+    size_t candidateCount = 0;
+
+    for (size_t index = 0; index < RANDOM_SYMBOL_POOL_LENGTH - 1; ++index) {
+        const char candidate = random_symbol_pool[index];
+        if (candidate == '\0') {
+            break;
+        }
+        if (candidate != '*' && displaySymbolIsAvailable(candidate) && candidateCount < RANDOM_SYMBOL_POOL_LENGTH - 1) {
+            candidates[candidateCount++] = candidate;
+        }
+    }
+
+    if (candidateCount == 0) {
+        if (displaySymbolIsAvailable('#')) {
+            candidates[candidateCount++] = '#';
+        }
+        if (displaySymbolIsAvailable('&')) {
+            candidates[candidateCount++] = '&';
+        }
+    }
+
+    if (candidateCount == 0) {
+        return '\0';
+    }
+    return candidates[random(static_cast<long>(candidateCount))];
+}
+
 void prioritizePendingTriggersWithExecuteAt(unsigned long executeAt) {
     if (pendingTriggerCount < 2) {
         return;
@@ -357,8 +400,15 @@ bool displayLetter(uint8_t triggerIndex, char letter) {
     triggerActive = true;
 
     if (letter == '*') {
-        letter = (random(2) == 0) ? '#' : '&';
-        Serial.print(F("🔀 `*` wurde ersetzt durch: "));
+        letter = resolveRandomSymbolSelection();
+        if (letter == '\0') {
+            Serial.println(F("Keine gueltige Zufalls-Zeichenliste vorhanden."));
+            triggerActive = false;
+            lastDisplayLetterError = DisplayLetterError::LetterNotFound;
+            ensureWiFiSymbolAfterError();
+            return false;
+        }
+        Serial.print(F("Zufallsauswahl `*` wurde ersetzt durch: "));
         Serial.println(letter);
     }
 

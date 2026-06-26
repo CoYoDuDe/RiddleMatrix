@@ -61,6 +61,7 @@ uint16_t dailyLetterRandomPaletteMasks[NUM_TRIGGERS][NUM_DAYS] = {};
 unsigned long letter_trigger_delays[NUM_TRIGGERS][NUM_DAYS] = {};
 uint8_t customSymbolBitmaps[CUSTOM_SYMBOL_COUNT][SYMBOL_BITMAP_SIZE] = {};
 uint8_t customSymbolEnabled[CUSTOM_SYMBOL_COUNT] = {};
+char random_symbol_pool[RANDOM_SYMBOL_POOL_LENGTH] = {};
 
 int display_brightness;
 unsigned long letter_display_time;
@@ -89,8 +90,10 @@ constexpr uint16_t EEPROM_CONFIG_VERSION_WITHOUT_ACTIVITY_WINDOW = 5;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_ACTIVITY_WINDOW = 6;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_COLOR_MODES = 7;
 constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_WIFI_MODES = 8;
+constexpr uint16_t EEPROM_CONFIG_VERSION_WITH_EDITABLE_SYMBOLS = 9;
 constexpr uint16_t DEFAULT_ACTIVE_START_MINUTES = 0;
 constexpr uint16_t DEFAULT_ACTIVE_END_MINUTES = 1439;
+constexpr char DEFAULT_RANDOM_SYMBOL_POOL[] = "#&";
 
 constexpr size_t LEGACY_AUTH_TOKEN_MAX_LENGTH = 64;
 
@@ -117,6 +120,57 @@ void resetNetworkExtensionDefaults() {
     copyDefaultString(wifi_dns, sizeof(wifi_dns), DEFAULT_WIFI_DNS);
     copyDefaultString(wifi_local_ap_ssid, sizeof(wifi_local_ap_ssid), DEFAULT_WIFI_LOCAL_AP_SSID);
     copyDefaultString(wifi_local_ap_password, sizeof(wifi_local_ap_password), DEFAULT_WIFI_LOCAL_AP_PASSWORD);
+}
+
+bool isSupportedRandomPoolSymbol(char letter) {
+    if (letter == '\0' || letter == '*') {
+        return false;
+    }
+    for (size_t index = 0; index < sizeof(availableLetters); ++index) {
+        if (availableLetters[index] == letter) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void resetRandomSymbolPoolToDefault() {
+    copyDefaultString(random_symbol_pool, sizeof(random_symbol_pool), DEFAULT_RANDOM_SYMBOL_POOL);
+}
+
+bool sanitizeRandomSymbolPool() {
+    char sanitized[RANDOM_SYMBOL_POOL_LENGTH] = {};
+    size_t writeIndex = 0;
+
+    for (size_t index = 0; index < RANDOM_SYMBOL_POOL_LENGTH - 1; ++index) {
+        char current = random_symbol_pool[index];
+        if (current == '\0') {
+            break;
+        }
+        current = static_cast<char>(std::toupper(static_cast<unsigned char>(current)));
+        if (!isSupportedRandomPoolSymbol(current)) {
+            continue;
+        }
+        bool duplicate = false;
+        for (size_t existing = 0; existing < writeIndex; ++existing) {
+            if (sanitized[existing] == current) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate && writeIndex < RANDOM_SYMBOL_POOL_LENGTH - 1) {
+            sanitized[writeIndex++] = current;
+        }
+    }
+
+    if (writeIndex == 0) {
+        copyDefaultString(sanitized, sizeof(sanitized), DEFAULT_RANDOM_SYMBOL_POOL);
+    }
+
+    const bool changed = strncmp(random_symbol_pool, sanitized, RANDOM_SYMBOL_POOL_LENGTH) != 0;
+    memcpy(random_symbol_pool, sanitized, RANDOM_SYMBOL_POOL_LENGTH);
+    random_symbol_pool[RANDOM_SYMBOL_POOL_LENGTH - 1] = '\0';
+    return changed;
 }
 
 bool isValidOperationModeValue(uint8_t mode) {
@@ -454,6 +508,8 @@ void saveConfig() {
     EEPROM.put(EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD, wifi_local_ap_password);
     EEPROM.put(EEPROM_OFFSET_CUSTOM_SYMBOL_BITMAPS, customSymbolBitmaps);
     EEPROM.put(EEPROM_OFFSET_CUSTOM_SYMBOL_ENABLED, customSymbolEnabled);
+    sanitizeRandomSymbolPool();
+    EEPROM.put(EEPROM_OFFSET_RANDOM_SYMBOL_POOL, random_symbol_pool);
     EEPROM.commit();
 
     Serial.println(F("✅ Einstellungen erfolgreich gespeichert!"));
@@ -465,6 +521,7 @@ void loadConfig() {
     resetLettersToDefaults();
     resetTriggerDelaysToDefaults();
     resetCustomSymbolsToDefaults();
+    resetRandomSymbolPoolToDefault();
     standalone_active_start_minutes = DEFAULT_ACTIVE_START_MINUTES;
     standalone_active_end_minutes = DEFAULT_ACTIVE_END_MINUTES;
     resetNetworkExtensionDefaults();
@@ -532,7 +589,7 @@ void loadConfig() {
         Serial.println(F("ℹ️ Legacy-Versionskennung am historischen Offset 0x190 entdeckt."));
     }
 
-    if (usingCurrentLayout || storedVersion == EEPROM_CONFIG_VERSION_WITH_WIFI_MODES) {
+    if (usingCurrentLayout || storedVersion == EEPROM_CONFIG_VERSION_WITH_EDITABLE_SYMBOLS || storedVersion == EEPROM_CONFIG_VERSION_WITH_WIFI_MODES) {
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTERS, dailyLetters);
         EEPROM.get(EEPROM_OFFSET_DAILY_LETTER_COLORS, dailyLetterColors);
         sanitizeColorMatrix(dailyLetterColors);
@@ -559,10 +616,17 @@ void loadConfig() {
         wifi_local_ap_ssid[sizeof(wifi_local_ap_ssid) - 1] = '\0';
         EEPROM.get(EEPROM_OFFSET_WIFI_LOCAL_AP_PASSWORD, wifi_local_ap_password);
         wifi_local_ap_password[sizeof(wifi_local_ap_password) - 1] = '\0';
-        if (usingCurrentLayout) {
+        if (usingCurrentLayout || storedVersion == EEPROM_CONFIG_VERSION_WITH_EDITABLE_SYMBOLS) {
             EEPROM.get(EEPROM_OFFSET_CUSTOM_SYMBOL_BITMAPS, customSymbolBitmaps);
             EEPROM.get(EEPROM_OFFSET_CUSTOM_SYMBOL_ENABLED, customSymbolEnabled);
         } else {
+            migratedLegacyLayout = true;
+        }
+        if (usingCurrentLayout) {
+            EEPROM.get(EEPROM_OFFSET_RANDOM_SYMBOL_POOL, random_symbol_pool);
+            random_symbol_pool[sizeof(random_symbol_pool) - 1] = '\0';
+        } else {
+            resetRandomSymbolPoolToDefault();
             migratedLegacyLayout = true;
         }
     } else if (storedVersion == EEPROM_CONFIG_VERSION_WITH_COLOR_MODES) {
@@ -599,10 +663,10 @@ void loadConfig() {
         }
     }
 
-    if (usingCurrentLayout || storedVersion == EEPROM_CONFIG_VERSION_WITH_WIFI_MODES || storedVersion != EEPROM_CONFIG_VERSION_WITH_AUTH) {
+    if (usingCurrentLayout || storedVersion == EEPROM_CONFIG_VERSION_WITH_EDITABLE_SYMBOLS || storedVersion == EEPROM_CONFIG_VERSION_WITH_WIFI_MODES || storedVersion != EEPROM_CONFIG_VERSION_WITH_AUTH) {
         EEPROM.get(EEPROM_OFFSET_DISPLAY_BRIGHTNESS, display_brightness);
         EEPROM.get(EEPROM_OFFSET_LETTER_DISPLAY_TIME, letter_display_time);
-        if (usingCurrentLayout || storedVersion == EEPROM_CONFIG_VERSION_WITH_WIFI_MODES) {
+        if (usingCurrentLayout || storedVersion == EEPROM_CONFIG_VERSION_WITH_EDITABLE_SYMBOLS || storedVersion == EEPROM_CONFIG_VERSION_WITH_WIFI_MODES) {
             EEPROM.get(EEPROM_OFFSET_TRIGGER_DELAY_MATRIX, letter_trigger_delays);
         }
         EEPROM.get(EEPROM_OFFSET_AUTO_INTERVAL, letter_auto_display_interval);
@@ -709,6 +773,11 @@ void loadConfig() {
             memset(customSymbolBitmaps[symbolIndex], 0, SYMBOL_BITMAP_SIZE);
             eepromUpdated = true;
         }
+    }
+
+    if (sanitizeRandomSymbolPool()) {
+        Serial.println(F("Zufalls-Zeichenliste bereinigt."));
+        eepromUpdated = true;
     }
 
     if (display_brightness < 1 || display_brightness > 255) {

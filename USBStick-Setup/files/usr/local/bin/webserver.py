@@ -1585,7 +1585,7 @@ def transfer_symbol():
 
     if not raw_hostname:
         return "Hostname fehlt", 400
-    if len(symbol) != 1 or symbol not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ*#~&?01234567":
+    if len(symbol) != 1 or symbol not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ#~&?01234567":
         return "Ungültiges Zeichen/Symbol", 400
     if not _SYMBOL_BITMAP_HEX_PATTERN.fullmatch(bitmap):
         return "Bitmap muss 256 Hex-Zeichen enthalten", 400

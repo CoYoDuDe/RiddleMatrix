@@ -2,6 +2,7 @@
 #include "wifi_manager.h"
 #include <AsyncJson.h>
 #include <algorithm>
+#include <cctype>
 #include <math.h>
 
 namespace {
@@ -296,7 +297,7 @@ String escapeHtml(const String &input) {
 String getLetterOptionLabel(char letter) {
     switch (letter) {
         case '*':
-            return F("Sun+Rad");
+            return F("Zufall");
         case '#':
             return F("Sun");
         case '~':
@@ -909,6 +910,7 @@ void setupWebServer() {
         html += "Helligkeit (1–255): <input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'><br>";
         html += "Zeichen-Anzeigezeit (Sekunden, 1–60): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
         html += "Automodus-Intervall (Sekunden, 30–600): <input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'><br>";
+        html += "Zufalls-Zeichen bei *: <input type='text' name='random_symbol_pool' maxlength='39' value='" + escapeHtml(String(random_symbol_pool)) + "'><br>";
         html += "Standalone aktiv von: <input type='time' name='active_start' value='" + escapeHtml(formatMinutesAsTime(standalone_active_start_minutes)) + "'><br>";
         html += "Standalone aktiv bis: <input type='time' name='active_end' value='" + escapeHtml(formatMinutesAsTime(standalone_active_end_minutes)) + "'><br>";
         html += "<label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> Automodus aktivieren</label>";
@@ -1046,6 +1048,9 @@ void setupWebServer() {
         html += "<label>Zeichen/Symbol: <select id='symbolSlot' onchange='loadCustomSymbol()'>";
         for (size_t idx = 0; idx < sizeof(availableLetters); ++idx) {
             char optionChar = availableLetters[idx];
+            if (optionChar == '*') {
+                continue;
+            }
             html += "<option value='" + escapeHtml(String(optionChar)) + "'>" + escapeHtml(getLetterOptionLabel(optionChar)) + "</option>";
         }
         html += "</select></label>";
@@ -1131,7 +1136,7 @@ void setupWebServer() {
         }
 
         const String charValue = request->getParam(F("char"))->value();
-        if (charValue.length() != 1 || !isSupportedLetter(charValue[0])) {
+        if (charValue.length() != 1 || charValue[0] == '*' || !isSupportedLetter(charValue[0])) {
             request->send(400, F("text/plain"), F("ungueltiges Zeichen/Symbol"));
             return;
         }
@@ -1177,7 +1182,7 @@ void setupWebServer() {
         }
 
         const String charValue = request->getParam(F("char"), true)->value();
-        if (charValue.length() != 1 || !isSupportedLetter(charValue[0])) {
+        if (charValue.length() != 1 || charValue[0] == '*' || !isSupportedLetter(charValue[0])) {
             request->send(400, F("text/plain"), F("ungueltiges Zeichen/Symbol"));
             return;
         }
@@ -1497,6 +1502,9 @@ void setupWebServer() {
         const AsyncWebParameter *autoIntervalParam = request->getParam("auto_interval", true);
         const AsyncWebParameter *activeStartParam = request->getParam("active_start", true);
         const AsyncWebParameter *activeEndParam = request->getParam("active_end", true);
+        const String randomPoolParam = request->hasParam("random_symbol_pool", true)
+            ? request->getParam("random_symbol_pool", true)->value()
+            : String(random_symbol_pool);
 
         long brightnessCandidate = 0;
         if (!parseSignedLongInRange(brightnessParam->value(), 1L, 255L, brightnessCandidate)) {
@@ -1546,6 +1554,32 @@ void setupWebServer() {
             }
         }
 
+        char randomPoolCandidate[RANDOM_SYMBOL_POOL_LENGTH] = {};
+        size_t randomPoolWriteIndex = 0;
+        for (size_t index = 0; index < randomPoolParam.length() && randomPoolWriteIndex < RANDOM_SYMBOL_POOL_LENGTH - 1; ++index) {
+            char current = static_cast<char>(std::toupper(static_cast<unsigned char>(randomPoolParam.charAt(index))));
+            if (current == '*') {
+                continue;
+            }
+            if (!isSupportedLetter(current)) {
+                continue;
+            }
+            bool duplicate = false;
+            for (size_t existing = 0; existing < randomPoolWriteIndex; ++existing) {
+                if (randomPoolCandidate[existing] == current) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                randomPoolCandidate[randomPoolWriteIndex++] = current;
+            }
+        }
+        if (randomPoolWriteIndex == 0) {
+            randomPoolCandidate[0] = '#';
+            randomPoolCandidate[1] = '&';
+        }
+
         display_brightness = static_cast<int>(brightnessCandidate);
         display.setBrightness(display_brightness);
         if (!triggerActive && wifiSymbolVisible) {
@@ -1555,6 +1589,8 @@ void setupWebServer() {
         letter_auto_display_interval = autoIntervalCandidate;
         standalone_active_start_minutes = activeStartCandidate;
         standalone_active_end_minutes = activeEndCandidate;
+        strncpy(random_symbol_pool, randomPoolCandidate, sizeof(random_symbol_pool));
+        random_symbol_pool[sizeof(random_symbol_pool) - 1] = '\0';
         if (autoModeProvided) {
             autoDisplayMode = autoModeCandidate;
         }
