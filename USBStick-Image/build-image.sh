@@ -320,6 +320,18 @@ cleanup() {
   ln -s /riddlematrix/config/public_ap.env "$root_mount/etc/usbstick/public_ap.env"
   sync
 
+  # Compress only after every filesystem is cleanly unmounted. Compressing a
+  # still-mounted raw image can produce an .xz that does not match the final
+  # image after delayed filesystem metadata is flushed during unmount.
+  umount_if_mounted "$root_mount/riddlematrix"
+  umount_if_mounted "$root_mount/dev/pts"
+  umount_if_mounted "$root_mount/dev"
+  umount_if_mounted "$root_mount/proc"
+  umount_if_mounted "$root_mount/sys"
+  umount_if_mounted "$root_mount"
+  losetup -d "$loop_device"
+  loop_device=""
+
   log "Image fertig: $OUTPUT_IMAGE"
   if ((COMPRESS)); then
     log "Komprimiere Image nach $OUTPUT_IMAGE.xz"
