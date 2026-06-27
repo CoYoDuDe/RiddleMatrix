@@ -459,10 +459,11 @@ function loadLocalBrowserConfig() {
 }
 
 function saveLocalBrowserConfig() {
-  if (!localBrowserMode) {
-    return;
+  try {
+    window.localStorage.setItem(localStorageKey, JSON.stringify({ boxen: knownBoxes, boxOrder, localScanSubnet }));
+  } catch (error) {
+    console.warn("Lokale Browser-Konfiguration konnte nicht gespeichert werden:", error);
   }
-  window.localStorage.setItem(localStorageKey, JSON.stringify({ boxen: knownBoxes, boxOrder, localScanSubnet }));
 }
 
 function getDefaultSymbolName(value) {
@@ -705,16 +706,24 @@ function enterLocalBrowserMode(reason) {
     localBrowserMode = true;
     const localConfig = loadLocalBrowserConfig();
     localScanSubnet = validateSubnetPrefix(localConfig.localScanSubnet) || localScanSubnet;
-    knownBoxes = {};
-    Object.entries(localConfig.boxen).forEach(([hostname, box]) => {
-      knownBoxes[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
+    const mergedKnownBoxes = {};
+    Object.entries(knownBoxes || {}).forEach(([hostname, box]) => {
+      mergedKnownBoxes[hostname] = normalizeBox(JSON.parse(JSON.stringify(box || {})));
     });
-    boxOrder = localConfig.boxOrder.filter(hostname => knownBoxes[hostname]);
-    Object.keys(knownBoxes).forEach(hostname => {
-      if (!boxOrder.includes(hostname)) {
-        boxOrder.push(hostname);
+    Object.entries(localConfig.boxen).forEach(([hostname, box]) => {
+      if (!mergedKnownBoxes[hostname]) {
+        mergedKnownBoxes[hostname] = normalizeBox(JSON.parse(JSON.stringify(box)));
       }
     });
+    knownBoxes = mergedKnownBoxes;
+    const mergedOrder = [];
+    [...boxOrder, ...localConfig.boxOrder, ...Object.keys(knownBoxes)].forEach(hostname => {
+      if (hostname && knownBoxes[hostname] && !mergedOrder.includes(hostname)) {
+        mergedOrder.push(hostname);
+      }
+    });
+    boxOrder = mergedOrder;
+    saveLocalBrowserConfig();
   }
   if (!localBrowserMode || (connectedBoxes || []).length === 0) {
     connectedBoxes = [];
@@ -1465,6 +1474,7 @@ async function fetchDevices() {
       knownBoxes = mergedKnownBoxes;
       connectedBoxes = newConnectedBoxes;
       boxOrder = mergedBoxOrder;
+      saveLocalBrowserConfig();
 
       if (statusArea && statusArea.dataset.fetchError === "true") {
         statusArea.innerHTML = "";
@@ -1483,8 +1493,10 @@ async function fetchDevices() {
         showSetup();
       }
     } catch (e) {
-      if (shouldUseLocalBrowserMode()) {
-        enterLocalBrowserMode("Webspace-Modus aktiv: Der Server kann dein lokales WLAN nicht sehen, der Browser verwaltet die Boxen direkt.");
+      const localConfig = loadLocalBrowserConfig();
+      if (shouldUseLocalBrowserMode() || Object.keys(localConfig.boxen || {}).length > 0) {
+        enterLocalBrowserMode("Lokaler Offline-Modus aktiv: bekannte Boxen bleiben gespeichert und koennen vorbereitet werden.");
+        showSetup();
         return;
       }
       console.error("Fehler beim Abrufen der Geräte:", e);
@@ -1787,6 +1799,9 @@ function showSetup() {
           <button onclick="removeBox(${hostnameArgument})">Entfernen</button>
         </div></div>`;
     });
+    if (boxOrder.length === 0) {
+      html += '<div class="box-card"><p>Keine bekannte Box vorhanden. Nutze links nur verbundene Boxen oder unter Einstellungen die lokale Boxen-Suche bzw. Box-IP direkt, um eine Box anzulernen.</p></div>';
+    }
 
     html += `
     <div class="action-buttons">
@@ -2330,7 +2345,9 @@ function transferAllSymbols() {
 async function runTransferLoop() {
   while (transferring && !transferCancelled && Object.keys(transferPending).length > 0) {
     await fetchDevices();
-    const connectedHostnames = new Set(connectedBoxes.map(box => box.hostname));
+    const connectedHostnames = localBrowserMode
+      ? new Set(Object.keys(transferPending))
+      : new Set(connectedBoxes.map(box => box.hostname));
 
     for (const hostname of Object.keys(transferPending)) {
       if (transferCancelled) {
@@ -2378,6 +2395,10 @@ function transferAll() {
     transferPending[hostname] = true;
   });
   transferStatusLines = [];
+  if (Object.keys(transferPending).length === 0) {
+    appendTransferStatus("Keine bekannte Box vorhanden.");
+    return;
+  }
   transferring = true;
   transferCancelled = false;
   showSetup();
