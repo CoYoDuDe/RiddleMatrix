@@ -11,6 +11,7 @@ import ipaddress
 import copy
 import shutil
 import socket
+import shlex
 from functools import lru_cache
 from typing import Optional
 
@@ -54,6 +55,59 @@ SERVER_HOST = os.environ.get("RIDDLEMATRIX_SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.environ.get("RIDDLEMATRIX_SERVER_PORT", "8080"))
 SHUTDOWN_COMMAND_ENV_VAR = "SHUTDOWN_COMMAND"
 HIDE_SHUTDOWN = os.environ.get("RIDDLEMATRIX_HIDE_SHUTDOWN", "").strip().lower() in {"1", "true", "yes", "on"}
+BOX_MANAGER_KEY_HEADER = "X-RiddleMatrix-Manager-Key"
+
+
+def _read_public_ap_passphrase() -> str:
+    for path in (
+        os.environ.get("RIDDLEMATRIX_PUBLIC_AP_ENV", ""),
+        "/etc/usbstick/public_ap.env",
+        os.path.join(os.path.dirname(CONFIG_FILE), "public_ap.env"),
+    ):
+        if not path:
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as env_file:
+                for raw_line in env_file:
+                    line = raw_line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    if key.strip() == "WPA_PASSPHRASE":
+                        parsed = shlex.split(value, comments=False, posix=True)
+                        return parsed[0] if parsed else value.strip().strip("\"'")
+        except OSError:
+            continue
+        except ValueError:
+            continue
+    return ""
+
+
+def get_box_manager_key() -> str:
+    key = os.environ.get("RIDDLEMATRIX_BOX_MANAGER_KEY", "").strip()
+    if key:
+        return key
+    key = _read_public_ap_passphrase().strip()
+    if key:
+        return key
+    return "RiddleMatrix-Setup!"
+
+
+def box_manager_headers(extra=None) -> dict:
+    headers = dict(extra or {})
+    key = get_box_manager_key()
+    if key:
+        headers[BOX_MANAGER_KEY_HEADER] = key
+    return headers
+
+
+def box_manager_url(url: str) -> str:
+    key = get_box_manager_key()
+    if not key:
+        return url
+    separator = "&" if "?" in url else "?"
+    from urllib.parse import quote
+    return f"{url}{separator}rm_key={quote(key, safe='')}"
 
 
 class RedirectResponseError(RuntimeError):
@@ -738,6 +792,7 @@ def fetch_trigger_delays(ip):
     try:
         response = requests.get(
             f"http://{ip}/api/trigger-delays",
+            headers=box_manager_headers(),
             timeout=3,
             allow_redirects=False,
         )
@@ -788,6 +843,35 @@ def _ping_host(ip: str) -> bool:
         return True
 
 
+def get_hello_hostname(ip: str) -> str:
+    ip = sanitize_ipv4(ip)
+    if ip == SAFE_IP_PLACEHOLDER:
+        return ""
+    try:
+        response = requests.get(
+            f"http://{ip}/api/hello",
+            timeout=1.5,
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        return ""
+
+    try:
+        _ensure_no_redirect(response, action="Hello-Abfrage", host=ip)
+    except RedirectResponseError:
+        return ""
+
+    if not response.ok:
+        return ""
+    try:
+        data = response.json()
+    except ValueError:
+        return ""
+    if not isinstance(data, dict) or not data.get("riddleMatrix"):
+        return ""
+    return sanitize_hostname(data.get("hostname") or "")
+
+
 def _iter_arp_scan_ips():
     ips = set()
     try:
@@ -813,6 +897,7 @@ def _inspect_candidate_device(ip: str, config: dict):
     try:
         r = requests.get(
             f"http://{ip}/",
+            headers=box_manager_headers(),
             timeout=1.5,
             allow_redirects=False,
         )
@@ -821,16 +906,17 @@ def _inspect_candidate_device(ip: str, config: dict):
 
     _ensure_no_redirect(r, action="Geräte-Scan", host=ip)
 
-    if not r.ok:
-        return None, config
+    hostname = ""
+    if r.ok:
+        soup = BeautifulSoup(r.text, "html.parser")
+        hostname_field = soup.find("input", {"name": "hostname"})
+        if hostname_field is not None:
+            hostname = get_hostname_from_web(ip)
 
-    soup = BeautifulSoup(r.text, "html.parser")
-    hostname_field = soup.find("input", {"name": "hostname"})
-    if hostname_field is None:
-        return None, config
+    if not hostname or hostname == "Unbekannt":
+        hostname = get_hello_hostname(ip)
 
-    hostname = get_hostname_from_web(ip)
-    if hostname == "Unbekannt":
+    if not hostname:
         return None, config
 
     hostname = sanitize_hostname(hostname)
@@ -900,6 +986,7 @@ def get_connected_devices():
                         try:
                             r = requests.get(
                                 f"http://{ip}/",
+                                headers=box_manager_headers(),
                                 timeout=3,
                                 allow_redirects=False,
                             )
@@ -908,16 +995,17 @@ def get_connected_devices():
 
                         _ensure_no_redirect(r, action="Geräte-Scan", host=ip)
 
-                        if not r.ok:
-                            continue
+                        hostname = ""
+                        if r.ok:
+                            soup = BeautifulSoup(r.text, "html.parser")
+                            hostname_field = soup.find("input", {"name": "hostname"})
+                            if hostname_field is not None:
+                                hostname = get_hostname_from_web(ip)
 
-                        soup = BeautifulSoup(r.text, "html.parser")
-                        hostname_field = soup.find("input", {"name": "hostname"})
-                        if hostname_field is None:
-                            continue
+                        if not hostname or hostname == "Unbekannt":
+                            hostname = get_hello_hostname(ip)
 
-                        hostname = get_hostname_from_web(ip)
-                        if hostname == "Unbekannt":
+                        if not hostname:
                             continue
 
                         hostname = sanitize_hostname(hostname)
@@ -953,6 +1041,7 @@ def get_hostname_from_web(ip):
     try:
         r = requests.get(
             f"http://{ip}/",
+            headers=box_manager_headers(),
             timeout=3,
             allow_redirects=False,
         )
@@ -994,6 +1083,7 @@ def learn_box(ip, identifier):
     try:
         r = requests.get(
             f"http://{ip}/",
+            headers=box_manager_headers(),
             timeout=3,
             allow_redirects=False,
         )
@@ -1002,12 +1092,16 @@ def learn_box(ip, identifier):
 
     _ensure_no_redirect(r, action="Box-Lernvorgang", host=ip)
 
-    if not r.ok:
-        return
-
-    soup = BeautifulSoup(r.text, "html.parser")
-    letters, colors, html_delays = extract_box_state_from_soup(soup)
-    color_modes, color_palette_masks = extract_box_color_settings_from_soup(soup)
+    if r.ok:
+        soup = BeautifulSoup(r.text, "html.parser")
+        letters, colors, html_delays = extract_box_state_from_soup(soup)
+        color_modes, color_palette_masks = extract_box_color_settings_from_soup(soup)
+    else:
+        letters = {day: ["" for _ in range(TRIGGER_SLOTS)] for day in DAYS}
+        colors = {day: [DEFAULT_COLOR for _ in range(TRIGGER_SLOTS)] for day in DAYS}
+        html_delays = _default_delay_matrix()
+        color_modes = _default_color_mode_matrix()
+        color_palette_masks = _default_color_palette_mask_matrix()
 
     try:
         delays = fetch_trigger_delays(ip)
@@ -1101,9 +1195,12 @@ def vendor_static(filename: str):
 
 @app.route("/webspace-config.js")
 def webspace_config():
+    manager_key_json = json.dumps(get_box_manager_key())
     return (
         "window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 = "
-        "window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 || '';\n",
+        "window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 || '';\n"
+        "window.RIDDLEMATRIX_BOX_MANAGER_KEY = "
+        f"window.RIDDLEMATRIX_BOX_MANAGER_KEY || {manager_key_json};\n",
         200,
         {"Content-Type": "application/javascript; charset=utf-8"},
     )
@@ -1481,7 +1578,7 @@ def transfer_box():
         return jsonify({"status": "❌ IP unbekannt"})
 
     try:
-        r = requests.get(f"http://{ip}/", timeout=3, allow_redirects=False)
+        r = requests.get(f"http://{ip}/", headers=box_manager_headers(), timeout=3, allow_redirects=False)
     except requests.RequestException:
         return jsonify({"status": "❌ Box nicht erreichbar"})
     if (
@@ -1546,6 +1643,7 @@ def transfer_box():
         r = requests.post(
             f"http://{ip}/updateAllLetters",
             json=payload,
+            headers=box_manager_headers(),
             timeout=3,
             allow_redirects=False,
         )
@@ -1603,6 +1701,7 @@ def transfer_symbol():
     try:
         response = requests.post(
             f"http://{ip}/api/symbol-bitmap",
+            headers=box_manager_headers(),
             data={
                 "char": symbol,
                 "enabled": "1" if enabled else "0",
@@ -1614,6 +1713,7 @@ def transfer_symbol():
         if not response.ok and symbol in "01234567":
             response = requests.post(
                 f"http://{ip}/api/custom-symbol",
+                headers=box_manager_headers(),
                 data={
                     "slot": symbol,
                     "enabled": "1" if enabled else "0",

@@ -5,6 +5,7 @@
   <title>Boxen verwalten</title>
   <script src="vendor/xlsx.full.min.js"></script>
   <script>window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 = window.RIDDLEMATRIX_WEBSPACE_AUTH_SHA256 || "";</script>
+  <script>window.RIDDLEMATRIX_BOX_MANAGER_KEY = window.RIDDLEMATRIX_BOX_MANAGER_KEY || "";</script>
   <script src="webspace-config.js"></script>
   <script type="text/javascript">
     var gk_isXlsx = false;
@@ -218,6 +219,7 @@ let localSubnetCandidates = [];
 const localStorageKey = "riddlematrix.localBrowserConfig.v1";
 const symbolStorageKey = "riddlematrix.customSymbols.v1";
 const webspaceAuthStorageKey = "riddlematrix.webspaceAuth.v1";
+const boxManagerKey = String(window.RIDDLEMATRIX_BOX_MANAGER_KEY || "").trim();
 const managerBasePath = location.pathname.endsWith("/")
   ? location.pathname
   : location.pathname.replace(/[^/]*$/, "");
@@ -277,6 +279,22 @@ const symbolPresets = {
   "Rad": "00000000000000000000C000000FFE000063E3000181C080038081C007C083E0078081D009408288082084081010880410088804100490041802A00C1C01C01C3FFFFFFE1C01C01C1802A00C10049004101888041021C4040941C2880B82A1C807C2A3F0038491E0010490C00089C880006BEB00001FFC000010840000200200",
   "Riddler": "000000000000000000000000000000000007E000003FFC00007FFE0000FFFF0000FE3F0001F81F8001F00F8001F00F8000001F8000003F0000007F000000FE000001FC000003F8000003F0000003E0000007C0000007C0000003C000000000000003C0000003C0000003C0000003C00000000000000000000000000000000000"
 };
+
+function boxManagerHeaders(baseHeaders = {}) {
+  const headers = { ...baseHeaders };
+  if (boxManagerKey) {
+    headers["X-RiddleMatrix-Manager-Key"] = boxManagerKey;
+  }
+  return headers;
+}
+
+function boxManagerUrl(url) {
+  if (!boxManagerKey) {
+    return url;
+  }
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}rm_key=${encodeURIComponent(boxManagerKey)}`;
+}
 let currentWordTrigger = 0;
 let separateWordTriggers = false;
 let setupTab = "boxes";
@@ -950,7 +968,7 @@ async function fetchLocalTriggerDelays(ip, box, signal = null) {
   try {
     const response = await fetchWithTimeout(
       `http://${ip}/api/trigger-delays`,
-      { method: "GET", mode: "cors", cache: "no-store", signal },
+      { method: "GET", mode: "cors", cache: "no-store", signal, headers: boxManagerHeaders() },
       900
     );
     if (!response.ok) {
@@ -1014,10 +1032,11 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
   }
   let hostname = `Box-${ip.replace(/\./g, "-")}`;
   let learnedBox = makeDefaultBox(ip);
+  let helloMatched = false;
   try {
     const response = await fetchWithTimeout(
-      `http://${ip}/`,
-      { method: "GET", mode: "cors", cache: "no-store", signal },
+      boxManagerUrl(`http://${ip}/`),
+      { method: "GET", mode: "cors", cache: "no-store", signal, headers: boxManagerHeaders() },
       900
     );
     if (response.ok) {
@@ -1030,11 +1049,40 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
         learnedBox = extractLocalBoxStateFromHtml(html, ip);
         learnedBox = await fetchLocalTriggerDelays(ip, learnedBox, signal);
       }
-    } else if (silent) {
-      return null;
+    } else {
+      const helloResponse = await fetchWithTimeout(
+        `http://${ip}/api/hello`,
+        { method: "GET", mode: "cors", cache: "no-store", signal },
+        900
+      );
+      if (helloResponse.ok) {
+        const hello = await helloResponse.json();
+        if (hello && hello.riddleMatrix && hello.hostname) {
+          hostname = String(hello.hostname).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || hostname;
+          helloMatched = true;
+        }
+      }
+      if (silent && !helloMatched) {
+        return null;
+      }
     }
   } catch (error) {
-    if (silent) {
+    try {
+      const helloResponse = await fetchWithTimeout(
+        `http://${ip}/api/hello`,
+        { method: "GET", mode: "cors", cache: "no-store", signal },
+        900
+      );
+      if (helloResponse.ok) {
+        const hello = await helloResponse.json();
+        if (hello && hello.riddleMatrix && hello.hostname) {
+          hostname = String(hello.hostname).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || hostname;
+          helloMatched = true;
+        }
+      }
+    } catch (helloError) {
+    }
+    if (silent && !helloMatched) {
       return null;
     }
     console.warn("Box konnte nicht abgefragt werden, sie wird trotzdem lokal angelegt:", error);
@@ -1425,7 +1473,7 @@ function openBox(ip) {
     container.removeChild(container.firstChild);
   }
   if (isHostedHttpsMode()) {
-    const url = `http://${ip}`;
+    const url = boxManagerUrl(`http://${ip}`);
     const wrapper = document.createElement("div");
     wrapper.className = "box-card";
     wrapper.innerHTML = `<h2>Box-Webinterface</h2><p>Aus einer HTTPS-Webspace-Seite darf ein lokales HTTP-Webinterface nicht eingebettet werden. Oeffne die Box in einem eigenen Tab:</p><p><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>`;
@@ -1433,7 +1481,7 @@ function openBox(ip) {
     return;
   }
   const iframe = document.createElement("iframe");
-  iframe.src = `http://${ip}`;
+  iframe.src = boxManagerUrl(`http://${ip}`);
   container.appendChild(iframe);
 }
 
@@ -1905,7 +1953,7 @@ function removeBox(hostname) {
     showSetup();
     return;
   }
-  const headers = { "Content-Type": "application/json" };
+  const headers = boxManagerHeaders({ "Content-Type": "application/json" });
 
   fetch(managerPath("/remove_box"), {
     method: "POST",
@@ -2067,13 +2115,13 @@ async function transferSymbolToBox(hostname, symbolKey) {
       form.append("char", symbolKey);
       form.append("enabled", symbol.enabled ? "1" : "0");
       form.append("bitmap", symbol.bitmap);
-      response = await fetch(`http://${ip}/api/symbol-bitmap`, { method: "POST", mode: "cors", body: form });
+      response = await fetch(`http://${ip}/api/symbol-bitmap`, { method: "POST", mode: "cors", headers: boxManagerHeaders(), body: form });
       if (!response.ok && customSymbolSlots.includes(symbolKey)) {
         const fallbackForm = new FormData();
         fallbackForm.append("slot", symbolKey);
         fallbackForm.append("enabled", symbol.enabled ? "1" : "0");
         fallbackForm.append("bitmap", symbol.bitmap);
-        response = await fetch(`http://${ip}/api/custom-symbol`, { method: "POST", mode: "cors", body: fallbackForm });
+        response = await fetch(`http://${ip}/api/custom-symbol`, { method: "POST", mode: "cors", headers: boxManagerHeaders(), body: fallbackForm });
       }
     } else {
       response = await fetch(managerPath("/transfer_symbol"), {

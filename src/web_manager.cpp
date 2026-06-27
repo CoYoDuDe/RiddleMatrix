@@ -11,6 +11,7 @@ constexpr size_t MAX_JSON_BODY_SIZE = 4096;
 constexpr size_t UPDATE_JSON_CAPACITY = 4096;
 constexpr size_t MIN_SSID_LENGTH = 2;
 constexpr size_t MIN_HOSTNAME_LENGTH = 2;
+constexpr char MANAGER_KEY_HEADER[] = "X-RiddleMatrix-Manager-Key";
 
 struct UpdateAllLettersContext {
     String body;
@@ -65,6 +66,80 @@ bool isSupportedLetter(char letter) {
             return true;
         }
     }
+    return false;
+}
+
+String currentManagerKey() {
+    String key = String(wifi_local_ap_password);
+    key.trim();
+    if (key.length() >= 8) {
+        return key;
+    }
+
+    key = String(wifi_password);
+    key.trim();
+    if (key.length() >= 8) {
+        return key;
+    }
+
+    key = String(RIDDLEMATRIX_DEFAULT_WIFI_PASSWORD);
+    key.trim();
+    return key;
+}
+
+bool constantTimeEquals(const String &left, const String &right) {
+    const size_t leftLength = left.length();
+    const size_t rightLength = right.length();
+    uint8_t diff = static_cast<uint8_t>(leftLength ^ rightLength);
+    const size_t maxLength = leftLength > rightLength ? leftLength : rightLength;
+    for (size_t idx = 0; idx < maxLength; ++idx) {
+        const char a = idx < leftLength ? left.charAt(idx) : '\0';
+        const char b = idx < rightLength ? right.charAt(idx) : '\0';
+        diff |= static_cast<uint8_t>(a ^ b);
+    }
+    return diff == 0;
+}
+
+bool managerKeyMatches(const String &providedKey) {
+    String sanitized = providedKey;
+    sanitized.trim();
+    if (sanitized.isEmpty()) {
+        return false;
+    }
+
+    const String activeKey = currentManagerKey();
+    if (constantTimeEquals(sanitized, activeKey)) {
+        return true;
+    }
+
+    const String defaultKey = String(RIDDLEMATRIX_DEFAULT_WIFI_PASSWORD);
+    return constantTimeEquals(sanitized, defaultKey);
+}
+
+bool isManagerAuthorized(AsyncWebServerRequest *request) {
+    if (request == nullptr) {
+        return false;
+    }
+    if (request->hasHeader(MANAGER_KEY_HEADER) &&
+        managerKeyMatches(request->header(MANAGER_KEY_HEADER))) {
+        return true;
+    }
+    if (request->hasParam(F("rm_key")) &&
+        managerKeyMatches(request->getParam(F("rm_key"))->value())) {
+        return true;
+    }
+    if (request->hasParam(F("rm_key"), true) &&
+        managerKeyMatches(request->getParam(F("rm_key"), true)->value())) {
+        return true;
+    }
+    return false;
+}
+
+bool requireManagerAuth(AsyncWebServerRequest *request) {
+    if (isManagerAuthorized(request)) {
+        return true;
+    }
+    request->send(403, F("text/plain; charset=utf-8"), F("RiddleMatrix-Manager erforderlich."));
     return false;
 }
 
@@ -388,6 +463,18 @@ constexpr const char *const DAY_KEYS[NUM_DAYS] = {
 } // namespace
 
 const char scriptJS[] PROGMEM = R"rawliteral(
+    const riddleMatrixManagerKey = new URLSearchParams(window.location.search).get('rm_key') || '';
+
+    function managerFetch(url, options) {
+        const fetchOptions = Object.assign({}, options || {});
+        const headers = new Headers(fetchOptions.headers || {});
+        if (riddleMatrixManagerKey) {
+            headers.set('X-RiddleMatrix-Manager-Key', riddleMatrixManagerKey);
+        }
+        fetchOptions.headers = headers;
+        return fetch(url, fetchOptions);
+    }
+
     function updateRtcInputs(timeText) {
         const text = String(timeText || '');
         const match = text.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}:\d{2}(?::\d{2})?)/);
@@ -411,7 +498,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     // 🕒 Aktuelle Uhrzeit abrufen
     function fetchRTC() {
-        fetch('/getTime')
+        managerFetch('/getTime')
             .then(response => response.text())
             .then(time => {
                 document.getElementById('rtcTime').innerText = time;
@@ -422,7 +509,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     // 📝 Freien RAM abrufen
     function fetchMemory() {
-        fetch('/memory')
+        managerFetch('/memory')
             .then(response => response.text())
             .then(memory => {
                 document.getElementById('memoryUsage').innerText = memory + ' bytes';
@@ -433,7 +520,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     // 🕒 RTC-Zeit setzen
     function setRTC() {
         let form = new FormData(document.getElementById('rtcForm'));
-        fetch('/setTime', { method: 'POST', body: form })
+        managerFetch('/setTime', { method: 'POST', body: form })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('Fehler: ' + error));
@@ -441,7 +528,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     // 🌐 Zeit per NTP synchronisieren
     function syncNTP() {
-        fetch('/syncNTP')
+        managerFetch('/syncNTP')
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => {
                 const text = result.message && result.message.trim() !== ''
@@ -466,7 +553,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             return;
         }
         select.innerHTML = '<option>Suche Netzwerke...</option>';
-        fetch('/scanWiFi')
+        managerFetch('/scanWiFi')
             .then(response => response.json())
             .then(networks => {
                 select.innerHTML = '<option value="">SSID aus Liste waehlen...</option>';
@@ -527,7 +614,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             query = '?trigger=' + encodeURIComponent(triggerIndex + 1);
         }
 
-        fetch('/triggerLetter' + query)
+        managerFetch('/triggerLetter' + query)
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => {
                 const text = result.message && result.message.trim() !== '' ? result.message : (result.ok ? '✅ Trigger erfolgreich!' : '❌ Unbekannter Fehler beim Trigger!');
@@ -557,7 +644,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
             url += '&trigger=' + encodeURIComponent(triggerIndex + 1);
         }
 
-        fetch(url)
+        managerFetch(url)
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => {
                 const text = result.message && result.message.trim() !== '' ? result.message : (result.ok ? '✅ Zeichen/Symbol angezeigt!' : '❌ Anzeige fehlgeschlagen!');
@@ -634,7 +721,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     function loadCustomSymbol() {
         const symbol = document.getElementById('symbolSlot')?.value || 'A';
-        fetch('/api/symbol-bitmap?char=' + encodeURIComponent(symbol))
+        managerFetch('/api/symbol-bitmap?char=' + encodeURIComponent(symbol))
             .then(response => response.json())
             .then(data => {
                 loadSymbolFromHex(data.bitmap || '');
@@ -657,7 +744,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         form.append('char', document.getElementById('symbolSlot')?.value || 'A');
         form.append('enabled', document.getElementById('symbolEnabled')?.checked ? '1' : '0');
         form.append('bitmap', symbolBitmapToHex());
-        fetch('/api/symbol-bitmap', { method: 'POST', body: form })
+        managerFetch('/api/symbol-bitmap', { method: 'POST', body: form })
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => alert(result.message || (result.ok ? 'Symbol gespeichert.' : 'Symbol konnte nicht gespeichert werden.')))
             .catch(error => alert('Symbol konnte nicht gespeichert werden: ' + error));
@@ -667,7 +754,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         const form = new FormData();
         form.append('char', document.getElementById('symbolSlot')?.value || 'A');
         form.append('clear', '1');
-        fetch('/api/symbol-bitmap', { method: 'POST', body: form })
+        managerFetch('/api/symbol-bitmap', { method: 'POST', body: form })
             .then(response => response.text().then(message => ({ ok: response.ok, message })))
             .then(result => {
                 alert(result.message || (result.ok ? 'Default wiederhergestellt.' : 'Default konnte nicht wiederhergestellt werden.'));
@@ -730,7 +817,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         const staticIpCheckbox = document.getElementById('wifi_static_ip_enabled');
         form.set('wifi_static_ip_enabled', staticIpCheckbox && staticIpCheckbox.checked ? 'on' : 'off');
 
-        fetch('/updateWiFi', { method: 'POST', body: form })
+        managerFetch('/updateWiFi', { method: 'POST', body: form })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
@@ -741,7 +828,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         let form = new FormData(document.getElementById('displayForm'));
         let autoModeChecked = document.getElementById('auto_mode').checked;
         form.set('auto_mode', autoModeChecked ? 'on' : 'off');
-        fetch('/updateDisplaySettings', { method: 'POST', body: form })
+        managerFetch('/updateDisplaySettings', { method: 'POST', body: form })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
@@ -751,7 +838,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     function saveTriggerDelays() {
         syncSharedTriggerFormFields();
         let form = new FormData(document.getElementById('delaysForm'));
-        fetch('/updateTriggerDelays', { method: 'POST', body: form })
+        managerFetch('/updateTriggerDelays', { method: 'POST', body: form })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
@@ -761,7 +848,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     function saveAllLetters() {
         syncSharedTriggerFormFields();
         let formData = new FormData(document.getElementById('lettersForm'));
-        fetch('/updateAllLetters', { method: 'POST', body: formData })
+        managerFetch('/updateAllLetters', { method: 'POST', body: formData })
             .then(response => response.text())
             .then(alert)
             .catch(error => alert('❌ Fehler: ' + error));
@@ -871,13 +958,27 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 void setupWebServer() {
     DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Origin"), F("*"));
     DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Methods"), F("GET, POST, OPTIONS"));
-    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Headers"), F("Content-Type"));
+    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Headers"), F("Content-Type, X-RiddleMatrix-Manager-Key"));
     DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Private-Network"), F("true"));
     // ℹ️ Hinweis: Der Helper refreshWiFiIdleTimer(...) aus wifi_manager.cpp muss
     //             zu Beginn jeder neuen Route mit echter Nutzerinteraktion
     //             aufgerufen werden, damit der WLAN-Timeout zuverlässig
     //             zurückgesetzt wird.
+    server.on("/api/hello", HTTP_GET, [](AsyncWebServerRequest *request) {
+        StaticJsonDocument<256> responseDoc;
+        responseDoc["riddleMatrix"] = true;
+        responseDoc["hostname"] = hostname;
+        responseDoc["ip"] = WiFi.localIP().toString();
+        responseDoc["auth"] = true;
+        String responseBody;
+        serializeJson(responseDoc, responseBody);
+        request->send(200, F("application/json"), responseBody);
+    });
+
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /"));
         String html;
         if (!html.reserve(24576)) {
@@ -1137,6 +1238,9 @@ void setupWebServer() {
     });
 
     server.on("/scanWiFi", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /scanWiFi"));
         const WiFiMode_t previousMode = WiFi.getMode();
         if (previousMode == WIFI_OFF) {
@@ -1163,6 +1267,9 @@ void setupWebServer() {
     });
 
     server.on("/api/custom-symbol", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /api/custom-symbol"));
         if (!request->hasParam(F("slot"))) {
             request->send(400, F("text/plain"), F("slot fehlt"));
@@ -1186,6 +1293,9 @@ void setupWebServer() {
     });
 
     server.on("/api/symbol-bitmap", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /api/symbol-bitmap"));
         if (!request->hasParam(F("char"))) {
             request->send(400, F("text/plain"), F("char fehlt"));
@@ -1232,6 +1342,9 @@ void setupWebServer() {
     });
 
     server.on("/api/symbol-bitmap", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("POST /api/symbol-bitmap"));
         if (!request->hasParam(F("char"), true)) {
             request->send(400, F("text/plain"), F("char fehlt"));
@@ -1295,6 +1408,9 @@ void setupWebServer() {
     });
 
     server.on("/api/custom-symbol", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("POST /api/custom-symbol"));
         if (!request->hasParam(F("slot"), true) || !request->hasParam(F("bitmap"), true)) {
             request->send(400, F("text/plain"), F("slot oder bitmap fehlt"));
@@ -1323,6 +1439,9 @@ void setupWebServer() {
     });
 
     server.on("/updateWiFi", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("POST /updateWiFi"));
         if (request->hasParam("ssid", true) && request->hasParam("hostname", true)) {
             const String ssidParam = request->getParam("ssid", true)->value();
@@ -1544,6 +1663,9 @@ void setupWebServer() {
     });
 
     server.on("/updateDisplaySettings", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("POST /updateDisplaySettings"));
         if (!(request->hasParam("brightness", true) &&
               request->hasParam("letter_time", true) &&
@@ -1671,6 +1793,9 @@ void setupWebServer() {
     });
 
     server.on("/updateTriggerDelays", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("POST /updateTriggerDelays"));
 
         unsigned long parsedDelays[NUM_TRIGGERS][NUM_DAYS];
@@ -1735,6 +1860,9 @@ void setupWebServer() {
     });
 
     server.on("/api/trigger-delays", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /api/trigger-delays"));
         AsyncJsonResponse *response = new AsyncJsonResponse();
         JsonVariant root = response->getRoot();
@@ -1756,6 +1884,9 @@ void setupWebServer() {
         "/updateAllLetters",
         HTTP_POST,
         [](AsyncWebServerRequest *request) {
+            if (!requireManagerAuth(request)) {
+                return;
+            }
             UpdateAllLettersContext *context = static_cast<UpdateAllLettersContext *>(request->_tempObject);
             auto cleanup = [&]() {
                 if (context != nullptr) {
@@ -2256,6 +2387,9 @@ void setupWebServer() {
         });
 
     server.on("/displayLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /displayLetter"));
         if (!request->hasParam("char")) {
             request->send(400, "text/plain", "Fehlender Parameter!");
@@ -2314,6 +2448,9 @@ void setupWebServer() {
     });
 
     server.on("/triggerLetter", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /triggerLetter"));
         uint8_t triggerIndex = 0;
         if (request->hasParam("trigger")) {
@@ -2369,12 +2506,18 @@ void setupWebServer() {
     });
 
     server.on("/getTime", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /getTime"));
         String currentTime = getRTCTime();
         request->send(200, "text/plain", currentTime);
     });
 
     server.on("/setTime", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("POST /setTime"));
         if (request->hasParam("date", true) && request->hasParam("time", true)) {
             String date = request->getParam("date", true)->value();
@@ -2390,6 +2533,9 @@ void setupWebServer() {
     });
 
     server.on("/syncNTP", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /syncNTP"));
         if (syncTimeWithNTP()) {
             request->send(200, "text/plain", "✅ NTP Synchronisierung erfolgreich abgeschlossen!");
@@ -2399,6 +2545,9 @@ void setupWebServer() {
     });
 
     server.on("/memory", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!requireManagerAuth(request)) {
+            return;
+        }
         refreshWiFiIdleTimer(F("GET /memory"));
         request->send(200, "text/plain", String(ESP.getFreeHeap()));
     });

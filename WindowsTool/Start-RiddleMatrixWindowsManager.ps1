@@ -462,6 +462,7 @@ function Start-ManagerServer {
     $env:RIDDLEMATRIX_SCAN_SUBNET = $Settings.BoxSubnet
     $env:RIDDLEMATRIX_ENABLE_ARP_SCAN = '1'
     $env:RIDDLEMATRIX_HIDE_SHUTDOWN = '1'
+    $env:RIDDLEMATRIX_BOX_MANAGER_KEY = [string]$Settings.Password
     $env:RIDDLEMATRIX_SERVER_HOST = '127.0.0.1'
     $env:RIDDLEMATRIX_SERVER_PORT = [string]$Settings.ManagerPort
     $env:SHUTDOWN_COMMAND = ''
