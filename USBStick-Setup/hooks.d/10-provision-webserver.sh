@@ -132,6 +132,15 @@ ensure_system_packages() {
     cloud-guest-utils
     parted
     firefox-esr
+    iw
+    wireless-tools
+    wpasupplicant
+    usb-modeswitch
+    libffi-dev
+    libssl-dev
+    build-essential
+  )
+  local -a optional_packages=(
     firmware-linux-nonfree
     firmware-iwlwifi
     firmware-realtek
@@ -141,13 +150,6 @@ ensure_system_packages() {
     firmware-zd1211
     firmware-mediatek
     firmware-misc-nonfree
-    iw
-    wireless-tools
-    wpasupplicant
-    usb-modeswitch
-    libffi-dev
-    libssl-dev
-    build-essential
   )
 
   local admindir="$TARGET_ROOT/var/lib/dpkg"
@@ -166,9 +168,25 @@ ensure_system_packages() {
     fi
   fi
 
+  local -a package_candidates=("${packages[@]}")
+  local optional_pkg
+  for optional_pkg in "${optional_packages[@]}"; do
+    if [[ "$TARGET_ROOT" = "/" ]]; then
+      if apt-cache show "$optional_pkg" >/dev/null 2>&1; then
+        package_candidates+=("$optional_pkg")
+      else
+        warn "Optional package $optional_pkg is not available in configured APT sources; skipping"
+      fi
+    elif command -v chroot >/dev/null 2>&1 && chroot "$TARGET_ROOT" apt-cache show "$optional_pkg" >/dev/null 2>&1; then
+      package_candidates+=("$optional_pkg")
+    else
+      warn "Optional package $optional_pkg is not available in configured APT sources; skipping"
+    fi
+  done
+
   local -a missing=()
   local pkg status
-  for pkg in "${packages[@]}"; do
+  for pkg in "${package_candidates[@]}"; do
     if ! status=$("$dpkg_query" --admindir="$admindir" -W -f='${Status}' "$pkg" 2>/dev/null); then
       missing+=("$pkg")
       continue
