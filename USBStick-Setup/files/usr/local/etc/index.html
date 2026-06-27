@@ -219,7 +219,7 @@ let localSubnetCandidates = [];
 const localStorageKey = "riddlematrix.localBrowserConfig.v1";
 const symbolStorageKey = "riddlematrix.customSymbols.v1";
 const webspaceAuthStorageKey = "riddlematrix.webspaceAuth.v1";
-const boxManagerKey = String(window.RIDDLEMATRIX_BOX_MANAGER_KEY || "").trim();
+const boxManagerKeyStorageKey = "riddlematrix.boxManagerKey.v1";
 const managerBasePath = location.pathname.endsWith("/")
   ? location.pathname
   : location.pathname.replace(/[^/]*$/, "");
@@ -280,20 +280,54 @@ const symbolPresets = {
   "Riddler": "000000000000000000000000000000000007E000003FFC00007FFE0000FFFF0000FE3F0001F81F8001F00F8001F00F8000001F8000003F0000007F000000FE000001FC000003F8000003F0000003E0000007C0000007C0000003C000000000000003C0000003C0000003C0000003C00000000000000000000000000000000000"
 };
 
+function getBoxManagerKey() {
+  const configuredKey = String(window.RIDDLEMATRIX_BOX_MANAGER_KEY || "").trim();
+  if (configuredKey) {
+    return configuredKey;
+  }
+  try {
+    const storedKey = String(localStorage.getItem(boxManagerKeyStorageKey) || "").trim();
+    if (storedKey) {
+      return storedKey;
+    }
+  } catch (error) {
+    console.warn("Manager-Key konnte nicht aus dem Browser-Speicher gelesen werden:", error);
+  }
+  return "RiddleMatrix-Setup!";
+}
+
+function saveBoxManagerKeyFromSettings() {
+  const input = document.getElementById("boxManagerKeyInput");
+  const key = String(input ? input.value : "").trim();
+  try {
+    if (key) {
+      localStorage.setItem(boxManagerKeyStorageKey, key);
+    } else {
+      localStorage.removeItem(boxManagerKeyStorageKey);
+    }
+  } catch (error) {
+    alert("Manager-Key konnte nicht gespeichert werden: " + error);
+    return;
+  }
+  alert("Manager-Key gespeichert. Neue Box-Aufrufe verwenden den Key automatisch.");
+}
+
 function boxManagerHeaders(baseHeaders = {}) {
   const headers = { ...baseHeaders };
-  if (boxManagerKey) {
-    headers["X-RiddleMatrix-Manager-Key"] = boxManagerKey;
+  const key = getBoxManagerKey();
+  if (key) {
+    headers["X-RiddleMatrix-Manager-Key"] = key;
   }
   return headers;
 }
 
 function boxManagerUrl(url) {
-  if (!boxManagerKey) {
+  const key = getBoxManagerKey();
+  if (!key) {
     return url;
   }
   const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}rm_key=${encodeURIComponent(boxManagerKey)}`;
+  return `${url}${separator}rm_key=${encodeURIComponent(key)}`;
 }
 let currentWordTrigger = 0;
 let separateWordTriggers = false;
@@ -1712,6 +1746,10 @@ function showAppSettings() {
   html += '<button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button></span>';
   html += '<label for="localBoxIp">Box-IP direkt</label>';
   html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.1.50"> <button type="button" onclick="learnLocalBoxFromIp()">Hinzufügen/lernen</button></span>';
+  html += '</div>';
+  html += '<div class="settings-grid">';
+  html += '<label for="boxManagerKeyInput">Box-Manager-Key</label>';
+  html += `<span><input id="boxManagerKeyInput" type="password" value="${escapeHtml(getBoxManagerKey())}" placeholder="AP-/Box-Passwort"> <button type="button" onclick="saveBoxManagerKeyFromSettings()">Speichern</button></span>`;
   html += '</div>';
   html += '<div id="localScanStatus" style="margin-top:10px;"></div>';
   html += '<p>Die Suche übernimmt nur Geräte, die wie RiddleMatrix-Boxen antworten. Der IP-Bereich wird automatisch vorgeschlagen, wenn Browser oder Manager ihn sicher erkennen können; sonst bitte Router-/LAN-Bereich eintragen.</p>';

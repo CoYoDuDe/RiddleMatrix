@@ -112,8 +112,20 @@ bool managerKeyMatches(const String &providedKey) {
         return true;
     }
 
-    const String defaultKey = String(RIDDLEMATRIX_DEFAULT_WIFI_PASSWORD);
-    return constantTimeEquals(sanitized, defaultKey);
+    const String fallbackKeys[] = {
+        String(RIDDLEMATRIX_DEFAULT_WIFI_PASSWORD),
+        String(RIDDLEMATRIX_DEFAULT_LOCAL_AP_PASSWORD),
+        String(RIDDLEMATRIX_DEFAULT_INFRA_WIFI_PASSWORD),
+        String(F("RiddleMatrix-Setup!")),
+    };
+    for (const String &candidate : fallbackKeys) {
+        String normalized = candidate;
+        normalized.trim();
+        if (!normalized.isEmpty() && constantTimeEquals(sanitized, normalized)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool isManagerAuthorized(AsyncWebServerRequest *request) {
