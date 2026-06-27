@@ -1210,6 +1210,7 @@ async function scanLocalSubnet(options = {}) {
   saveLocalBrowserConfig();
   localScanInFlight = true;
   localScanAbortController = new AbortController();
+  const previousConnectedBoxes = (connectedBoxes || []).slice();
   const scanButton = document.getElementById("localScanBtn");
   if (scanButton) {
     scanButton.textContent = "Scan abbrechen";
@@ -1259,7 +1260,7 @@ async function scanLocalSubnet(options = {}) {
     if (scanButton) {
       scanButton.textContent = "Subnetz scannen";
     }
-    connectedBoxes = foundBoxes.slice();
+    connectedBoxes = foundBoxes.length > 0 ? foundBoxes.slice() : previousConnectedBoxes;
     saveLocalBrowserConfig();
     renderDeviceList();
     showSetup();
@@ -1664,6 +1665,50 @@ function showSetup() {
       const symbolTransferMark = symbolTransferCompleted[hostname] ? '<span class="transfer-badge">✓ Zeichen/Symbole übertragen</span>' : '';
       const triggerRange = separateWordTriggers ? [...Array(triggersPerDay).keys()] : [0];
       html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}${transferMark}${symbolTransferMark}</h3>`;
+      for (const trigger of triggerRange) {
+        html += `<table class="manager-table box-settings-table"><thead><tr><th class="row-heading">${separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</th>`;
+        for (let i = 0; i < days.length; i++) {
+          html += `<th class="day-heading">${dayNames[i]}</th>`;
+        }
+        html += '</tr></thead><tbody>';
+        html += '<tr><th>Zeichen/Symbol</th>';
+        for (let i = 0; i < days.length; i++) {
+          const letters = box.letters?.[days[i]] || [];
+          const letter = letters[trigger] || "";
+          const letterOptionsHtml = letterOptions.map(optionValue => {
+            const isSelected = letter === "" ? optionValue === "" : optionValue === letter;
+            const label = getLetterLabel(optionValue);
+            return `<option value="${optionValue}" ${isSelected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+          }).join("");
+          html += `<td><select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter', true, null, ${!separateWordTriggers})" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">${letterOptionsHtml}</select></td>`;
+        }
+        html += '</tr><tr><th>Farbe</th>';
+        for (let i = 0; i < days.length; i++) {
+          const colors = box.colors?.[days[i]] || [];
+          const color = sanitizeColor(colors[trigger] || defaultColor);
+          html += `<td><input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateWordTriggers})"></td>`;
+        }
+        html += '</tr><tr><th>Farbmodus</th>';
+        for (let i = 0; i < days.length; i++) {
+          const colorMode = (box.colorModes?.[days[i]] || [defaultColorMode])[trigger] || defaultColorMode;
+          html += `<td><select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateWordTriggers})"><option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Einfarbig</option><option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewählt)</option><option value="random_all" ${colorMode === "random_all" ? "selected" : ""}>Zufall (alle)</option></select></td>`;
+        }
+        html += '</tr><tr><th>Palette</th>';
+        for (let i = 0; i < days.length; i++) {
+          const colorPaletteMask = (box.colorPaletteMasks?.[days[i]] || [defaultColorPaletteMask])[trigger] || defaultColorPaletteMask;
+          html += `<td><div class="palette-grid">${randomPalette.map((entry, paletteIndex) => `<label class="palette-chip"><input type="checkbox" data-live-edit="true" ${((colorPaletteMask & (1 << paletteIndex)) !== 0) ? "checked" : ""} onchange="savePalette(${hostnameArgument}, '${days[i]}', ${trigger}, ${!separateWordTriggers})" data-palette-hostname="${escapeHtml(hostname)}" data-palette-day="${days[i]}" data-palette-trigger="${trigger}" data-palette-index="${paletteIndex}"><span class="palette-swatch" style="background:${escapeColor(entry.color)}"></span>${escapeHtml(entry.label)}</label>`).join("")}</div></td>`;
+        }
+        html += '</tr><tr><th>Verzögerung (s)</th>';
+        for (let i = 0; i < days.length; i++) {
+          const delays = box.delays?.[days[i]] || [];
+          const rawDelay = delays[trigger];
+          const parsedDelay = typeof rawDelay === "number" ? rawDelay : parseFloat(String(rawDelay).replace(",", "."));
+          const delayValue = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? Math.min(999, Math.round(parsedDelay)) : defaultDelay;
+          html += `<td><input type="number" class="delay-input" data-live-edit="true" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayValue}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this, ${!separateWordTriggers})"></td>`;
+        }
+        html += '</tr></tbody></table>';
+      }
+      if (false) {
       html += '<table class="manager-table box-settings-table"><thead><tr><th class="row-heading">Wochentag</th>';
       for (const trigger of triggerRange) {
         html += `<th>${separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</th>`;
@@ -1725,7 +1770,9 @@ function showSetup() {
         }
         html += '</tr>';
       }
-      html += `</tbody></table>
+      html += `</tbody></table>`;
+      }
+      html += `
         <div class="order-buttons">
           <button onclick="moveBoxUp(${hostnameArgument})">↑</button>
           <button onclick="moveBoxDown(${hostnameArgument})">↓</button>
@@ -2000,8 +2047,10 @@ function removeBox(hostname) {
   if (localBrowserMode) {
     delete knownBoxes[hostname];
     boxOrder = boxOrder.filter(entry => entry !== hostname);
+    connectedBoxes = connectedBoxes.filter(box => box.hostname !== hostname);
     saveLocalBrowserConfig();
-    enterLocalBrowserMode(`Box entfernt: ${hostname}`);
+    renderDeviceList();
+    statusArea.innerHTML = `<div class="statusEntry status">Box entfernt: ${escapeHtml(hostname)}</div>`;
     showSetup();
     return;
   }
@@ -2015,6 +2064,10 @@ function removeBox(hostname) {
     if (!response.ok) {
       statusArea.innerHTML = '<div class="statusEntry status"> Fehler beim Entfernen.</div>';
     } else {
+      delete knownBoxes[hostname];
+      boxOrder = boxOrder.filter(entry => entry !== hostname);
+      connectedBoxes = connectedBoxes.filter(box => box.hostname !== hostname);
+      renderDeviceList();
       showSetup();
     }
   }).catch(e => {

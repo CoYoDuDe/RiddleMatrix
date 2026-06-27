@@ -1086,12 +1086,11 @@ void setupWebServer() {
         html += "<form id='displayForm'>";
         html += "<table>";
         html += "<tr><th>Helligkeit</th><td><input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'> <span class='muted'>1-255</span></td></tr>";
+        html += "<tr><th>Zufalls-Zeichen bei *</th><td><input type='text' name='random_symbol_pool' maxlength='39' value='" + escapeHtml(String(random_symbol_pool)) + "'></td></tr>";
+        html += "<tr><th>Automodus</th><td><label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> aktivieren</label></td></tr>";
         html += "<tr><th>Zeichen-Anzeigezeit</th><td><input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'> <span class='muted'>Sekunden, 1-60</span></td></tr>";
         html += "<tr><th>Automodus-Intervall</th><td><input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'> <span class='muted'>Sekunden, 30-600</span></td></tr>";
-        html += "<tr><th>Zufalls-Zeichen bei *</th><td><input type='text' name='random_symbol_pool' maxlength='39' value='" + escapeHtml(String(random_symbol_pool)) + "'></td></tr>";
-        html += "<tr><th>Standalone aktiv von</th><td><input type='time' name='active_start' value='" + escapeHtml(formatMinutesAsTime(standalone_active_start_minutes)) + "'></td></tr>";
-        html += "<tr><th>Standalone aktiv bis</th><td><input type='time' name='active_end' value='" + escapeHtml(formatMinutesAsTime(standalone_active_end_minutes)) + "'></td></tr>";
-        html += "<tr><th>Automodus</th><td><label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> aktivieren</label></td></tr>";
+        html += "<tr><th>Standalone aktiv</th><td>von <input type='time' name='active_start' value='" + escapeHtml(formatMinutesAsTime(standalone_active_start_minutes)) + "'> bis <input type='time' name='active_end' value='" + escapeHtml(formatMinutesAsTime(standalone_active_end_minutes)) + "'></td></tr>";
         html += "<tr><th>Hinweis</th><td class='muted'>Aktivzeiten im Format HH:MM; gleicher Start- und Endwert bedeutet 24-Stunden-Betrieb.</td></tr>";
         html += "</table>";
         html += "<button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
