@@ -1,17 +1,24 @@
 [Unit]
 Description=Start X for kioskuser
-After=getty@tty1.service
-Requires=getty@tty1.service
+After=systemd-user-sessions.service webserver.service
+Wants=webserver.service
+Conflicts=getty@tty1.service
 
 [Service]
 Type=simple
 User=kioskuser
-ExecStart=/usr/bin/startx /home/kioskuser/start_firefox.sh
+WorkingDirectory=/home/kioskuser
+Environment=HOME=/home/kioskuser
+ExecStart=/usr/bin/startx /home/kioskuser/start_firefox.sh -- :0 vt1 -keeptty -nolisten tcp
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=infinity
-StandardOutput=tty
+StandardInput=tty
+StandardOutput=journal+console
+StandardError=journal+console
 TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
 
 [Install]
 WantedBy=multi-user.target
