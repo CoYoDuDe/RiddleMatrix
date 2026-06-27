@@ -845,7 +845,7 @@ def _ping_host(ip: str) -> bool:
 
 def _quick_http_probe(ip: str) -> bool:
     try:
-        with socket.create_connection((ip, 80), timeout=0.08):
+        with socket.create_connection((ip, 80), timeout=0.25):
             pass
     except OSError:
         return False
@@ -985,11 +985,28 @@ def get_connected_devices_by_scan():
     return devices
 
 
-def get_connected_devices():
+def get_connected_known_devices(config: Optional[dict] = None):
+    config = config or load_config()
+    devices = []
+    for hostname in config.get("boxOrder", []):
+        box = config.get("boxen", {}).get(hostname)
+        if not isinstance(box, dict):
+            continue
+        ip = sanitize_ipv4(box.get("ip"))
+        if ip == SAFE_IP_PLACEHOLDER:
+            continue
+        if _quick_http_probe(ip):
+            devices.append({"ip": ip, "hostname": hostname})
+    return devices
+
+
+def get_connected_devices(full_scan: bool = False):
     devices = []
     config = load_config()
     if not os.path.exists(LEASE_FILE):
-        return get_connected_devices_by_scan() if ENABLE_ARP_SCAN else devices
+        if full_scan and ENABLE_ARP_SCAN:
+            return get_connected_devices_by_scan()
+        return get_connected_known_devices(config)
     if os.path.exists(LEASE_FILE):
         with open(LEASE_FILE, "r") as f:
             for line in f:
@@ -1541,7 +1558,10 @@ def reload_all():
         save_config(working_config)
 
         try:
-            devices = get_connected_devices()
+            try:
+                devices = get_connected_devices(full_scan=True)
+            except TypeError:
+                devices = get_connected_devices()
         except RedirectResponseError as exc:
             CONFIG_FILE = original_config_path
             save_config(backup_config)
