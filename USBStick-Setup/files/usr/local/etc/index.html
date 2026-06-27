@@ -1019,7 +1019,7 @@ function extractLocalBoxStateFromHtml(html, ip) {
 async function fetchLocalTriggerDelays(ip, box, signal = null) {
   try {
     const response = await fetchWithTimeout(
-      `http://${ip}/api/trigger-delays`,
+      boxManagerUrl(`http://${ip}/api/trigger-delays`),
       { method: "GET", mode: "cors", cache: "no-store", signal, headers: boxManagerHeaders() },
       900
     );
@@ -1103,8 +1103,8 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
       }
     } else {
       const helloResponse = await fetchWithTimeout(
-        `http://${ip}/api/hello`,
-        { method: "GET", mode: "cors", cache: "no-store", signal },
+        boxManagerUrl(`http://${ip}/api/hello`),
+        { method: "GET", mode: "cors", cache: "no-store", signal, headers: boxManagerHeaders() },
         900
       );
       if (helloResponse.ok) {
@@ -2228,13 +2228,13 @@ async function transferSymbolToBox(hostname, symbolKey) {
       form.append("char", symbolKey);
       form.append("enabled", symbol.enabled ? "1" : "0");
       form.append("bitmap", symbol.bitmap);
-      response = await fetch(`http://${ip}/api/symbol-bitmap`, { method: "POST", mode: "cors", headers: boxManagerHeaders(), body: form });
+      response = await fetch(boxManagerUrl(`http://${ip}/api/symbol-bitmap`), { method: "POST", mode: "cors", headers: boxManagerHeaders(), body: form });
       if (!response.ok && customSymbolSlots.includes(symbolKey)) {
         const fallbackForm = new FormData();
         fallbackForm.append("slot", symbolKey);
         fallbackForm.append("enabled", symbol.enabled ? "1" : "0");
         fallbackForm.append("bitmap", symbol.bitmap);
-        response = await fetch(`http://${ip}/api/custom-symbol`, { method: "POST", mode: "cors", headers: boxManagerHeaders(), body: fallbackForm });
+        response = await fetch(boxManagerUrl(`http://${ip}/api/custom-symbol`), { method: "POST", mode: "cors", headers: boxManagerHeaders(), body: fallbackForm });
       }
     } else {
       response = await fetch(managerPath("/transfer_symbol"), {
