@@ -279,7 +279,6 @@ const symbolPresets = {
 };
 let currentWordTrigger = 0;
 let separateWordTriggers = false;
-let separateBoxTriggers = false;
 let setupTab = "boxes";
 let managerSymbolSlot = "0";
 let managerSymbolEnabled = true;
@@ -980,7 +979,14 @@ async function fetchLocalTriggerDelays(ip, box, signal = null) {
 }
 
 function hostnameFromBoxHtml(html, fallbackIp) {
-  const titleMatch = String(html || "").match(/<title[^>]*>(.*?)<\/title>/i);
+  const text = String(html || "");
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  const hostnameInput = doc.querySelector('input[name="hostname"]');
+  const hostnameValue = hostnameInput && typeof hostnameInput.value === "string" ? hostnameInput.value.trim() : "";
+  if (hostnameValue) {
+    return hostnameValue.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || `Box-${fallbackIp.replace(/\./g, "-")}`;
+  }
+  const titleMatch = text.match(/<title[^>]*>(.*?)<\/title>/i);
   if (titleMatch && titleMatch[1]) {
     const title = titleMatch[1].replace(/<[^>]+>/g, "").trim();
     if (title && title.length <= 64) {
@@ -1037,6 +1043,14 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
   let suffix = 2;
   while (knownBoxes[candidate] && knownBoxes[candidate].ip !== ip) {
     candidate = `${hostname}-${suffix++}`;
+  }
+  const existingByIp = boxOrder.find(existingHostname =>
+    existingHostname !== candidate && knownBoxes[existingHostname]?.ip === ip
+  );
+  if (existingByIp && !knownBoxes[candidate]) {
+    knownBoxes[candidate] = normalizeBox(knownBoxes[existingByIp] || {});
+    delete knownBoxes[existingByIp];
+    boxOrder = boxOrder.map(existingHostname => existingHostname === existingByIp ? candidate : existingHostname);
   }
   if (!knownBoxes[candidate]) {
     knownBoxes[candidate] = learnedBox;
@@ -1538,8 +1552,7 @@ function showSetup() {
 
   if (setupTab === "boxes") {
     html += '<div class="box-card"><div class="toggle-row">';
-    html += `<label><input type="checkbox" data-live-edit="true" ${separateBoxTriggers ? "checked" : ""} onchange="setSeparateBoxTriggers(this.checked)"> Alle 3 Trigger in den Boxkarten anzeigen</label>`;
-    if (separateBoxTriggers) {
+    if (separateWordTriggers) {
       html += '<span>Alle drei Trigger werden einzeln angezeigt.</span>';
     } else {
       html += '<span>Änderungen gelten pro Tag für alle drei Trigger.</span>';
@@ -1561,7 +1574,7 @@ function showSetup() {
           <div class="weekday-col">
             <label>${dayNames[i]}</label>
             <div class="trigger-container">`;
-        const triggerRange = separateBoxTriggers ? [...Array(triggersPerDay).keys()] : [0];
+        const triggerRange = separateWordTriggers ? [...Array(triggersPerDay).keys()] : [0];
         for (const trigger of triggerRange) {
           const letter = letters[trigger] || "";
           const color = sanitizeColor(colors[trigger] || defaultColor);
@@ -1580,12 +1593,12 @@ function showSetup() {
           }).join("");
           html += `
               <div class="trigger-entry">
-                <span>${separateBoxTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</span>
-                <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter', true, null, ${!separateBoxTriggers})" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
+                <span>${separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</span>
+                <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter', true, null, ${!separateWordTriggers})" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
                   ${letterOptionsHtml}
                 </select>
-                <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateBoxTriggers})">
-                <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateBoxTriggers})">
+                <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateWordTriggers})">
+                <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateWordTriggers})">
                   <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Einfarbig</option>
                   <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewählt)</option>
                   <option value="random_all" ${colorMode === "random_all" ? "selected" : ""}>Zufall (alle)</option>
@@ -1594,7 +1607,7 @@ function showSetup() {
                   ${randomPalette.map((entry, paletteIndex) => `
                     <label class="palette-chip">
                       <input type="checkbox" data-live-edit="true" ${((colorPaletteMask & (1 << paletteIndex)) !== 0) ? "checked" : ""}
-                        onchange="savePalette(${hostnameArgument}, '${days[i]}', ${trigger}, ${!separateBoxTriggers})"
+                        onchange="savePalette(${hostnameArgument}, '${days[i]}', ${trigger}, ${!separateWordTriggers})"
                         data-palette-hostname="${escapeHtml(hostname)}"
                         data-palette-day="${days[i]}"
                         data-palette-trigger="${trigger}"
@@ -1604,7 +1617,7 @@ function showSetup() {
                 </div>
                 <div class="delay-input-wrapper">
                   <span>Verzögerung (s)</span>
-                  <input type="number" class="delay-input" data-live-edit="true" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this, ${!separateBoxTriggers})">
+                  <input type="number" class="delay-input" data-live-edit="true" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this, ${!separateWordTriggers})">
                 </div>
               </div>`;
         }
@@ -1828,7 +1841,7 @@ function setSeparateWordTriggers(enabled) {
 }
 
 function setSeparateBoxTriggers(enabled) {
-  separateBoxTriggers = !!enabled;
+  separateWordTriggers = !!enabled;
   showSetup();
 }
 

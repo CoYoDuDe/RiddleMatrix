@@ -881,7 +881,7 @@ void setupWebServer() {
         refreshWiFiIdleTimer(F("GET /"));
         String html;
         if (!html.reserve(24576)) {
-            request->send(507, "text/plain", "Nicht genug Speicher fuer die Weboberflaeche.");
+            request->send(507, "text/plain; charset=utf-8", "Nicht genug Speicher für die Weboberfläche.");
             return;
         }
         html = "<!doctype html><html lang='de'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>";
@@ -891,7 +891,7 @@ void setupWebServer() {
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
         html += "<form id='wifiForm'>";
-        html += "<p>Standard bleibt: Box verbindet sich nur beim Start zur Verwaltung und schaltet WLAN nach Inaktivitaet wieder ab.</p>";
+        html += "<p>Standard bleibt: Box verbindet sich nur beim Start zur Verwaltung und schaltet WLAN nach Inaktivität wieder ab.</p>";
         html += "<fieldset><legend>WLAN-Modus</legend>";
         html += "<label><input type='radio' name='wifi_mode' value='timed' ";
         html += (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::TimedManager) ? "checked" : "");
@@ -901,15 +901,15 @@ void setupWebServer() {
         html += "> Dauerhaft mit bestehendem WLAN verbinden</label><br>";
         html += "<label><input type='radio' name='wifi_mode' value='ap_sta' ";
         html += (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp) ? "checked" : "");
-        html += "> AP+STA/Mesh-Kopie: WLAN verbinden und zusaetzlichen Box-AP starten</label>";
+        html += "> AP+STA/Mesh-Kopie: WLAN verbinden und zusätzlichen Box-AP starten</label>";
         html += "</fieldset>";
         html += "<p>SSID und Hostname sind Pflichtfelder (mindestens 2 Zeichen), das Passwort ist optional.</p>";
         html += "Netzwerke: <select id='wifiNetworkSelect' onchange='applySelectedWiFiNetwork()'><option value=''>Noch nicht gesucht</option></select> ";
         html += "<button type='button' onclick='loadWiFiNetworks()'>WLAN suchen</button><br>";
         html += "SSID: <input type='text' name='ssid' value='" + escapeHtml(String(wifi_ssid)) + "'><br>";
         html += "Passwort: <input type='password' name='password' placeholder='Leer lassen, um es zu behalten'><br>";
-        html += "<label><input type='checkbox' id='password_remove' name='password_remove' value='on'> Passwort loeschen</label><br>";
-        html += "<p style='margin-top:4px;'>Leer gelassenes Passwort ohne Haken laesst das bisherige Passwort unveraendert.</p>";
+        html += "<label><input type='checkbox' id='password_remove' name='password_remove' value='on'> Passwort löschen</label><br>";
+        html += "<p style='margin-top:4px;'>Leer gelassenes Passwort ohne Haken lässt das bisherige Passwort unverändert.</p>";
         html += "Hostname: <input type='text' name='hostname' value='" + escapeHtml(String(hostname)) + "'><br>";
         html += "<div id='wifiSymbolField'><label><input type='checkbox' id='wifi_status_symbol_enabled' name='wifi_status_symbol_enabled' value='on' ";
         html += (wifi_status_symbol_enabled ? "checked" : "");
@@ -929,7 +929,7 @@ void setupWebServer() {
         html += "<div id='localApFields' style='display:none; border-left:3px solid #999; padding-left:10px; margin:8px 0;'>";
         html += "<p>AP+STA startet einen lokalen Box-AP mit denselben Zugangsdaten wie das Ziel-WLAN, sofern hier nichts anderes eingetragen wird.</p>";
         html += "Lokale AP-SSID: <input type='text' name='local_ap_ssid' value='" + escapeHtml(String(wifi_local_ap_ssid)) + "'><br>";
-        html += "Lokales AP-Passwort: <input type='password' name='local_ap_password' placeholder='Leer lassen = WLAN-Passwort uebernehmen'><br>";
+        html += "Lokales AP-Passwort: <input type='password' name='local_ap_password' placeholder='Leer lassen = WLAN-Passwort übernehmen'><br>";
         html += "</div>";
         html += "<button type='button' onclick='saveWiFi()'>Speichern</button>";
         html += "</form>";
@@ -943,11 +943,11 @@ void setupWebServer() {
         html += "Standalone aktiv von: <input type='time' name='active_start' value='" + escapeHtml(formatMinutesAsTime(standalone_active_start_minutes)) + "'><br>";
         html += "Standalone aktiv bis: <input type='time' name='active_end' value='" + escapeHtml(formatMinutesAsTime(standalone_active_end_minutes)) + "'><br>";
         html += "<label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> Automodus aktivieren</label>";
-        html += "<p class='muted'>Zulaessige Werte: Helligkeit 1-255, Anzeigezeit 1-60&nbsp;s, Automodus-Intervall 30-600&nbsp;s. Aktivzeiten im Format HH:MM; gleicher Start- und Endwert bedeutet 24-Stunden-Betrieb.</p>";
+        html += "<p class='muted'>Zulässige Werte: Helligkeit 1-255, Anzeigezeit 1-60&nbsp;s, Automodus-Intervall 30-600&nbsp;s. Aktivzeiten im Format HH:MM; gleicher Start- und Endwert bedeutet 24-Stunden-Betrieb.</p>";
         html += "<br><button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
         html += "</form>";
 
-        html += "<h2>Trigger-Verzoegerungen pro Wochentag</h2>";
+        html += "<h2>Trigger-Verzögerungen pro Wochentag</h2>";
         html += "<label><input type='checkbox' id='separate_trigger_editing' onchange='applyTriggerEditMode()'> Trigger 2 und 3 separat bearbeiten</label>";
         html += "<p style='margin-top:4px;'>Ohne Haken werden die Werte von Trigger 1 beim Speichern auf alle Trigger kopiert.</p>";
         html += "<form id='delaysForm'>";
@@ -973,7 +973,7 @@ void setupWebServer() {
         }
 
         html += "</table>";
-        html += "<br><button type='button' onclick='saveTriggerDelays()'>Verzoegerungen speichern</button>";
+        html += "<br><button type='button' onclick='saveTriggerDelays()'>Verzögerungen speichern</button>";
         html += "</form>";
 
         // **RTC-Zeit anzeigen & ändern**
@@ -989,7 +989,7 @@ void setupWebServer() {
         html += "<button type='button' onclick='syncNTP()'>Zeit mit NTP synchronisieren</button>";
 
         html += "<h2>Schnellbearbeitung Zeichen &amp; Farben</h2>";
-        html += "<p class='muted'>Fuer schnelle Aenderungen direkt an der Box. Erweiterte Farbmodi, Zufallspaletten und der 32x32-Zeicheneditor bleiben im RiddleMatrix-Manager.</p>";
+        html += "<p class='muted'>Für schnelle Änderungen direkt an der Box. Erweiterte Farbmodi, Zufallspaletten und der 32x32-Zeicheneditor bleiben im RiddleMatrix-Manager.</p>";
         html += "<form id='lettersForm'>";
         html += "<table style='text-align:center;'><tr><th>Wochentag</th>";
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
@@ -1026,10 +1026,10 @@ void setupWebServer() {
         html += "</form>";
 
         html += "<h2>Trigger, Zeichen &amp; Symbole</h2>";
-        html += "<p>Die komplette Bearbeitung von Trigger-Verzoegerungen, erweiterten Farbmodi und Zeichen/Symbolen erfolgt im RiddleMatrix-Manager. Die Firmware-Endpunkte zum Uebernehmen, Speichern und Anzeigen bleiben aktiv.</p>";
+        html += "<p>Die komplette Bearbeitung von Trigger-Verzögerungen, erweiterten Farbmodi und Zeichen/Symbolen erfolgt im RiddleMatrix-Manager. Die Firmware-Endpunkte zum Übernehmen, Speichern und Anzeigen bleiben aktiv.</p>";
         html += "<h2>Manueller Trigger</h2>";
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-            html += "<button type='button' style='margin-right:8px;' onclick='triggerLetter(" + String(trigger) + ")'>Trigger " + String(trigger + 1) + " ausloesen</button>";
+            html += "<button type='button' style='margin-right:8px;' onclick='triggerLetter(" + String(trigger) + ")'>Trigger " + String(trigger + 1) + " auslösen</button>";
         }
         html += "<script src='/script.js'></script></body></html>";
         request->send(200, "text/html; charset=utf-8", html);
@@ -2215,7 +2215,7 @@ void setupWebServer() {
             }
             cleanup();
 
-            String confirmation = expectDelays ? String(F("✅ Zeichen/Symbole, Farben, Farbmodi & Verzoegerungen gespeichert!"))
+            String confirmation = expectDelays ? String(F("✅ Zeichen/Symbole, Farben, Farbmodi & Verzögerungen gespeichert!"))
                                                : String(F("✅ Zeichen/Symbole, Farben & Farbmodi gespeichert!"));
             request->send(200, "text/plain", confirmation);
         },
