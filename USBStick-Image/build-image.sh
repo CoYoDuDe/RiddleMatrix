@@ -163,6 +163,17 @@ EOF
   echo "127.0.0.1 localhost" > "$root_mount/etc/hosts"
   echo "127.0.1.1 riddlematrix-usb" >> "$root_mount/etc/hosts"
 
+  mkdir -p "$root_mount/etc/initramfs-tools/conf.d" "$root_mount/etc/default/grub.d"
+  cat > "$root_mount/etc/initramfs-tools/conf.d/riddlematrix-usb.conf" <<'EOF'
+# USB sticks boot on very different chipsets. Keep storage/USB modules in the
+# initramfs instead of relying on the build machine's detected hardware.
+MODULES=most
+EOF
+  cat > "$root_mount/etc/default/grub.d/riddlematrix-usb.cfg" <<'EOF'
+GRUB_CMDLINE_LINUX_DEFAULT="quiet rootwait"
+GRUB_CMDLINE_LINUX="rootwait"
+EOF
+
   mkdir -p "$root_mount/riddlematrix" "$root_mount/etc/usbstick"
 }
 
@@ -255,7 +266,36 @@ cleanup() {
   mount_chroot_filesystems "$root_mount"
   echo "grub-pc grub-pc/install_devices_empty boolean true" | chroot "$root_mount" debconf-set-selections
   chroot "$root_mount" apt-get update
-  chroot "$root_mount" apt-get install -y systemd-sysv linux-image-amd64 grub-common grub2-common grub-pc-bin grub-efi-amd64-bin dosfstools e2fsprogs sudo ca-certificates
+  chroot "$root_mount" apt-get install -y \
+    systemd-sysv linux-image-amd64 initramfs-tools \
+    grub-common grub2-common grub-pc-bin grub-efi-amd64-bin \
+    dosfstools e2fsprogs sudo ca-certificates
+
+  local -a optional_wifi_packages=(
+    firmware-linux-free
+    firmware-linux-nonfree
+    firmware-misc-nonfree
+    firmware-iwlwifi
+    firmware-realtek
+    firmware-atheros
+    firmware-brcm80211
+    firmware-mediatek
+    wireless-regdb
+    iw
+    usb-modeswitch
+  )
+  local -a available_wifi_packages=()
+  local package
+  for package in "${optional_wifi_packages[@]}"; do
+    if chroot "$root_mount" apt-cache show "$package" >/dev/null 2>&1; then
+      available_wifi_packages+=("$package")
+    else
+      log "Optionales WLAN-Paket nicht verfuegbar: $package"
+    fi
+  done
+  if [[ ${#available_wifi_packages[@]} -gt 0 ]]; then
+    chroot "$root_mount" apt-get install -y "${available_wifi_packages[@]}"
+  fi
 
   log "Installiere RiddleMatrix-Payload und Pakete."
   "$REPO_ROOT/USBStick-Setup/setup.sh" --target "$root_mount" --skip-systemd
@@ -267,6 +307,7 @@ cleanup() {
   chroot "$root_mount" systemctl enable bootlocal.service webserver.service kiosk-startx.service riddlematrix-grow-root.service
 
   log "Installiere GRUB fuer Legacy-BIOS und UEFI."
+  chroot "$root_mount" update-initramfs -u -k all
   grub-install --target=i386-pc --boot-directory="$root_mount/boot" "$loop_device"
   chroot "$root_mount" grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=RiddleMatrix --removable --recheck
   chroot "$root_mount" update-grub
