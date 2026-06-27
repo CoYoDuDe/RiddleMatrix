@@ -504,11 +504,15 @@ void handleTrigger(char triggerType, bool isAutoMode, bool fromWeb) {
 
     if (wifiConnected) {
         if (!isAutoMode && !fromWeb) {
-            Serial.println(F("⛔ WiFi wird abgeschaltet wegen Trigger (Quelle: Seriell)!"));
-            WiFi.disconnect();
-            wifiConnected = false;
-            server.end();
-            webServerRunning = false;
+            if (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {
+                Serial.println(F("WiFi wird abgeschaltet wegen Trigger (Quelle: Seriell)."));
+                WiFi.disconnect();
+                wifiConnected = false;
+                server.end();
+                webServerRunning = false;
+            } else {
+                Serial.println(F("WiFi bleibt aktiv, weil ein dauerhafter WLAN-Modus aktiv ist."));
+            }
         } else {
             Serial.print(F("ℹ️ WiFi bleibt aktiv (Quelle: "));
             if (isAutoMode) {

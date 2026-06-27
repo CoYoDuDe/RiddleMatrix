@@ -94,13 +94,6 @@ void loop() {
     checkAutoDisplay();
     processPendingTriggers();
 
-    if (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::TimedManager) &&
-        !triggerActive && wifiConnected && !wifiDisabled && wifiStartTime != 0) {
-        unsigned long now = millis();
-        if (now - wifiStartTime >= WIFI_IDLE_TIMEOUT_MS) {
-            Serial.println(F("⏱️ Keine Anzeigeaktivität – deaktiviere WiFi & Webserver."));
-            disableWiFiAndServer();
-        }
-    }
+    maintainWiFiAccessWindow(WIFI_IDLE_TIMEOUT_MS);
 
 }

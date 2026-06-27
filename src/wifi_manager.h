@@ -36,4 +36,6 @@ void checkWiFi();
 // **⏳ Idle-Timer für aktive Web-Nutzung zurücksetzen**
 void refreshWiFiIdleTimer(const __FlashStringHelper *reason = nullptr);
 
+void maintainWiFiAccessWindow(unsigned long timeoutMs);
+
 #endif

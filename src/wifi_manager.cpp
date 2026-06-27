@@ -11,6 +11,40 @@ constexpr unsigned long NTP_RETRY_INTERVAL_MS = 300UL * 1000UL;
 constexpr unsigned long NTP_PERIODIC_INTERVAL_MS = 6UL * 60UL * 60UL * 1000UL;
 unsigned long lastNtpSyncAttempt = 0;
 bool ntpSyncedSinceBoot = false;
+bool temporaryStartupApActive = false;
+unsigned long temporaryStartupApLastIdle = 0;
+
+uint8_t connectedSoftApClients() {
+    return WiFi.softAPgetStationNum();
+}
+
+void startTemporaryStartupAccessPoint() {
+    const char *apSsid = wifi_local_ap_ssid[0] != '\0' ? wifi_local_ap_ssid : hostname;
+    const char *apPassword = wifi_local_ap_password[0] != '\0' ? wifi_local_ap_password : wifi_password;
+    const bool apStarted = WiFi.softAP(apSsid, apPassword);
+    temporaryStartupApActive = apStarted;
+    temporaryStartupApLastIdle = millis();
+    Serial.print(F("Temporärer Start-AP "));
+    Serial.println(apStarted ? F("gestartet.") : F("konnte nicht gestartet werden."));
+    if (apStarted) {
+        Serial.print(F("Start-AP-IP-Adresse: "));
+        Serial.println(WiFi.softAPIP());
+    }
+}
+
+void stopTemporaryStartupAccessPoint() {
+    if (!temporaryStartupApActive) {
+        return;
+    }
+    if (connectedSoftApClients() > 0) {
+        temporaryStartupApLastIdle = millis();
+        return;
+    }
+    WiFi.softAPdisconnect(true);
+    temporaryStartupApActive = false;
+    temporaryStartupApLastIdle = 0;
+    Serial.println(F("Temporärer Start-AP beendet, dauerhaftes WLAN bleibt aktiv."));
+}
 
 void syncTimeAfterWiFiConnection(const __FlashStringHelper *reason) {
     const unsigned long now = millis();
@@ -36,6 +70,7 @@ void startFallbackAccessPoint() {
     const char *fallbackPassword = wifi_local_ap_password[0] != '\0' ? wifi_local_ap_password : wifi_password;
     WiFi.mode(WIFI_AP_STA);
     const bool apStarted = WiFi.softAP(fallbackSsid, fallbackPassword);
+    temporaryStartupApActive = false;
     Serial.print(F("Fallback-Konfigurations-AP "));
     Serial.println(apStarted ? F("gestartet.") : F("konnte nicht gestartet werden."));
     wifiDisabled = false;
@@ -51,6 +86,39 @@ void refreshWiFiIdleTimer(const __FlashStringHelper *reason) {
     if (reason != nullptr) {
         Serial.print(F("🔄 WiFi-Idle-Timer aktualisiert: "));
         Serial.println(reason);
+    }
+}
+
+void maintainWiFiAccessWindow(unsigned long timeoutMs) {
+    const unsigned long now = millis();
+
+    if (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::TimedManager)) {
+        if (!triggerActive && wifiConnected && !wifiDisabled && wifiStartTime != 0) {
+            if (connectedSoftApClients() > 0) {
+                wifiStartTime = now;
+                return;
+            }
+            if (now - wifiStartTime >= timeoutMs) {
+                Serial.println(F("Keine Manager-Verbindung - deaktiviere WiFi & Webserver."));
+                disableWiFiAndServer();
+            }
+        }
+        return;
+    }
+
+    if (!temporaryStartupApActive) {
+        return;
+    }
+    if (connectedSoftApClients() > 0) {
+        temporaryStartupApLastIdle = now;
+        return;
+    }
+    if (temporaryStartupApLastIdle == 0) {
+        temporaryStartupApLastIdle = now;
+        return;
+    }
+    if (now - temporaryStartupApLastIdle >= timeoutMs) {
+        stopTemporaryStartupAccessPoint();
     }
 }
 
@@ -180,14 +248,19 @@ void connectWiFi() {
         return;
     }
     const bool staWithLocalAp = (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp));
-    WiFi.mode(staWithLocalAp ? WIFI_AP_STA : WIFI_STA);
+    const bool alwaysConnected = (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::AlwaysConnected));
+    WiFi.mode((staWithLocalAp || alwaysConnected) ? WIFI_AP_STA : WIFI_STA);
     if (staWithLocalAp) {
         const bool apStarted = WiFi.softAP(wifi_local_ap_ssid, wifi_local_ap_password);
         Serial.print(F("Lokaler Box-AP "));
         Serial.println(apStarted ? F("gestartet.") : F("konnte nicht gestartet werden."));
+        temporaryStartupApActive = false;
+    } else if (alwaysConnected) {
+        startTemporaryStartupAccessPoint();
     } else {
         WiFi.softAPdisconnect(true);
         Serial.println(F("STA-Modus aktiviert, SoftAP getrennt."));
+        temporaryStartupApActive = false;
     }
     Serial.println(F("ℹ️ STA-Modus aktiviert, SoftAP getrennt."));
     WiFi.hostname(hostname);
