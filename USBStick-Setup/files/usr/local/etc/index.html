@@ -80,6 +80,34 @@
     .weekday-col {
       display: flex; flex-direction: column; align-items: stretch; min-width: 120px; gap: 6px;
     }
+    .manager-table {
+      width: 100%; border-collapse: collapse; background: #fff; margin-top: 8px;
+    }
+    .manager-table th, .manager-table td {
+      border: 1px solid #d1d5db; padding: 7px; vertical-align: top;
+    }
+    .manager-table th {
+      background: #eef2f7; text-align: left; font-weight: bold;
+    }
+    .manager-table .day-heading {
+      text-align: center; min-width: 120px;
+    }
+    .manager-table .row-heading {
+      width: 110px; white-space: nowrap;
+    }
+    .box-settings-table select, .box-settings-table input[type="color"], .box-settings-table input[type="number"],
+    .word-table input[type="text"] {
+      width: 100%; box-sizing: border-box;
+    }
+    .trigger-cell {
+      min-width: 155px;
+    }
+    .trigger-cell-title {
+      display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px;
+    }
+    .trigger-controls {
+      display: flex; flex-direction: column; gap: 5px;
+    }
     .weekday-col select, .weekday-col input[type="color"], .weekday-col input[type="text"],
     .weekday-col input[type="number"] {
       margin-top: 4px; width: 100%; box-sizing: border-box;
@@ -294,22 +322,6 @@ function getBoxManagerKey() {
     console.warn("Manager-Key konnte nicht aus dem Browser-Speicher gelesen werden:", error);
   }
   return "RiddleMatrix-Setup!";
-}
-
-function saveBoxManagerKeyFromSettings() {
-  const input = document.getElementById("boxManagerKeyInput");
-  const key = String(input ? input.value : "").trim();
-  try {
-    if (key) {
-      localStorage.setItem(boxManagerKeyStorageKey, key);
-    } else {
-      localStorage.removeItem(boxManagerKeyStorageKey);
-    }
-  } catch (error) {
-    alert("Manager-Key konnte nicht gespeichert werden: " + error);
-    return;
-  }
-  alert("Manager-Key gespeichert. Neue Box-Aufrufe verwenden den Key automatisch.");
 }
 
 function boxManagerHeaders(baseHeaders = {}) {
@@ -700,7 +712,9 @@ function enterLocalBrowserMode(reason) {
       }
     });
   }
-  connectedBoxes = [];
+  if (!localBrowserMode || (connectedBoxes || []).length === 0) {
+    connectedBoxes = [];
+  }
   renderDeviceList();
   if (statusArea) {
     const message = reason || "Webspace-Modus aktiv: Boxen werden direkt aus diesem Browser im lokalen WLAN verwaltet.";
@@ -1584,27 +1598,28 @@ function showSetup() {
     }
     html += '</div>';
 
-    html += '<div class="weekday-row">';
+    const wordTriggerRange = separateWordTriggers ? [...Array(triggersPerDay).keys()] : [0];
+    html += '<table class="manager-table word-table"><thead><tr><th class="row-heading">Trigger</th>';
     for (let i = 0; i < days.length; i++) {
-      html += `<div class="weekday-col"><label>${dayNames[i]}</label>`;
-      const triggerRange = separateWordTriggers ? [...Array(triggersPerDay).keys()] : [0];
-      triggerRange.forEach(trigger => {
+      html += `<th class="day-heading">${dayNames[i]}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+    wordTriggerRange.forEach(trigger => {
+      html += `<tr><th>${separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</th>`;
+      for (let i = 0; i < days.length; i++) {
         const currentWord = boxOrder.map(hostname => {
           const letters = knownBoxes[hostname]?.letters?.[days[i]] || [];
           return letters[trigger] || "";
         }).join("");
-        const label = separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger";
-        html += `
-          <div class="trigger-entry">
-            <span>${label}</span>
-            <input type="text" class="word-input" data-live-edit="true" placeholder="Wort eingeben (max ${maxLength} Zeichen)"
-              value="${escapeHtml(currentWord)}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this, ${trigger}, ${!separateWordTriggers})"
-              onkeydown="handleKeydown(event, '${days[i]}', this.value, ${maxLength}, this, ${trigger}, ${!separateWordTriggers})">
-          </div>`;
-      });
-      html += '</div>';
-    }
-    html += '</div></div>';
+        html += `<td>
+          <input type="text" class="word-input" data-live-edit="true" placeholder="Wort eingeben (max ${maxLength} Zeichen)"
+            value="${escapeHtml(currentWord)}" onchange="updateWord('${days[i]}', this.value, ${maxLength}, this, ${trigger}, ${!separateWordTriggers})"
+            onkeydown="handleKeydown(event, '${days[i]}', this.value, ${maxLength}, this, ${trigger}, ${!separateWordTriggers})">
+        </td>`;
+      }
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
   }
 
   if (setupTab === "symbols") {
@@ -1647,16 +1662,18 @@ function showSetup() {
       const hostnameArgument = escapeJsString(hostname);
       const transferMark = transferCompleted[hostname] ? '<span class="transfer-badge">✓ Einstellungen übertragen</span>' : '';
       const symbolTransferMark = symbolTransferCompleted[hostname] ? '<span class="transfer-badge">✓ Zeichen/Symbole übertragen</span>' : '';
-      html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}${transferMark}${symbolTransferMark}</h3><div class="weekday-row">`;
+      const triggerRange = separateWordTriggers ? [...Array(triggersPerDay).keys()] : [0];
+      html += `<div class="box-card"><h3><span class="box-order">${index + 1}</span>${escapedHostname}${transferMark}${symbolTransferMark}</h3>`;
+      html += '<table class="manager-table box-settings-table"><thead><tr><th class="row-heading">Wochentag</th>';
+      for (const trigger of triggerRange) {
+        html += `<th>${separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</th>`;
+      }
+      html += '</tr></thead><tbody>';
       for (let i = 0; i < days.length; i++) {
         const letters = box.letters?.[days[i]] || [];
         const colors = box.colors?.[days[i]] || [];
         const delays = box.delays?.[days[i]] || [];
-        html += `
-          <div class="weekday-col">
-            <label>${dayNames[i]}</label>
-            <div class="trigger-container">`;
-        const triggerRange = separateWordTriggers ? [...Array(triggersPerDay).keys()] : [0];
+        html += `<tr><th>${dayNames[i]}</th>`;
         for (const trigger of triggerRange) {
           const letter = letters[trigger] || "";
           const color = sanitizeColor(colors[trigger] || defaultColor);
@@ -1674,17 +1691,20 @@ function showSetup() {
             return `<option value="${optionValue}" ${isSelected ? "selected" : ""}>${escapeHtml(label)}</option>`;
           }).join("");
           html += `
-              <div class="trigger-entry">
-                <span>${separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</span>
+              <td class="trigger-cell"><div class="trigger-controls">
+                <span class="trigger-cell-title">${separateWordTriggers ? `Trigger ${trigger + 1}` : "Alle Trigger"}</span>
+                <label>Zeichen/Symbol
                 <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'letter', true, null, ${!separateWordTriggers})" onfocus="this.size='7'" onblur="this.size='1'" onclick="event.stopPropagation();">
                   ${letterOptionsHtml}
-                </select>
-                <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateWordTriggers})">
+                </select></label>
+                <label>Farbe
+                <input type="color" data-live-edit="true" value="${escapeColor(color)}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'color', true, null, ${!separateWordTriggers})"></label>
+                <label>Farbmodus
                 <select data-live-edit="true" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'colorMode', true, null, ${!separateWordTriggers})">
                   <option value="fixed" ${colorMode === "fixed" ? "selected" : ""}>Einfarbig</option>
                   <option value="random_selected" ${colorMode === "random_selected" ? "selected" : ""}>Zufall (ausgewählt)</option>
                   <option value="random_all" ${colorMode === "random_all" ? "selected" : ""}>Zufall (alle)</option>
-                </select>
+                </select></label>
                 <div class="palette-grid">
                   ${randomPalette.map((entry, paletteIndex) => `
                     <label class="palette-chip">
@@ -1701,13 +1721,11 @@ function showSetup() {
                   <span>Verzögerung (s)</span>
                   <input type="number" class="delay-input" data-live-edit="true" min="0" max="999" step="1" inputmode="numeric" pattern="\\d*" value="${delayDisplay}" onchange="saveField(${hostnameArgument}, '${days[i]}', ${trigger}, this.value, 'delay', true, this, ${!separateWordTriggers})">
                 </div>
-              </div>`;
+              </div></td>`;
         }
-        html += `
-            </div>
-          </div>`;
+        html += '</tr>';
       }
-      html += `</div>
+      html += `</tbody></table>
         <div class="order-buttons">
           <button onclick="moveBoxUp(${hostnameArgument})">↑</button>
           <button onclick="moveBoxDown(${hostnameArgument})">↓</button>
@@ -1746,10 +1764,6 @@ function showAppSettings() {
   html += '<button type="button" id="localScanBtn" onclick="scanLocalSubnet()">Subnetz scannen</button></span>';
   html += '<label for="localBoxIp">Box-IP direkt</label>';
   html += '<span><input id="localBoxIp" type="text" placeholder="z.B. 192.168.1.50"> <button type="button" onclick="learnLocalBoxFromIp()">Hinzufügen/lernen</button></span>';
-  html += '</div>';
-  html += '<div class="settings-grid">';
-  html += '<label for="boxManagerKeyInput">Box-Manager-Key</label>';
-  html += `<span><input id="boxManagerKeyInput" type="password" value="${escapeHtml(getBoxManagerKey())}" placeholder="AP-/Box-Passwort"> <button type="button" onclick="saveBoxManagerKeyFromSettings()">Speichern</button></span>`;
   html += '</div>';
   html += '<div id="localScanStatus" style="margin-top:10px;"></div>';
   html += '<p>Die Suche übernimmt nur Geräte, die wie RiddleMatrix-Boxen antworten. Der IP-Bereich wird automatisch vorgeschlagen, wenn Browser oder Manager ihn sicher erkennen können; sonst bitte Router-/LAN-Bereich eintragen.</p>';

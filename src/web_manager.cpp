@@ -524,7 +524,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         managerFetch('/memory')
             .then(response => response.text())
             .then(memory => {
-                document.getElementById('memoryUsage').innerText = memory + ' bytes';
+                document.getElementById('memoryUsage').innerText = memory;
             })
             .catch(error => console.error('Fehler:', error));
     }
@@ -809,6 +809,18 @@ const char scriptJS[] PROGMEM = R"rawliteral(
         image.src = URL.createObjectURL(file);
     }
 
+    function displayDayTriggersSequential(dayIndex) {
+        const delayMs = 1500;
+        for (let trigger = 0; trigger < 3; trigger++) {
+            window.setTimeout(() => {
+                const select = document.getElementById('letter_' + trigger + '_' + dayIndex);
+                if (select) {
+                    displayLetter(trigger, select.value);
+                }
+            }, trigger * delayMs);
+        }
+    }
+
     function saveWiFi() {
         const formElement = document.getElementById('wifiForm');
         let form = new FormData(formElement);
@@ -873,9 +885,25 @@ const char scriptJS[] PROGMEM = R"rawliteral(
 
     function applyTriggerEditMode() {
         const separate = isSeparateTriggerEditingEnabled();
+        const lettersCheckbox = document.getElementById('separate_trigger_editing_letters');
+        if (lettersCheckbox) {
+            lettersCheckbox.checked = separate;
+        }
         document.querySelectorAll('.advanced-trigger-column').forEach(element => {
             element.style.display = separate ? '' : 'none';
         });
+    }
+
+    function initializeTriggerEditMode() {
+        const delayCheckbox = document.getElementById('separate_trigger_editing');
+        const lettersCheckbox = document.getElementById('separate_trigger_editing_letters');
+        if (delayCheckbox) {
+            delayCheckbox.checked = false;
+        }
+        if (lettersCheckbox) {
+            lettersCheckbox.checked = false;
+        }
+        applyTriggerEditMode();
     }
 
     function syncSharedTriggerFormFields() {
@@ -964,7 +992,7 @@ const char scriptJS[] PROGMEM = R"rawliteral(
     updateWiFiModeFields();
     toggleStaticIpFields();
 
-    applyTriggerEditMode();
+    initializeTriggerEditMode();
 )rawliteral";
 
 void setupWebServer() {
@@ -998,14 +1026,15 @@ void setupWebServer() {
             return;
         }
         html = "<!doctype html><html lang='de'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>";
-        html += "<style>body{font-family:sans-serif;max-width:980px;margin:0 auto;padding:12px;line-height:1.35}fieldset{margin:8px 0}input,select,button{margin:3px 2px;padding:4px}table{border-collapse:collapse;width:100%}td,th{padding:4px;border:1px solid #bbb}h1,h2{margin-bottom:6px}.muted{color:#555;font-size:.92em}</style>";
+        html += "<style>body{font-family:sans-serif;max-width:980px;margin:0 auto;padding:12px;line-height:1.35}fieldset{margin:8px 0}input,select,button{margin:3px 2px;padding:4px}table{border-collapse:collapse;width:100%}td,th{padding:4px;border:1px solid #bbb}th{text-align:left;background:#f3f3f3}h1,h2{margin-bottom:6px}.muted{color:#555;font-size:.92em}</style>";
         html += "</head><body><h1>RiddleMatrix Einstellungen</h1>";
 
         // **WiFi-Einstellungen**
         html += "<h2>WiFi Konfiguration</h2>";
         html += "<form id='wifiForm'>";
-        html += "<p>Standard bleibt: Box verbindet sich nur beim Start zur Verwaltung und schaltet WLAN nach Inaktivität wieder ab.</p>";
-        html += "<fieldset><legend>WLAN-Modus</legend>";
+        html += "<table>";
+        html += "<tr><th>Hinweis</th><td>Standard bleibt: Box verbindet sich nur beim Start zur Verwaltung und schaltet WLAN nach Inaktivität wieder ab.</td></tr>";
+        html += "<tr><th>WLAN-Modus</th><td>";
         html += "<label><input type='radio' name='wifi_mode' value='timed' ";
         html += (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::TimedManager) ? "checked" : "");
         html += "> Standard: Manager/Hotspot zeitweise</label><br>";
@@ -1015,53 +1044,61 @@ void setupWebServer() {
         html += "<label><input type='radio' name='wifi_mode' value='ap_sta' ";
         html += (wifi_operation_mode == static_cast<uint8_t>(WiFiOperationMode::StaWithLocalAp) ? "checked" : "");
         html += "> AP+STA/Mesh-Kopie: WLAN verbinden und zusätzlichen Box-AP starten</label>";
-        html += "</fieldset>";
-        html += "<p>SSID und Hostname sind Pflichtfelder (mindestens 2 Zeichen), das Passwort ist optional.</p>";
-        html += "Netzwerke: <select id='wifiNetworkSelect' onchange='applySelectedWiFiNetwork()'><option value=''>Noch nicht gesucht</option></select> ";
-        html += "<button type='button' onclick='loadWiFiNetworks()'>WLAN suchen</button><br>";
-        html += "SSID: <input type='text' name='ssid' value='" + escapeHtml(String(wifi_ssid)) + "'><br>";
-        html += "Passwort: <input type='password' name='password' placeholder='Leer lassen, um es zu behalten'><br>";
-        html += "<label><input type='checkbox' id='password_remove' name='password_remove' value='on'> Passwort löschen</label><br>";
+        html += "</td></tr>";
+        html += "<tr><th>Pflichtfelder</th><td>SSID und Hostname sind Pflichtfelder (mindestens 2 Zeichen), das Passwort ist optional.</td></tr>";
+        html += "<tr><th>Netzwerke</th><td><select id='wifiNetworkSelect' onchange='applySelectedWiFiNetwork()'><option value=''>Noch nicht gesucht</option></select> ";
+        html += "<button type='button' onclick='loadWiFiNetworks()'>WLAN suchen</button></td></tr>";
+        html += "<tr><th>SSID</th><td><input type='text' name='ssid' value='" + escapeHtml(String(wifi_ssid)) + "'></td></tr>";
+        html += "<tr><th>Passwort</th><td><input type='password' name='password' placeholder='Leer lassen, um es zu behalten'><br>";
+        html += "<label><input type='checkbox' id='password_remove' name='password_remove' value='on'> Passwort löschen</label>";
         html += "<p style='margin-top:4px;'>Leer gelassenes Passwort ohne Haken lässt das bisherige Passwort unverändert.</p>";
-        html += "Hostname: <input type='text' name='hostname' value='" + escapeHtml(String(hostname)) + "'><br>";
-        html += "<div id='wifiSymbolField'><label><input type='checkbox' id='wifi_status_symbol_enabled' name='wifi_status_symbol_enabled' value='on' ";
+        html += "</td></tr>";
+        html += "<tr><th>Hostname</th><td><input type='text' name='hostname' value='" + escapeHtml(String(hostname)) + "'></td></tr>";
+        html += "<tr id='wifiSymbolField'><th>WiFi-Symbol</th><td><label><input type='checkbox' id='wifi_status_symbol_enabled' name='wifi_status_symbol_enabled' value='on' ";
         html += (wifi_status_symbol_enabled ? "checked" : "");
-        html += "> WiFi-Symbol im Standardmodus anzeigen</label></div>";
-        html += "<div id='persistentWifiFields' style='display:none; border-left:3px solid #999; padding-left:10px; margin:8px 0;'>";
-        html += "<p>In dauerhaften WLAN-Modi bleibt die Box online, reconnectet automatisch und zeigt kein WiFi-Symbol auf der Matrix.</p>";
-        html += "<label><input type='checkbox' id='wifi_static_ip_enabled' name='wifi_static_ip_enabled' value='on' ";
+        html += "> Im Standardmodus anzeigen</label></td></tr>";
+        html += "</table>";
+        html += "<div id='persistentWifiFields' style='display:none; margin:8px 0;'>";
+        html += "<table><tr><th>Hinweis</th><td>In dauerhaften WLAN-Modi bleibt die Box online, reconnectet automatisch und zeigt kein WiFi-Symbol auf der Matrix.</td></tr>";
+        html += "<tr><th>IP-Modus</th><td><label><input type='checkbox' id='wifi_static_ip_enabled' name='wifi_static_ip_enabled' value='on' ";
         html += (wifi_static_ip_enabled ? "checked" : "");
-        html += "> Statische IP verwenden</label>";
+        html += "> Statische IP verwenden</label></td></tr></table>";
         html += "<div id='staticIpFields' style='display:none; margin:6px 0;'>";
-        html += "IP: <input type='text' name='static_ip' value='" + escapeHtml(String(wifi_static_ip)) + "'><br>";
-        html += "Gateway: <input type='text' name='gateway' value='" + escapeHtml(String(wifi_gateway)) + "'><br>";
-        html += "Subnetz: <input type='text' name='subnet' value='" + escapeHtml(String(wifi_subnet)) + "'><br>";
-        html += "DNS: <input type='text' name='dns' value='" + escapeHtml(String(wifi_dns)) + "'><br>";
+        html += "<table>";
+        html += "<tr><th>IP</th><td><input type='text' name='static_ip' value='" + escapeHtml(String(wifi_static_ip)) + "'></td></tr>";
+        html += "<tr><th>Gateway</th><td><input type='text' name='gateway' value='" + escapeHtml(String(wifi_gateway)) + "'></td></tr>";
+        html += "<tr><th>Subnetz</th><td><input type='text' name='subnet' value='" + escapeHtml(String(wifi_subnet)) + "'></td></tr>";
+        html += "<tr><th>DNS</th><td><input type='text' name='dns' value='" + escapeHtml(String(wifi_dns)) + "'></td></tr>";
+        html += "</table>";
         html += "</div>";
         html += "</div>";
-        html += "<div id='localApFields' style='display:none; border-left:3px solid #999; padding-left:10px; margin:8px 0;'>";
-        html += "<p>AP+STA startet einen lokalen Box-AP mit denselben Zugangsdaten wie das Ziel-WLAN, sofern hier nichts anderes eingetragen wird.</p>";
-        html += "Lokale AP-SSID: <input type='text' name='local_ap_ssid' value='" + escapeHtml(String(wifi_local_ap_ssid)) + "'><br>";
-        html += "Lokales AP-Passwort: <input type='password' name='local_ap_password' placeholder='Leer lassen = WLAN-Passwort übernehmen'><br>";
+        html += "<div id='localApFields' style='display:none; margin:8px 0;'>";
+        html += "<table>";
+        html += "<tr><th>Hinweis</th><td>AP+STA startet einen lokalen Box-AP mit denselben Zugangsdaten wie das Ziel-WLAN, sofern hier nichts anderes eingetragen wird.</td></tr>";
+        html += "<tr><th>Lokale AP-SSID</th><td><input type='text' name='local_ap_ssid' value='" + escapeHtml(String(wifi_local_ap_ssid)) + "'></td></tr>";
+        html += "<tr><th>Lokales AP-Passwort</th><td><input type='password' name='local_ap_password' placeholder='Leer lassen = WLAN-Passwort übernehmen'></td></tr>";
+        html += "</table>";
         html += "</div>";
         html += "<button type='button' onclick='saveWiFi()'>Speichern</button>";
         html += "</form>";
         // **Anzeige-Einstellungen**
         html += "<h2>Anzeige-Einstellungen</h2>";
         html += "<form id='displayForm'>";
-        html += "Helligkeit (1-255): <input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'><br>";
-        html += "Zeichen-Anzeigezeit (Sekunden, 1-60): <input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'><br>";
-        html += "Automodus-Intervall (Sekunden, 30-600): <input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'><br>";
-        html += "Zufalls-Zeichen bei *: <input type='text' name='random_symbol_pool' maxlength='39' value='" + escapeHtml(String(random_symbol_pool)) + "'><br>";
-        html += "Standalone aktiv von: <input type='time' name='active_start' value='" + escapeHtml(formatMinutesAsTime(standalone_active_start_minutes)) + "'><br>";
-        html += "Standalone aktiv bis: <input type='time' name='active_end' value='" + escapeHtml(formatMinutesAsTime(standalone_active_end_minutes)) + "'><br>";
-        html += "<label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> Automodus aktivieren</label>";
-        html += "<p class='muted'>Zulässige Werte: Helligkeit 1-255, Anzeigezeit 1-60&nbsp;s, Automodus-Intervall 30-600&nbsp;s. Aktivzeiten im Format HH:MM; gleicher Start- und Endwert bedeutet 24-Stunden-Betrieb.</p>";
-        html += "<br><button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
+        html += "<table>";
+        html += "<tr><th>Helligkeit</th><td><input type='number' name='brightness' min='1' max='255' value='" + escapeHtml(String(display_brightness)) + "'> <span class='muted'>1-255</span></td></tr>";
+        html += "<tr><th>Zeichen-Anzeigezeit</th><td><input type='number' name='letter_time' min='1' max='60' value='" + escapeHtml(String(letter_display_time)) + "'> <span class='muted'>Sekunden, 1-60</span></td></tr>";
+        html += "<tr><th>Automodus-Intervall</th><td><input type='number' name='auto_interval' min='30' max='600' value='" + escapeHtml(String(letter_auto_display_interval)) + "'> <span class='muted'>Sekunden, 30-600</span></td></tr>";
+        html += "<tr><th>Zufalls-Zeichen bei *</th><td><input type='text' name='random_symbol_pool' maxlength='39' value='" + escapeHtml(String(random_symbol_pool)) + "'></td></tr>";
+        html += "<tr><th>Standalone aktiv von</th><td><input type='time' name='active_start' value='" + escapeHtml(formatMinutesAsTime(standalone_active_start_minutes)) + "'></td></tr>";
+        html += "<tr><th>Standalone aktiv bis</th><td><input type='time' name='active_end' value='" + escapeHtml(formatMinutesAsTime(standalone_active_end_minutes)) + "'></td></tr>";
+        html += "<tr><th>Automodus</th><td><label><input type='checkbox' id='auto_mode' name='auto_mode' " + String(autoDisplayMode ? "checked='checked'" : "") + "> aktivieren</label></td></tr>";
+        html += "<tr><th>Hinweis</th><td class='muted'>Aktivzeiten im Format HH:MM; gleicher Start- und Endwert bedeutet 24-Stunden-Betrieb.</td></tr>";
+        html += "</table>";
+        html += "<button type='button' onclick='saveDisplaySettings()'>Speichern</button>";
         html += "</form>";
 
         html += "<h2>Trigger-Verzögerungen pro Wochentag</h2>";
-        html += "<label><input type='checkbox' id='separate_trigger_editing' onchange='applyTriggerEditMode()'> Trigger 2 und 3 separat bearbeiten</label>";
+        html += "<label><input type='checkbox' id='separate_trigger_editing' autocomplete='off' onchange='applyTriggerEditMode()'> Trigger 2 und 3 separat bearbeiten</label>";
         html += "<p style='margin-top:4px;'>Ohne Haken werden die Werte von Trigger 1 beim Speichern auf alle Trigger kopiert.</p>";
         html += "<form id='delaysForm'>";
         html += "<table border='1' style='width:100%; text-align:center;'>";
@@ -1090,35 +1127,33 @@ void setupWebServer() {
         html += "</form>";
 
         // **RTC-Zeit anzeigen & ändern**
-        html += "<h2>Datum & Uhrzeit setzen</h2>";
-        html += "<p>Aktuelle Zeit: <span id='rtcTime'>Laden...</span></p>";
-        html += "<p>Wochentag: <span id='rtcWeekday'>-</span></p>";
-        html += "<p>Freier RAM: <span id='memoryUsage'>Laden...</span></p>";
+        html += "<h2>Datum &amp; Uhrzeit</h2>";
+        html += "<table><tr><th>Aktuelle Zeit</th><td><span id='rtcTime'>Laden...</span></td></tr>";
+        html += "<tr><th>Freier RAM</th><td><span id='memoryUsage'>Laden...</span> bytes</td></tr></table>";
         html += "<form id='rtcForm'>";
-        html += "Datum (YYYY-MM-DD): <input type='date' name='date'><br>";
-        html += "Uhrzeit (HH:MM:SS): <input type='time' name='time' step='1'><br>";
+        html += "<table><tr><th>Datum</th><td><input type='date' name='date'></td></tr>";
+        html += "<tr><th>Uhrzeit</th><td><input type='time' name='time' step='1'></td></tr></table>";
         html += "<button type='button' onclick='setRTC()'>Speichern</button>";
         html += "</form>";
         html += "<button type='button' onclick='syncNTP()'>Zeit mit NTP synchronisieren</button>";
 
         html += "<h2>Schnellbearbeitung Zeichen &amp; Farben</h2>";
-        html += "<p class='muted'>Für schnelle Änderungen direkt an der Box. Erweiterte Farbmodi, Zufallspaletten und der 32x32-Zeicheneditor bleiben im RiddleMatrix-Manager.</p>";
+        html += "<p class='muted'>Schnelle Änderungen direkt an der Box. Der große Zeicheneditor bleibt im RiddleMatrix-Manager.</p>";
+        html += "<label><input type='checkbox' id='separate_trigger_editing_letters' autocomplete='off' onchange='document.getElementById(\"separate_trigger_editing\").checked=this.checked; applyTriggerEditMode();'> Alle 3 Trigger separat anzeigen</label>";
         html += "<form id='lettersForm'>";
-        html += "<table style='text-align:center;'><tr><th>Wochentag</th>";
+        const size_t displayDayOrder[NUM_DAYS] = {1, 2, 3, 4, 5, 6, 0};
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
-            String classAttribute = trigger == 0 ? "" : " class='advanced-trigger-column'";
-            html += "<th" + classAttribute + ">Trigger " + String(trigger + 1) + "</th>";
-        }
-        html += "</tr>";
-        for (size_t day = 0; day < NUM_DAYS; ++day) {
-            html += "<tr><td>" + escapeHtml(String(daysOfTheWeek[day])) + "</td>";
-            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            String tableClass = trigger == 0 ? "" : " class='advanced-trigger-column'";
+            html += "<table" + tableClass + " style='text-align:center; margin-top:8px;'><tr><th>Trigger " + String(trigger + 1) + "</th>";
+            for (size_t orderIndex = 0; orderIndex < NUM_DAYS; ++orderIndex) {
+                const size_t day = displayDayOrder[orderIndex];
+                html += "<th>" + escapeHtml(String(daysOfTheWeek[day])) + "</th>";
+            }
+            html += "</tr><tr><th>Zeichen</th>";
+            for (size_t orderIndex = 0; orderIndex < NUM_DAYS; ++orderIndex) {
+                const size_t day = displayDayOrder[orderIndex];
                 String selectId = "letter_" + String(trigger) + "_" + String(day);
-                String colorId = "color_" + String(trigger) + "_" + String(day);
-                String colorModeId = "color_mode_" + String(trigger) + "_" + String(day);
-                String classAttribute = trigger == 0 ? "" : " class='advanced-trigger-column'";
-                html += "<td" + classAttribute + ">";
-                html += "<select id='" + selectId + "' name='" + selectId + "'>";
+                html += "<td><select id='" + selectId + "' name='" + selectId + "'>";
                 for (size_t idx = 0; idx < sizeof(availableLetters); ++idx) {
                     char optionChar = availableLetters[idx];
                     const String optionValue = escapeHtml(String(optionChar));
@@ -1127,19 +1162,31 @@ void setupWebServer() {
                     html += (dailyLetters[trigger][day] == optionChar) ? "selected" : "";
                     html += ">" + optionLabel + "</option>";
                 }
-                html += "</select>";
-                html += "<br><input type='color' id='" + colorId + "' name='" + colorId + "' value='" + escapeHtml(String(dailyLetterColors[trigger][day])) + "'>";
-                html += "<input type='hidden' id='" + colorModeId + "' name='" + colorModeId + "' value='fixed'>";
-                html += "<br><button type='button' onclick='displayLetter(" + String(trigger) + ", document.getElementById(\"" + selectId + "\").value)'>Anzeigen</button>";
+                html += "</select></td>";
+            }
+            html += "</tr><tr><th>Farbe</th>";
+            for (size_t orderIndex = 0; orderIndex < NUM_DAYS; ++orderIndex) {
+                const size_t day = displayDayOrder[orderIndex];
+                String colorId = "color_" + String(trigger) + "_" + String(day);
+                String colorModeId = "color_mode_" + String(trigger) + "_" + String(day);
+                html += "<td><input type='color' id='" + colorId + "' name='" + colorId + "' value='" + escapeHtml(String(dailyLetterColors[trigger][day])) + "'>";
+                html += "<input type='hidden' id='" + colorModeId + "' name='" + colorModeId + "' value='fixed'></td>";
+            }
+            html += "</tr><tr><th>Anzeigen</th>";
+            for (size_t orderIndex = 0; orderIndex < NUM_DAYS; ++orderIndex) {
+                const size_t day = displayDayOrder[orderIndex];
+                String selectId = "letter_" + String(trigger) + "_" + String(day);
+                html += "<td><button type='button' onclick='displayLetter(" + String(trigger) + ", document.getElementById(\"" + selectId + "\").value)'>Trigger " + String(trigger + 1) + "</button>";
+                if (trigger == 0) {
+                    html += "<br><button type='button' onclick='displayDayTriggersSequential(" + String(day) + ")'>Alle</button>";
+                }
                 html += "</td>";
             }
-            html += "</tr>";
+            html += "</tr></table>";
         }
-        html += "</table><br><button type='button' onclick='saveAllLetters()'>Zeichen &amp; Farben speichern</button>";
+        html += "<br><button type='button' onclick='saveAllLetters()'>Zeichen &amp; Farben speichern</button>";
         html += "</form>";
 
-        html += "<h2>Trigger, Zeichen &amp; Symbole</h2>";
-        html += "<p>Die komplette Bearbeitung von Trigger-Verzögerungen, erweiterten Farbmodi und Zeichen/Symbolen erfolgt im RiddleMatrix-Manager. Die Firmware-Endpunkte zum Übernehmen, Speichern und Anzeigen bleiben aktiv.</p>";
         html += "<h2>Manueller Trigger</h2>";
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
             html += "<button type='button' style='margin-right:8px;' onclick='triggerLetter(" + String(trigger) + ")'>Trigger " + String(trigger + 1) + " auslösen</button>";
