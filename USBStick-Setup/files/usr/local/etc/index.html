@@ -237,6 +237,8 @@ let devicesPollInFlight = false;
 let devicesPollPromise = null;
 let devicesPollTimeoutId = null;
 const devicesPollIntervalMs = 1000;
+let emptyConnectedPolls = 0;
+const maxEmptyConnectedPollsBeforeClear = 5;
 let localBrowserMode = false;
 let localScanInFlight = false;
 let localScanAbortController = null;
@@ -1431,6 +1433,17 @@ async function fetchDevices() {
       const data = await res.json();
       const newKnownBoxes = data.boxen || {};
       const newConnectedBoxes = data.connected || [];
+      let effectiveConnectedBoxes = newConnectedBoxes;
+      if (newConnectedBoxes.length > 0) {
+        emptyConnectedPolls = 0;
+      } else if ((connectedBoxes || []).length > 0) {
+        emptyConnectedPolls += 1;
+        if (emptyConnectedPolls < maxEmptyConnectedPollsBeforeClear) {
+          effectiveConnectedBoxes = connectedBoxes;
+        }
+      } else {
+        emptyConnectedPolls = 0;
+      }
       const newBoxOrder = data.boxOrder || Object.keys(newKnownBoxes);
 
       const normalizedIncoming = {};
@@ -1468,11 +1481,11 @@ async function fetchDevices() {
       // Pruefe auf Aenderungen
       const hasChanges =
         JSON.stringify(knownBoxes) !== JSON.stringify(mergedKnownBoxes) ||
-        JSON.stringify(connectedBoxes) !== JSON.stringify(newConnectedBoxes) ||
+        JSON.stringify(connectedBoxes) !== JSON.stringify(effectiveConnectedBoxes) ||
         JSON.stringify(boxOrder) !== JSON.stringify(mergedBoxOrder);
 
       knownBoxes = mergedKnownBoxes;
-      connectedBoxes = newConnectedBoxes;
+      connectedBoxes = effectiveConnectedBoxes;
       boxOrder = mergedBoxOrder;
       saveLocalBrowserConfig();
 

@@ -843,6 +843,36 @@ def _ping_host(ip: str) -> bool:
         return True
 
 
+def _quick_http_probe(ip: str) -> bool:
+    try:
+        with socket.create_connection((ip, 80), timeout=0.08):
+            pass
+    except OSError:
+        return False
+
+    try:
+        response = requests.get(
+            f"http://{ip}/api/hello",
+            timeout=0.45,
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        return False
+
+    try:
+        _ensure_no_redirect(response, action="Schnelltest", host=ip)
+    except RedirectResponseError:
+        return False
+
+    if not response.ok:
+        return False
+    try:
+        data = response.json()
+    except ValueError:
+        return False
+    return isinstance(data, dict) and bool(data.get("riddleMatrix"))
+
+
 def get_hello_hostname(ip: str) -> str:
     ip = sanitize_ipv4(ip)
     if ip == SAFE_IP_PLACEHOLDER:
@@ -891,7 +921,7 @@ def _iter_arp_scan_ips():
 
 
 def _inspect_candidate_device(ip: str, config: dict):
-    if not _ping_host(ip):
+    if not _quick_http_probe(ip):
         return None, config
 
     try:
@@ -982,56 +1012,58 @@ def get_connected_devices():
                         )
                         continue
 
-                    if ping_rc == 0:
-                        try:
-                            r = requests.get(
-                                f"http://{ip}/",
-                                headers=box_manager_headers(),
-                                timeout=3,
-                                allow_redirects=False,
-                            )
-                        except requests.RequestException:
-                            continue
+                    if ping_rc != 0 and not _quick_http_probe(ip):
+                        continue
 
-                        _ensure_no_redirect(r, action="Geräte-Scan", host=ip)
+                    try:
+                        r = requests.get(
+                            f"http://{ip}/",
+                            headers=box_manager_headers(),
+                            timeout=3,
+                            allow_redirects=False,
+                        )
+                    except requests.RequestException:
+                        continue
 
-                        hostname = ""
-                        if r.ok:
-                            soup = BeautifulSoup(r.text, "html.parser")
-                            hostname_field = soup.find("input", {"name": "hostname"})
-                            if hostname_field is not None:
-                                hostname = get_hostname_from_web(ip)
+                    _ensure_no_redirect(r, action="Geräte-Scan", host=ip)
 
-                        if not hostname or hostname == "Unbekannt":
-                            hostname = get_hello_hostname(ip)
+                    hostname = ""
+                    if r.ok:
+                        soup = BeautifulSoup(r.text, "html.parser")
+                        hostname_field = soup.find("input", {"name": "hostname"})
+                        if hostname_field is not None:
+                            hostname = get_hostname_from_web(ip)
 
-                        if not hostname:
-                            continue
+                    if not hostname or hostname == "Unbekannt":
+                        hostname = get_hello_hostname(ip)
 
-                        hostname = sanitize_hostname(hostname)
-                        boxen = config.get("boxen", {})
-                        identifier = _allocate_unique_hostname(hostname, config)
+                    if not hostname:
+                        continue
 
-                        existing_box = boxen.get(identifier)
-                        if isinstance(existing_box, dict) and existing_box.get("ip") != ip:
-                            existing_box["ip"] = ip
+                    hostname = sanitize_hostname(hostname)
+                    boxen = config.get("boxen", {})
+                    identifier = _allocate_unique_hostname(hostname, config)
+
+                    existing_box = boxen.get(identifier)
+                    if isinstance(existing_box, dict) and existing_box.get("ip") != ip:
+                        existing_box["ip"] = ip
+                        save_config(config)
+
+                    for existing_identifier, box in list(boxen.items()):
+                        if (
+                            isinstance(box, dict)
+                            and box.get("ip") == ip
+                            and existing_identifier != identifier
+                        ):
+                            box["ip"] = SAFE_IP_PLACEHOLDER
                             save_config(config)
+                            break
 
-                        for existing_identifier, box in list(boxen.items()):
-                            if (
-                                isinstance(box, dict)
-                                and box.get("ip") == ip
-                                and existing_identifier != identifier
-                            ):
-                                box["ip"] = SAFE_IP_PLACEHOLDER
-                                save_config(config)
-                                break
+                    devices.append({"ip": ip, "hostname": identifier})
 
-                        devices.append({"ip": ip, "hostname": identifier})
-
-                        if existing_box is None:
-                            learn_box(ip, identifier)
-                            config = load_config()
+                    if existing_box is None:
+                        learn_box(ip, identifier)
+                        config = load_config()
     return devices
 
 def get_hostname_from_web(ip):
