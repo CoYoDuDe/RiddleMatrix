@@ -359,6 +359,10 @@ function isHostedHttpsMode() {
   return location.protocol === "https:" && !["localhost", "127.0.0.1", "::1"].includes(location.hostname);
 }
 
+function shouldUseLocalBrowserMode() {
+  return isHostedHttpsMode() || location.protocol === "file:";
+}
+
 function updateRuntimeButtons() {
   const shutdownButton = document.getElementById("shutdown");
   const settingsButton = document.getElementById("settingsBtn");
@@ -1365,6 +1369,10 @@ function normalizeBox(box) {
 }
 
 async function fetchDevices() {
+  if (shouldUseLocalBrowserMode() && !localBrowserMode) {
+    enterLocalBrowserMode("Lokaler Browser-Modus aktiv: bekannte Boxen bleiben im Browser gespeichert.");
+    return Promise.resolve();
+  }
   if (localBrowserMode) {
     enterLocalBrowserMode();
     return Promise.resolve();
@@ -1378,7 +1386,7 @@ async function fetchDevices() {
     try {
       const res = await fetch(managerPath("/devices"));
       if (!res.ok) {
-        if (isHostedHttpsMode()) {
+        if (shouldUseLocalBrowserMode()) {
           enterLocalBrowserMode("Webspace-Modus aktiv: /devices ist auf dem Server nicht verfuegbar, lokale Boxen werden im Browser gespeichert.");
           return;
         }
@@ -1475,7 +1483,7 @@ async function fetchDevices() {
         showSetup();
       }
     } catch (e) {
-      if (isHostedHttpsMode()) {
+      if (shouldUseLocalBrowserMode()) {
         enterLocalBrowserMode("Webspace-Modus aktiv: Der Server kann dein lokales WLAN nicht sehen, der Browser verwaltet die Boxen direkt.");
         return;
       }
@@ -2136,10 +2144,10 @@ async function transferBox(hostname) {
         color_modes: box.colorModes,
         color_palette_masks: box.colorPaletteMasks
       };
-      const response = await fetch(`http://${ip}/updateAllLetters`, {
+      const response = await fetch(boxManagerUrl(`http://${ip}/updateAllLetters`), {
         method: "POST",
         mode: "cors",
-        headers,
+        headers: boxManagerHeaders(headers),
         body: JSON.stringify(payload)
       });
       statusText = response.ok ? "Übertragen" : `Fehler (${response.status})`;
