@@ -139,6 +139,7 @@ ensure_system_packages() {
     firmware-brcm80211
     firmware-libertas
     firmware-zd1211
+    firmware-mediatek
     firmware-misc-nonfree
     iw
     wireless-tools
@@ -148,10 +149,6 @@ ensure_system_packages() {
     libssl-dev
     build-essential
   )
-
-  if [[ "$target_arch" = "amd64" ]]; then
-    packages+=(linux-image-cloud-amd64)
-  fi
 
   local admindir="$TARGET_ROOT/var/lib/dpkg"
   local dpkg_query="dpkg-query"
