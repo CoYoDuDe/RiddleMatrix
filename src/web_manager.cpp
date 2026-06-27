@@ -988,8 +988,45 @@ void setupWebServer() {
         html += "</form>";
         html += "<button type='button' onclick='syncNTP()'>Zeit mit NTP synchronisieren</button>";
 
+        html += "<h2>Schnellbearbeitung Zeichen &amp; Farben</h2>";
+        html += "<p class='muted'>Fuer schnelle Aenderungen direkt an der Box. Erweiterte Farbmodi, Zufallspaletten und der 32x32-Zeicheneditor bleiben im RiddleMatrix-Manager.</p>";
+        html += "<form id='lettersForm'>";
+        html += "<table style='text-align:center;'><tr><th>Wochentag</th>";
+        for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+            String classAttribute = trigger == 0 ? "" : " class='advanced-trigger-column'";
+            html += "<th" + classAttribute + ">Trigger " + String(trigger + 1) + "</th>";
+        }
+        html += "</tr>";
+        for (size_t day = 0; day < NUM_DAYS; ++day) {
+            html += "<tr><td>" + escapeHtml(String(daysOfTheWeek[day])) + "</td>";
+            for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
+                String selectId = "letter_" + String(trigger) + "_" + String(day);
+                String colorId = "color_" + String(trigger) + "_" + String(day);
+                String colorModeId = "color_mode_" + String(trigger) + "_" + String(day);
+                String classAttribute = trigger == 0 ? "" : " class='advanced-trigger-column'";
+                html += "<td" + classAttribute + ">";
+                html += "<select id='" + selectId + "' name='" + selectId + "'>";
+                for (size_t idx = 0; idx < sizeof(availableLetters); ++idx) {
+                    char optionChar = availableLetters[idx];
+                    const String optionValue = escapeHtml(String(optionChar));
+                    const String optionLabel = escapeHtml(getLetterOptionLabel(optionChar));
+                    html += "<option value='" + optionValue + "' ";
+                    html += (dailyLetters[trigger][day] == optionChar) ? "selected" : "";
+                    html += ">" + optionLabel + "</option>";
+                }
+                html += "</select>";
+                html += "<br><input type='color' id='" + colorId + "' name='" + colorId + "' value='" + escapeHtml(String(dailyLetterColors[trigger][day])) + "'>";
+                html += "<input type='hidden' id='" + colorModeId + "' name='" + colorModeId + "' value='fixed'>";
+                html += "<br><button type='button' onclick='displayLetter(" + String(trigger) + ", document.getElementById(\"" + selectId + "\").value)'>Anzeigen</button>";
+                html += "</td>";
+            }
+            html += "</tr>";
+        }
+        html += "</table><br><button type='button' onclick='saveAllLetters()'>Zeichen &amp; Farben speichern</button>";
+        html += "</form>";
+
         html += "<h2>Trigger, Zeichen &amp; Symbole</h2>";
-        html += "<p>Die komplette Bearbeitung von Tageswerten, Farben, Trigger-Verzoegerungen und Zeichen/Symbolen erfolgt im RiddleMatrix-Manager. Die Firmware-Endpunkte zum Uebernehmen, Speichern und Anzeigen bleiben aktiv.</p>";
+        html += "<p>Die komplette Bearbeitung von Trigger-Verzoegerungen, erweiterten Farbmodi und Zeichen/Symbolen erfolgt im RiddleMatrix-Manager. Die Firmware-Endpunkte zum Uebernehmen, Speichern und Anzeigen bleiben aktiv.</p>";
         html += "<h2>Manueller Trigger</h2>";
         for (size_t trigger = 0; trigger < NUM_TRIGGERS; ++trigger) {
             html += "<button type='button' style='margin-right:8px;' onclick='triggerLetter(" + String(trigger) + ")'>Trigger " + String(trigger + 1) + " ausloesen</button>";

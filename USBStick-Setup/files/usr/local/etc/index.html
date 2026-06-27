@@ -649,9 +649,7 @@ function enterLocalBrowserMode(reason) {
       }
     });
   }
-  connectedBoxes = boxOrder
-    .map(hostname => ({ hostname, ip: knownBoxes[hostname]?.ip }))
-    .filter(box => box.ip && box.ip !== "0.0.0.0");
+  connectedBoxes = [];
   renderDeviceList();
   if (statusArea) {
     const message = reason || "Webspace-Modus aktiv: Boxen werden direkt aus diesem Browser im lokalen WLAN verwaltet.";
@@ -1022,8 +1020,10 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
         return null;
       }
       hostname = hostnameFromBoxHtml(html, ip);
-      learnedBox = extractLocalBoxStateFromHtml(html, ip);
-      learnedBox = await fetchLocalTriggerDelays(ip, learnedBox, signal);
+      if (!Object.prototype.hasOwnProperty.call(knownBoxes, hostname)) {
+        learnedBox = extractLocalBoxStateFromHtml(html, ip);
+        learnedBox = await fetchLocalTriggerDelays(ip, learnedBox, signal);
+      }
     } else if (silent) {
       return null;
     }
@@ -1038,7 +1038,9 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
   while (knownBoxes[candidate] && knownBoxes[candidate].ip !== ip) {
     candidate = `${hostname}-${suffix++}`;
   }
-  knownBoxes[candidate] = learnedBox;
+  if (!knownBoxes[candidate]) {
+    knownBoxes[candidate] = learnedBox;
+  }
   knownBoxes[candidate].ip = ip;
   if (!boxOrder.includes(candidate)) {
     boxOrder.push(candidate);
@@ -1046,6 +1048,8 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
   saveLocalBrowserConfig();
   if (!silent) {
     enterLocalBrowserMode(`Lokale Box gespeichert: ${candidate} (${ip})`);
+    connectedBoxes = [{ hostname: candidate, ip }];
+    renderDeviceList();
     showSetup();
   }
   return { hostname: candidate, ip };
@@ -1103,6 +1107,7 @@ async function scanLocalSubnet(options = {}) {
 
   let checked = 0;
   let found = 0;
+  const foundBoxes = [];
   const ips = [];
   for (let host = 2; host <= 254; host += 1) {
     ips.push(`${subnet}.${host}`);
@@ -1122,6 +1127,10 @@ async function scanLocalSubnet(options = {}) {
       checked += 1;
       if (result) {
         found += 1;
+        if (!foundBoxes.some(box => box.hostname === result.hostname)) {
+          foundBoxes.push(result);
+        }
+        connectedBoxes = foundBoxes.slice();
         renderDeviceList();
         saveLocalBrowserConfig();
       }
@@ -1140,9 +1149,7 @@ async function scanLocalSubnet(options = {}) {
     if (scanButton) {
       scanButton.textContent = "Subnetz scannen";
     }
-    connectedBoxes = boxOrder
-      .map(hostname => ({ hostname, ip: knownBoxes[hostname]?.ip }))
-      .filter(box => box.ip && box.ip !== "0.0.0.0");
+    connectedBoxes = foundBoxes.slice();
     saveLocalBrowserConfig();
     renderDeviceList();
     showSetup();
@@ -1307,20 +1314,21 @@ async function fetchDevices() {
         mergedKnownBoxes[hostname] = normalizeBox(JSON.parse(JSON.stringify(box || {})));
       });
       Object.entries(normalizedIncoming).forEach(([hostname, box]) => {
-        mergedKnownBoxes[hostname] = normalizeBox({
-          ...(mergedKnownBoxes[hostname] || {}),
-          ...box,
-          ip: box.ip || mergedKnownBoxes[hostname]?.ip
-        });
+        if (mergedKnownBoxes[hostname]) {
+          mergedKnownBoxes[hostname].ip = box.ip || mergedKnownBoxes[hostname].ip;
+        } else {
+          mergedKnownBoxes[hostname] = normalizeBox(box);
+        }
       });
       (newConnectedBoxes || []).forEach(box => {
         if (!box?.hostname || !box?.ip) {
           return;
         }
-        mergedKnownBoxes[box.hostname] = normalizeBox({
-          ...(mergedKnownBoxes[box.hostname] || {}),
-          ip: box.ip
-        });
+        if (mergedKnownBoxes[box.hostname]) {
+          mergedKnownBoxes[box.hostname].ip = box.ip;
+        } else {
+          mergedKnownBoxes[box.hostname] = normalizeBox({ ip: box.ip });
+        }
       });
       const mergedBoxOrder = [];
       [...boxOrder, ...newBoxOrder, ...Object.keys(mergedKnownBoxes)].forEach(hostname => {
@@ -1379,28 +1387,17 @@ async function fetchDevices() {
 
 function renderDeviceList() {
   const list = document.getElementById("deviceList");
-  const onlineBoxes = new Map((connectedBoxes || []).map(box => [box.hostname, box]));
-  const visibleBoxes = boxOrder
-    .map(hostname => {
-      const known = knownBoxes[hostname] || {};
-      const online = onlineBoxes.get(hostname);
-      const ip = online?.ip || known.ip;
-      return ip ? { hostname, ip, online: localBrowserMode || !!online } : null;
-    })
-    .filter(Boolean);
-  (connectedBoxes || []).forEach(box => {
-    if (box?.hostname && box?.ip && !visibleBoxes.some(entry => entry.hostname === box.hostname)) {
-      visibleBoxes.push({ hostname: box.hostname, ip: box.ip, online: true });
-    }
-  });
+  const visibleBoxes = (connectedBoxes || [])
+    .filter(box => box?.hostname && box?.ip)
+    .map(box => ({ hostname: box.hostname, ip: box.ip }));
   list.innerHTML = visibleBoxes.length ? "" : "Keine verbundenen Boxen";
-  visibleBoxes.forEach(({ hostname, ip, online }) => {
+  visibleBoxes.forEach(({ hostname, ip }) => {
     const div = document.createElement("div");
-    div.className = "device" + (online ? "" : " offline");
+    div.className = "device";
     const title = document.createElement("strong");
     title.textContent = hostname;
     const detail = document.createElement("small");
-    detail.textContent = online ? `(${ip})` : `(${ip}) zuletzt bekannt`;
+    detail.textContent = `(${ip})`;
     div.appendChild(title);
     div.appendChild(detail);
     div.onclick = () => openBox(ip);
