@@ -129,6 +129,8 @@ ensure_system_packages() {
     xserver-xorg
     xinit
     x11-xserver-utils
+    dbus-x11
+    openbox
     cloud-guest-utils
     parted
     firefox-esr
