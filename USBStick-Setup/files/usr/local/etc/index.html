@@ -236,9 +236,9 @@ let boxOrder = [];
 let devicesPollInFlight = false;
 let devicesPollPromise = null;
 let devicesPollTimeoutId = null;
-const devicesPollIntervalMs = 1000;
+const devicesPollIntervalMs = 2000;
 let emptyConnectedPolls = 0;
-const maxEmptyConnectedPollsBeforeClear = 5;
+const maxEmptyConnectedPollsBeforeClear = 30;
 let localBrowserMode = false;
 let localScanInFlight = false;
 let localScanAbortController = null;
@@ -250,6 +250,7 @@ const localStorageKey = "riddlematrix.localBrowserConfig.v1";
 const symbolStorageKey = "riddlematrix.customSymbols.v1";
 const webspaceAuthStorageKey = "riddlematrix.webspaceAuth.v1";
 const boxManagerKeyStorageKey = "riddlematrix.boxManagerKey.v1";
+const boxManagerPerBoxKeyStorageKey = "riddlematrix.boxManagerKeysByIp.v1";
 const managerBasePath = location.pathname.endsWith("/")
   ? location.pathname
   : location.pathname.replace(/[^/]*$/, "");
@@ -326,22 +327,100 @@ function getBoxManagerKey() {
   return "RiddleMatrix-Setup!";
 }
 
-function boxManagerHeaders(baseHeaders = {}) {
+function getRememberedBoxManagerKeysByIp() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(boxManagerPerBoxKeyStorageKey) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function rememberBoxManagerKey(ip, key) {
+  ip = validateIpAddress(ip);
+  key = String(key || "").trim();
+  if (!ip || !key) {
+    return;
+  }
+  try {
+    const map = getRememberedBoxManagerKeysByIp();
+    map[ip] = key;
+    localStorage.setItem(boxManagerPerBoxKeyStorageKey, JSON.stringify(map));
+  } catch (error) {
+    console.warn("Manager-Key konnte nicht pro Box gespeichert werden:", error);
+  }
+}
+
+function getBoxManagerCandidateKeys(ip = "") {
+  const keys = [];
+  const addKey = value => {
+    const key = String(value || "").trim();
+    if (key && !keys.includes(key)) {
+      keys.push(key);
+    }
+  };
+  const remembered = getRememberedBoxManagerKeysByIp();
+  if (ip && remembered[ip]) {
+    addKey(remembered[ip]);
+  }
+  addKey(window.RIDDLEMATRIX_BOX_MANAGER_KEY);
+  try {
+    addKey(localStorage.getItem(boxManagerKeyStorageKey));
+  } catch (error) {
+  }
+  addKey("RiddleMatrix-Setup!");
+  return keys.length ? keys : [""];
+}
+
+function boxManagerHeaders(baseHeaders = {}, keyOverride = null) {
   const headers = { ...baseHeaders };
-  const key = getBoxManagerKey();
+  const key = keyOverride === null ? getBoxManagerKey() : String(keyOverride || "").trim();
   if (key) {
     headers["X-RiddleMatrix-Manager-Key"] = key;
   }
   return headers;
 }
 
-function boxManagerUrl(url) {
-  const key = getBoxManagerKey();
+function boxManagerUrl(url, keyOverride = null) {
+  const key = keyOverride === null ? getBoxManagerKey() : String(keyOverride || "").trim();
   if (!key) {
     return url;
   }
   const separator = url.includes("?") ? "&" : "?";
   return `${url}${separator}rm_key=${encodeURIComponent(key)}`;
+}
+
+async function fetchBoxWithManagerKeys(ip, path = "/", options = {}, timeoutMs = 1200) {
+  ip = validateIpAddress(ip);
+  if (!ip) {
+    return { response: null, key: "", error: new Error("ungueltige IP") };
+  }
+  let lastResponse = null;
+  let lastError = null;
+  const cleanPath = String(path || "/").startsWith("/") ? String(path || "/") : `/${path}`;
+  for (const key of getBoxManagerCandidateKeys(ip)) {
+    try {
+      const response = await fetchWithTimeout(
+        boxManagerUrl(`http://${ip}${cleanPath}`, key),
+        {
+          ...options,
+          headers: boxManagerHeaders(options.headers || {}, key)
+        },
+        timeoutMs
+      );
+      lastResponse = response;
+      if (response.ok) {
+        rememberBoxManagerKey(ip, key);
+        return { response, key, error: null };
+      }
+      if (response.status !== 401 && response.status !== 403) {
+        return { response, key, error: null };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  return { response: lastResponse, key: "", error: lastError };
 }
 let currentWordTrigger = 0;
 let separateWordTriggers = false;
@@ -1097,9 +1176,10 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
   let learnedBox = makeDefaultBox(ip);
   let helloMatched = false;
   try {
-    const response = await fetchWithTimeout(
-      boxManagerUrl(`http://${ip}/`),
-      { method: "GET", mode: "cors", cache: "no-store", signal, headers: boxManagerHeaders() },
+    const { response } = await fetchBoxWithManagerKeys(
+      ip,
+      "/",
+      { method: "GET", mode: "cors", cache: "no-store", signal },
       900
     );
     if (response.ok) {
@@ -1113,9 +1193,10 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
         learnedBox = await fetchLocalTriggerDelays(ip, learnedBox, signal);
       }
     } else {
-      const helloResponse = await fetchWithTimeout(
-        boxManagerUrl(`http://${ip}/api/hello`),
-        { method: "GET", mode: "cors", cache: "no-store", signal, headers: boxManagerHeaders() },
+      const { response: helloResponse } = await fetchBoxWithManagerKeys(
+        ip,
+        "/api/hello",
+        { method: "GET", mode: "cors", cache: "no-store", signal },
         900
       );
       if (helloResponse.ok) {
@@ -1174,6 +1255,12 @@ async function learnLocalBoxByIp(ip, { signal = null, silent = false } = {}) {
   if (!silent) {
     enterLocalBrowserMode(`Lokale Box gespeichert: ${candidate} (${ip})`);
     connectedBoxes = [{ hostname: candidate, ip }];
+  } else if (!connectedBoxes.some(box => box.hostname === candidate || box.ip === ip)) {
+    connectedBoxes = [...connectedBoxes, { hostname: candidate, ip }];
+    emptyConnectedPolls = 0;
+    renderDeviceList();
+  }
+  if (!silent) {
     renderDeviceList();
     showSetup();
   }
@@ -1549,13 +1636,39 @@ function renderDeviceList() {
   });
 }
 
-function openBox(ip) {
+async function openBox(ip) {
   const container = document.getElementById("content");
   while (container.firstChild) {
     container.removeChild(container.firstChild);
   }
+  ip = validateIpAddress(ip);
+  if (!ip) {
+    container.innerHTML = '<div class="box-card"><h2>Box-Webinterface</h2><p>Ungueltige Box-IP.</p></div>';
+    return;
+  }
+  const loading = document.createElement("div");
+  loading.className = "box-card";
+  loading.innerHTML = "<h2>Box-Webinterface</h2><p>Verbinde mit der Box...</p>";
+  container.appendChild(loading);
+
+  let key = getBoxManagerCandidateKeys(ip)[0] || "";
+  const probe = await fetchBoxWithManagerKeys(
+    ip,
+    "/",
+    { method: "GET", mode: "cors", cache: "no-store" },
+    2000
+  );
+  if (probe.response && probe.response.ok) {
+    key = probe.key;
+  } else if (probe.response && (probe.response.status === 401 || probe.response.status === 403)) {
+    loading.innerHTML = "<h2>Box-Webinterface</h2><p>Die Box verlangt einen anderen Manager-Key. Bitte Box neu scannen oder im Manager die AP-/Box-Key-Einstellung pruefen.</p>";
+    return;
+  }
+  while (container.firstChild) {
+    container.removeChild(container.firstChild);
+  }
   if (isHostedHttpsMode()) {
-    const url = boxManagerUrl(`http://${ip}`);
+    const url = boxManagerUrl(`http://${ip}`, key);
     const wrapper = document.createElement("div");
     wrapper.className = "box-card";
     wrapper.innerHTML = `<h2>Box-Webinterface</h2><p>Aus einer HTTPS-Webspace-Seite darf ein lokales HTTP-Webinterface nicht eingebettet werden. Oeffne die Box in einem eigenen Tab:</p><p><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>`;
@@ -1563,7 +1676,7 @@ function openBox(ip) {
     return;
   }
   const iframe = document.createElement("iframe");
-  iframe.src = boxManagerUrl(`http://${ip}`);
+  iframe.src = boxManagerUrl(`http://${ip}`, key);
   container.appendChild(iframe);
 }
 

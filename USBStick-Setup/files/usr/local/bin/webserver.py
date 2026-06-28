@@ -13,7 +13,7 @@ import shutil
 import socket
 import shlex
 from functools import lru_cache
-from typing import Optional
+from typing import List, Optional
 
 DAYS = ["mo", "di", "mi", "do", "fr", "sa", "so"]
 DAY_TO_FIRMWARE_INDEX = {
@@ -93,9 +93,31 @@ def get_box_manager_key() -> str:
     return "RiddleMatrix-Setup!"
 
 
+def get_box_manager_key_candidates() -> List[str]:
+    candidates: List[str] = []
+
+    def add(value: str) -> None:
+        key = (value or "").strip()
+        if key and key not in candidates:
+            candidates.append(key)
+
+    add(os.environ.get("RIDDLEMATRIX_BOX_MANAGER_KEY", ""))
+    add(_read_public_ap_passphrase())
+    add("RiddleMatrix-Setup!")
+    return candidates or ["RiddleMatrix-Setup!"]
+
+
 def box_manager_headers(extra=None) -> dict:
     headers = dict(extra or {})
     key = get_box_manager_key()
+    if key:
+        headers[BOX_MANAGER_KEY_HEADER] = key
+    return headers
+
+
+def box_manager_headers_for_key(key: str, extra=None) -> dict:
+    headers = dict(extra or {})
+    key = (key or "").strip()
     if key:
         headers[BOX_MANAGER_KEY_HEADER] = key
     return headers
@@ -151,7 +173,7 @@ def _default_config():
 def load_config():
     changed = False
     try:
-        with open(CONFIG_FILE, "r") as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
         if not isinstance(data, dict):
             app.logger.warning(
@@ -924,14 +946,21 @@ def _inspect_candidate_device(ip: str, config: dict):
     if not _quick_http_probe(ip):
         return None, config
 
-    try:
-        r = requests.get(
-            f"http://{ip}/",
-            headers=box_manager_headers(),
-            timeout=1.5,
-            allow_redirects=False,
-        )
-    except requests.RequestException:
+    r = None
+    for key in get_box_manager_key_candidates():
+        try:
+            candidate_response = requests.get(
+                f"http://{ip}/",
+                headers=box_manager_headers_for_key(key),
+                timeout=1.5,
+                allow_redirects=False,
+            )
+        except requests.RequestException:
+            continue
+        r = candidate_response
+        if candidate_response.ok or candidate_response.status_code not in (401, 403):
+            break
+    if r is None:
         return None, config
 
     _ensure_no_redirect(r, action="Geräte-Scan", host=ip)
@@ -1032,14 +1061,21 @@ def get_connected_devices(full_scan: bool = False):
                     if ping_rc != 0 and not _quick_http_probe(ip):
                         continue
 
-                    try:
-                        r = requests.get(
-                            f"http://{ip}/",
-                            headers=box_manager_headers(),
-                            timeout=3,
-                            allow_redirects=False,
-                        )
-                    except requests.RequestException:
+                    r = None
+                    for key in get_box_manager_key_candidates():
+                        try:
+                            candidate_response = requests.get(
+                                f"http://{ip}/",
+                                headers=box_manager_headers_for_key(key),
+                                timeout=3,
+                                allow_redirects=False,
+                            )
+                        except requests.RequestException:
+                            continue
+                        r = candidate_response
+                        if candidate_response.ok or candidate_response.status_code not in (401, 403):
+                            break
+                    if r is None:
                         continue
 
                     _ensure_no_redirect(r, action="Geräte-Scan", host=ip)
