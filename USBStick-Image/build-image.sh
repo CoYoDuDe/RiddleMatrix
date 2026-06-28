@@ -304,6 +304,7 @@ cleanup() {
     chroot "$root_mount" useradd -m -s /bin/bash kioskuser
   fi
   chroot "$root_mount" chown -R kioskuser:kioskuser /home/kioskuser
+  chroot "$root_mount" systemctl enable systemd-networkd.service
   chroot "$root_mount" systemctl enable bootlocal.service webserver.service kiosk-startx.service riddlematrix-grow-root.service
 
   log "Installiere GRUB fuer Legacy-BIOS und UEFI."
