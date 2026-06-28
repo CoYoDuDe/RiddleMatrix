@@ -41,9 +41,9 @@ Kopieren manuell erfolgen:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable kiosk-startx.service
-sudo systemctl restart kiosk-startx.service
-sudo systemctl status kiosk-startx.service
+sudo systemctl enable getty@tty1.service
+sudo systemctl restart getty@tty1.service
+sudo systemctl status getty@tty1.service
 ```
 
 `kiosk-startx.service` ist jetzt als `Type=simple` ausgelegt und startet `startx` ohne Zeitlimit. Dank `Restart=on-failure`

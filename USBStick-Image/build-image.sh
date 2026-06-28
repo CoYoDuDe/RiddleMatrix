@@ -305,7 +305,7 @@ cleanup() {
   fi
   chroot "$root_mount" chown -R kioskuser:kioskuser /home/kioskuser
   chroot "$root_mount" systemctl enable systemd-networkd.service
-  chroot "$root_mount" systemctl enable bootlocal.service webserver.service kiosk-startx.service riddlematrix-grow-root.service
+  chroot "$root_mount" systemctl enable bootlocal.service webserver.service riddlematrix-grow-root.service getty@tty1.service
 
   log "Installiere GRUB fuer Legacy-BIOS und UEFI."
   chroot "$root_mount" update-initramfs -u -k all
