@@ -278,6 +278,7 @@ set_permissions() {
   done
 
   local -a config_paths=(
+    "home/kioskuser/.bash_profile"
     "home/kioskuser/.xinitrc"
     "etc/dnsmasq.d/riddlematrix-hotspot.conf"
   )
@@ -342,9 +343,9 @@ enable_systemd_units() {
   [[ "$TARGET_ROOT" = "/" ]] || { warn "Systemd enable skipped (target root is $TARGET_ROOT)"; return; }
   command -v systemctl >/dev/null 2>&1 || { warn "systemctl not available; skipping service enable"; return; }
 
-  local -a units=(bootlocal.service webserver.service kiosk-startx.service riddlematrix-grow-root.service)
+  local -a units=(bootlocal.service webserver.service riddlematrix-grow-root.service getty@tty1.service)
   run_cmd systemctl daemon-reload
-  log "Systemd-Konfiguration neu geladen; kiosk-startx.service läuft nun als Type=simple mit automatischem Neustart bei Fehlern."
+  log "Systemd-Konfiguration neu geladen; tty1 startet den Kiosk per Autologin."
   for unit in "${units[@]}"; do
     if [[ -f "$TARGET_ROOT/etc/systemd/system/$unit" ]]; then
       run_cmd systemctl enable "$unit"
@@ -353,15 +354,10 @@ enable_systemd_units() {
     fi
   done
 
-  local kiosk_unit="kiosk-startx.service"
-  if [[ -f "$TARGET_ROOT/etc/systemd/system/$kiosk_unit" ]]; then
-    if ensure_kioskuser; then
-      run_cmd systemctl restart "$kiosk_unit"
-    else
-      warn "Überspringe Neustart von $kiosk_unit, da 'kioskuser' nicht angelegt werden konnte"
-    fi
+  if ensure_kioskuser; then
+    run_cmd systemctl restart getty@tty1.service
   else
-    warn "Service file $kiosk_unit missing; cannot restart"
+    warn "Ueberspringe Neustart von getty@tty1.service, da 'kioskuser' nicht angelegt werden konnte"
   fi
 }
 
