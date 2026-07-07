@@ -5,6 +5,7 @@
 
 void enableRTC();
 void enableRS485();
+void initializeTimezone();
 bool updateCachedWeekday(bool waitForIdle = false);
 bool isWeekdayCacheValid();
 int getCachedWeekday();

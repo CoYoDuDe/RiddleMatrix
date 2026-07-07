@@ -30,6 +30,7 @@ void setup() {
   delay(500);
   Serial.println(F("🚀 Systemstart..."));
   randomSeed(getChipRandomSeed() ^ micros());
+  initializeTimezone();
   // clearDisplay();
 
   webServerRunning = false;

@@ -15,6 +15,7 @@ constexpr unsigned long WEEKDAY_CACHE_MAX_AGE_MS = 5000UL;
 constexpr unsigned long SERIAL_IDLE_CHECK_DELAY_MS = 2UL;
 constexpr unsigned long SERIAL_IDLE_MAX_WAIT_MS = 20UL;
 constexpr const char *NTP_TIMEZONE_EUROPE_BERLIN = "CET-1CEST,M3.5.0,M10.5.0/3";
+bool timezoneInitialized = false;
 
 void storeWeekdayInCache(int weekday) {
   if (weekday >= 0 && weekday < static_cast<int>(NUM_DAYS)) {
@@ -27,6 +28,7 @@ void storeWeekdayInCache(int weekday) {
 }
 
 bool getSystemLocalTime(struct tm &timeinfo, uint32_t timeoutMs = 0) {
+  initializeTimezone();
   if (!getLocalTime(&timeinfo, timeoutMs)) {
     return false;
   }
@@ -34,6 +36,8 @@ bool getSystemLocalTime(struct tm &timeinfo, uint32_t timeoutMs = 0) {
 }
 
 bool setSystemLocalTime(int year, int month, int day, int hour, int minute, int second) {
+  initializeTimezone();
+
   struct tm localTime = {};
   localTime.tm_year = year - 1900;
   localTime.tm_mon = month - 1;
@@ -60,6 +64,16 @@ bool setSystemLocalTime(int year, int month, int day, int hour, int minute, int 
 }
 
 } // namespace
+
+void initializeTimezone() {
+  if (timezoneInitialized) {
+    return;
+  }
+
+  setenv("TZ", NTP_TIMEZONE_EUROPE_BERLIN, 1);
+  tzset();
+  timezoneInitialized = true;
+}
 
 void enableRTC() {
   digitalWrite(GPIO_RS485_ENABLE, HIGH);
@@ -251,6 +265,7 @@ bool setRTCFromWeb(const String &date, const String &time) {
 }
 bool syncTimeWithNTP() {
     Serial.println(F("Synchronisiere Zeit mit NTP..."));
+    initializeTimezone();
     configTzTime(NTP_TIMEZONE_EUROPE_BERLIN, "pool.ntp.org", "time.nist.gov");
 
     struct tm timeinfo;
