@@ -12,14 +12,14 @@ if [[ -e "$MARKER" ]]; then
   exit 0
 fi
 
-root_source="$(findmnt -n -o SOURCE /)"
+root_source="$(findmnt -n -o SOURCE / || true)"
 if [[ -z "$root_source" || ! -b "$root_source" ]]; then
   log "Root-Blockdevice konnte nicht ermittelt werden: $root_source"
   exit 0
 fi
 
-parent_name="$(lsblk -no PKNAME "$root_source" | head -n1 | tr -d '[:space:]')"
-part_number="$(lsblk -no PARTNUM "$root_source" | head -n1 | tr -d '[:space:]')"
+parent_name="$(lsblk -no PKNAME "$root_source" 2>/dev/null | head -n1 | tr -d '[:space:]' || true)"
+part_number="$(lsblk -no PARTNUM "$root_source" 2>/dev/null | head -n1 | tr -d '[:space:]' || true)"
 
 if [[ -z "$parent_name" || -z "$part_number" ]]; then
   log "Root-Partition konnte nicht eindeutig erkannt werden."
