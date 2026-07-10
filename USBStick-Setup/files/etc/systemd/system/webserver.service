@@ -1,6 +1,7 @@
 [Unit]
 Description=RiddleMatrix Manager Webserver
-After=network.target
+After=network.target bootlocal.service
+Wants=bootlocal.service
 
 [Service]
 ExecStartPre=/bin/sh -c '[ -x /usr/local/venv/riddlematrix/bin/python3 ] || { echo "Virtualenv /usr/local/venv/riddlematrix missing" >&2; exit 1; }'

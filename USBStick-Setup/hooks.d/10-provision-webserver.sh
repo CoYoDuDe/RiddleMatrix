@@ -126,6 +126,8 @@ ensure_system_packages() {
     iputils-ping
     curl
     wget
+    pciutils
+    usbutils
     xserver-xorg
     xinit
     x11-xserver-utils
@@ -144,9 +146,11 @@ ensure_system_packages() {
   )
   local -a optional_packages=(
     firmware-linux-nonfree
+    firmware-amd-graphics
     firmware-iwlwifi
     firmware-realtek
     firmware-atheros
+    firmware-ath9k-htc
     firmware-brcm80211
     firmware-libertas
     firmware-zd1211

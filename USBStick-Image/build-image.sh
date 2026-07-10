@@ -6,7 +6,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 OUTPUT_IMAGE="$REPO_ROOT/RiddleMatrix-usb.img"
 IMAGE_SIZE_MIB="${IMAGE_SIZE_MIB:-8192}"
-DEBIAN_SUITE="${DEBIAN_SUITE:-bookworm}"
+DEBIAN_SUITE="${DEBIAN_SUITE:-trixie}"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-https://deb.debian.org/debian}"
 COMPRESS=1
 work_dir=""
@@ -269,17 +269,21 @@ cleanup() {
   chroot "$root_mount" apt-get install -y \
     systemd-sysv linux-image-amd64 initramfs-tools \
     grub-common grub2-common grub-pc-bin grub-efi-amd64-bin \
-    dosfstools e2fsprogs sudo ca-certificates
+    dosfstools e2fsprogs sudo ca-certificates pciutils usbutils
 
   local -a optional_wifi_packages=(
     firmware-linux-free
     firmware-linux-nonfree
     firmware-misc-nonfree
+    firmware-amd-graphics
     firmware-iwlwifi
     firmware-realtek
     firmware-atheros
+    firmware-ath9k-htc
     firmware-brcm80211
+    firmware-libertas
     firmware-mediatek
+    firmware-zd1211
     wireless-regdb
     iw
     usb-modeswitch

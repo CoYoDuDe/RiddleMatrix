@@ -26,6 +26,12 @@ Image bauen:
 sudo ./USBStick-Image/build-image.sh --output ./RiddleMatrix-usb.img
 ```
 
+Der Builder nutzt standardmaessig Debian `trixie`, damit Kernel und WLAN-Firmware fuer aktuelle Notebooks moeglichst neu sind. Falls ein aelteres Basissystem benoetigt wird, kann weiter explizit gebaut werden:
+
+```bash
+sudo ./USBStick-Image/build-image.sh --suite bookworm --output ./RiddleMatrix-usb.img
+```
+
 Optional groesser bauen:
 
 ```bash
@@ -34,7 +40,9 @@ sudo IMAGE_SIZE_MIB=12288 ./USBStick-Image/build-image.sh --output ./RiddleMatri
 
 Der Standard ist 8192 MiB, weil Debian, Firefox, X11 und WLAN-Firmware sonst nicht zuverlaessig in das Image passen. Der Builder erzeugt zusaetzlich `RiddleMatrix-usb.img.xz`. Diese komprimierte Datei ist fuer Ablage/Download gedacht. Zum Schreiben mit Win32DiskImager muss sie vorher entpackt werden.
 
-Das Image installiert bewusst mehrere gaengige WLAN-Firmwarepakete fuer Intel, Realtek, Broadcom, Atheros und typische USB-WLAN-Sticks. Komplett garantieren laesst sich WLAN-AP-Betrieb trotzdem nicht, weil manche Notebook-Treiber oder Chipsaetze keinen Access-Point-Modus unter Linux unterstuetzen.
+Das Image installiert bewusst mehrere gaengige WLAN-Firmwarepakete fuer Intel, Realtek, Broadcom, Atheros, MediaTek und typische USB-WLAN-Sticks. Komplett garantieren laesst sich WLAN-AP-Betrieb trotzdem nicht, weil manche Notebook-Treiber oder Chipsaetze keinen Access-Point-Modus unter Linux unterstuetzen. In diesem Fall hilft nur ein anderer Treiber/Kernel oder ein USB-WLAN-Stick, der AP-Modus unter Linux kann.
+
+Tiny Core Linux waere kleiner, ist fuer dieses Projekt aber nicht die bessere Standardbasis: Der groesste Erfolgsfaktor ist breite Hardware-, Firmware- und Browser-Unterstuetzung. Debian ist groesser, dafuer deutlich wartbarer und fuer wechselnde Notebooks realistischer plug-and-play.
 
 ## Auf USB-Stick schreiben
 
@@ -69,6 +77,27 @@ WPA_PASSPHRASE='RiddleMatrix-Setup!'
 ```
 
 Im Windows-Manager koennen SSID und Passwort gespeichert und mit `USB-Stick WLAN speichern` auf den Stick geschrieben werden. Beim Linux-Boot verwendet `/etc/usbstick/public_ap.env` diese Datei.
+
+## Hotspot-Diagnose
+
+Beim Booten schreibt der Stick Diagnoseinformationen nach:
+
+```bash
+/var/log/riddlematrix-hotspot.log
+/run/riddlematrix-hotspot.status
+```
+
+Wenn kein Hotspot erscheint, dort zuerst pruefen:
+
+```bash
+sudo cat /run/riddlematrix-hotspot.status
+sudo tail -n 200 /var/log/riddlematrix-hotspot.log
+iw dev
+iw phy
+rfkill list
+```
+
+Der Hotspot-Start bevorzugt automatisch ein WLAN-Interface, das laut `iw` AP-Modus unterstuetzt. Meldet der interne Notebook-Chip keinen AP-Modus, bleibt der Kiosk/Webserver trotzdem aktiv und der Grund steht im Log.
 
 ## First Boot Resize
 

@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+LOG_FILE="/var/log/riddlematrix-hotspot.log"
 PERSIST_ROOT="/mnt/persist"
 PERSIST_USR_LOCAL="${PERSIST_ROOT}/usr_local"
 
@@ -10,19 +11,24 @@ export PUBLIC_AP_DNSMASQ_CONFIG="${PUBLIC_AP_DNSMASQ_CONFIG:-$PUBLIC_AP_DNSMASQ_
 
 PUBLIC_AP_HELPER="/usr/local/libexec/public_ap.sh"
 if [[ ! -f "$PUBLIC_AP_HELPER" ]]; then
-    echo "❌ Fehlendes Helferskript $PUBLIC_AP_HELPER" >&2
+    echo "Missing helper script $PUBLIC_AP_HELPER" >&2
     exit 1
 fi
 
+mkdir -p "$(dirname "$LOG_FILE")"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=== RiddleMatrix hotspot start $(date -Is 2>/dev/null || date) ==="
+
 # shellcheck disable=SC1090
 source "$PUBLIC_AP_HELPER"
+public_ap_write_status "starting" "Hotspot wird gestartet."
 
 notify_legacy_dnsmasq() {
     if [[ -f "$LEGACY_DNSMASQ_CONFIG" && ! -L "$LEGACY_DNSMASQ_CONFIG" ]]; then
         if grep -q "RiddleMatrix-Hotspot" "$LEGACY_DNSMASQ_CONFIG" 2>/dev/null; then
-            echo "ℹ️ Legacy-Hotspot-Konfiguration $LEGACY_DNSMASQ_CONFIG bleibt unverändert; Drop-in $PUBLIC_AP_DNSMASQ_CONFIG wird aktualisiert."
+            echo "Legacy hotspot config $LEGACY_DNSMASQ_CONFIG remains unchanged; updating drop-in $PUBLIC_AP_DNSMASQ_CONFIG."
         else
-            echo "ℹ️ Bestehende dnsmasq-Konfiguration $LEGACY_DNSMASQ_CONFIG bleibt unangetastet; Drop-in $PUBLIC_AP_DNSMASQ_CONFIG übernimmt die Hotspot-Einstellungen."
+            echo "Existing dnsmasq config $LEGACY_DNSMASQ_CONFIG remains untouched; hotspot settings use drop-in $PUBLIC_AP_DNSMASQ_CONFIG."
         fi
     fi
 }
@@ -30,46 +36,59 @@ notify_legacy_dnsmasq() {
 FALLBACK_CREDENTIALS=0
 if ! public_ap_load_env; then
     case "$PUBLIC_AP_ENV_STATUS" in
-        missing_file|empty_file)
-            echo "⚠️ $PUBLIC_AP_ENV_ERROR Verwende Standardwerte (Vorlage: $PUBLIC_AP_ENV_TEMPLATE)." >&2
-            public_ap_apply_defaults
-            FALLBACK_CREDENTIALS=1
-            ;;
-        missing_ssid|missing_passphrase)
-            echo "⚠️ $PUBLIC_AP_ENV_ERROR Greife auf Standardwerte zurück (Vorlage: $PUBLIC_AP_ENV_TEMPLATE)." >&2
+        missing_file|empty_file|missing_ssid|missing_passphrase)
+            echo "Warning: $PUBLIC_AP_ENV_ERROR Using default hotspot credentials from $PUBLIC_AP_ENV_TEMPLATE." >&2
             public_ap_apply_defaults
             FALLBACK_CREDENTIALS=1
             ;;
         *)
-            echo "⚠️ $PUBLIC_AP_ENV_ERROR Hotspot-Start wird übersprungen." >&2
+            echo "Warning: $PUBLIC_AP_ENV_ERROR Hotspot startup skipped." >&2
+            public_ap_write_status "failed" "$PUBLIC_AP_ENV_ERROR"
+            systemctl try-restart webserver --no-block || true
             exit 0
             ;;
     esac
 fi
 
 if (( FALLBACK_CREDENTIALS )); then
-    echo "ℹ️ Standard-Hotspot \"$SSID\" aktiv. Bitte /etc/usbstick/public_ap.env anpassen (Vorlage: $PUBLIC_AP_ENV_TEMPLATE)."
+    echo "Default hotspot \"$SSID\" active. Please edit /etc/usbstick/public_ap.env if needed."
 fi
 
 if [[ -d "$PERSIST_USR_LOCAL" ]]; then
-    echo "♻️ Synchronisiere persistente /usr/local-Dateien..."
+    echo "Syncing persistent /usr/local files..."
     mkdir -p /usr/local/bin /usr/local/etc
     cp -a "$PERSIST_USR_LOCAL/." /usr/local/
 fi
 
 rfkill unblock wifi || true
+systemctl stop NetworkManager 2>/dev/null || true
+systemctl stop wpa_supplicant 2>/dev/null || true
+pkill wpa_supplicant 2>/dev/null || true
+public_ap_log_diagnostics
 
 WIFI_IFACE="$(public_ap_detect_wifi_iface || true)"
 if [[ -z "$WIFI_IFACE" ]]; then
-    WIFI_IFACE="wlan0"
-    echo "⚠️ Konnte WLAN-Interface nicht automatisch erkennen, verwende Standard: $WIFI_IFACE"
+    echo "No WiFi interface found. Hotspot cannot start." >&2
+    public_ap_write_status "failed" "Kein WLAN-Interface gefunden."
+    systemctl try-restart webserver --no-block || true
+    exit 0
 fi
 
 if ! ip link show "$WIFI_IFACE" &>/dev/null; then
-    echo "❌ WLAN-Interface $WIFI_IFACE nicht gefunden." >&2
-    exit 1
+    echo "WiFi interface $WIFI_IFACE not found." >&2
+    public_ap_write_status "failed" "WLAN-Interface $WIFI_IFACE nicht gefunden."
+    systemctl try-restart webserver --no-block || true
+    exit 0
 fi
 
+if ! public_ap_iface_supports_ap "$WIFI_IFACE"; then
+    echo "WiFi interface $WIFI_IFACE does not report AP mode support. This chipset/driver probably cannot run a Linux hotspot." >&2
+    public_ap_write_status "failed" "WLAN-Interface $WIFI_IFACE unterstuetzt keinen AP-Modus."
+    systemctl try-restart webserver --no-block || true
+    exit 0
+fi
+
+echo "Using WiFi interface $WIFI_IFACE for the RiddleMatrix hotspot."
 ip link set "$WIFI_IFACE" down || true
 ip addr flush dev "$WIFI_IFACE" || true
 ip addr add 192.168.10.1/24 dev "$WIFI_IFACE"
@@ -84,7 +103,7 @@ LEASES_FILE="/var/lib/misc/dnsmasq.leases"
 LEASES_USER="root"
 LEASES_GROUP="dnsmasq"
 if ! getent group "$LEASES_GROUP" >/dev/null 2>&1; then
-    echo "⚠️ Gruppe $LEASES_GROUP nicht vorhanden; verwende root:root für $LEASES_FILE" >&2
+    echo "Group $LEASES_GROUP does not exist; using root:root for $LEASES_FILE" >&2
     LEASES_GROUP="$LEASES_USER"
 fi
 if [[ -e "$LEASES_FILE" ]]; then
@@ -94,6 +113,25 @@ else
 fi
 chown "$LEASES_USER:$LEASES_GROUP" "$LEASES_FILE"
 
-systemctl restart hostapd
-systemctl restart dnsmasq
-systemctl restart webserver || true
+systemctl stop hostapd 2>/dev/null || true
+systemctl stop dnsmasq 2>/dev/null || true
+
+if ! systemctl restart hostapd; then
+    echo "hostapd failed to start." >&2
+    journalctl -u hostapd -n 120 --no-pager 2>/dev/null || true
+    public_ap_write_status "failed" "hostapd konnte auf $WIFI_IFACE nicht starten."
+    systemctl try-restart webserver --no-block || true
+    exit 0
+fi
+
+if ! systemctl restart dnsmasq; then
+    echo "dnsmasq failed to start." >&2
+    journalctl -u dnsmasq -n 120 --no-pager 2>/dev/null || true
+    public_ap_write_status "failed" "dnsmasq konnte nicht starten."
+    systemctl try-restart webserver --no-block || true
+    exit 0
+fi
+
+systemctl try-restart webserver --no-block || true
+public_ap_write_status "running" "Hotspot $SSID laeuft auf $WIFI_IFACE mit DHCP 192.168.10.100-200."
+echo "RiddleMatrix hotspot $SSID is running on $WIFI_IFACE."
