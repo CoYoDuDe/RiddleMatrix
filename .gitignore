@@ -33,6 +33,7 @@ tests/__pycache__/
 
 # Local build artifacts
 dist/
+dist-public/
 
 # Private local/server defaults. Do not commit customer credentials.
 src/private_defaults.h
