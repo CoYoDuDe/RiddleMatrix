@@ -303,6 +303,10 @@ cleanup() {
 
   log "Installiere RiddleMatrix-Payload und Pakete."
   "$REPO_ROOT/USBStick-Setup/setup.sh" --target "$root_mount" --skip-systemd
+  # These package units may be enabled by default. bootlocal.service owns the
+  # AP lifecycle and starts hostapd/dnsmasq only after the WiFi interface was
+  # detected and configured.
+  chroot "$root_mount" systemctl disable dnsmasq.service hostapd.service wpa_supplicant.service 2>/dev/null || true
 
   if ! chroot "$root_mount" id kioskuser >/dev/null 2>&1; then
     chroot "$root_mount" useradd -m -s /bin/bash kioskuser
