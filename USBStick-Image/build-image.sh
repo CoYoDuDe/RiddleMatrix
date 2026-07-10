@@ -21,7 +21,7 @@ Usage: sudo USBStick-Image/build-image.sh [options]
 Options:
   -o, --output <file>       Output raw image path (default: ./RiddleMatrix-usb.img)
       --size-mib <mib>      Initial image size in MiB (default: 8192)
-      --suite <name>        Debian suite (default: bookworm)
+      --suite <name>        Debian suite (default: trixie)
       --mirror <url>        Debian mirror URL
       --no-compress         Do not create .xz next to the raw image
   -h, --help                Show this help
