@@ -71,6 +71,44 @@ def test_local_networks_route_returns_subnet_candidates(webserver_app, monkeypat
     assert "192.168.178" in data["subnets"]
 
 
+def test_hotspot_status_route_reports_unavailable_when_not_on_linux_stick(webserver_app, tmp_path):
+    module, client = webserver_app
+    module.HOTSPOT_STATUS_FILE = str(tmp_path / "missing-hotspot.status")
+
+    response = client.get("/hotspot_status")
+
+    assert response.status_code == 200
+    assert response.get_json() == {"available": False, "state": "unavailable"}
+
+
+def test_hotspot_status_route_returns_diagnostics(webserver_app, tmp_path):
+    module, client = webserver_app
+    status_path = tmp_path / "hotspot.status"
+    status_path.write_text(
+        "STATE=failed\n"
+        "MESSAGE=hostapd konnte auf wlan0 nicht starten.\n"
+        "INTERFACES=wlan0,wlan1\n"
+        "AP_CAPABLE=wlan1\n"
+        "DRIVERS=wlan0:mt7921e,wlan1:ath9k_htc\n"
+        "UPDATED=2026-07-10T12:00:00+02:00\n",
+        encoding="utf-8",
+    )
+    module.HOTSPOT_STATUS_FILE = str(status_path)
+
+    response = client.get("/hotspot_status")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "available": True,
+        "state": "failed",
+        "message": "hostapd konnte auf wlan0 nicht starten.",
+        "interfaces": ["wlan0", "wlan1"],
+        "apCapable": ["wlan1"],
+        "drivers": ["wlan0:mt7921e", "wlan1:ath9k_htc"],
+        "updated": "2026-07-10T12:00:00+02:00",
+    }
+
+
 def test_load_config_recovers_from_corrupted_file(tmp_path):
     module = _load_webserver(tmp_path)
     config_path = Path(module.CONFIG_FILE)

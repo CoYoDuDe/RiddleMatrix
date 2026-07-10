@@ -22,10 +22,31 @@ public_ap_log() {
 public_ap_write_status() {
     local state=$1
     local message=${2:-}
+    local interfaces=""
+    local ap_capable=""
+    local drivers=""
+    local iface driver
+
+    while IFS= read -r iface; do
+        [[ -n $iface ]] || continue
+        interfaces+="${interfaces:+,}$iface"
+        driver=$(basename "$(readlink -f "/sys/class/net/$iface/device/driver" 2>/dev/null)" 2>/dev/null || true)
+        [[ -n $driver ]] || driver="unbekannt"
+        drivers+="${drivers:+,}$iface:$driver"
+        if public_ap_iface_supports_ap "$iface"; then
+            ap_capable+="${ap_capable:+,}$iface"
+        fi
+    done < <(public_ap_wifi_interfaces)
+
+    message=${message//$'\n'/ }
+    message=${message//$'\r'/ }
     mkdir -p "$(dirname "$PUBLIC_AP_STATUS_FILE")"
     {
         printf 'STATE=%s\n' "$state"
         printf 'MESSAGE=%s\n' "$message"
+        printf 'INTERFACES=%s\n' "$interfaces"
+        printf 'AP_CAPABLE=%s\n' "$ap_capable"
+        printf 'DRIVERS=%s\n' "$drivers"
         printf 'UPDATED=%s\n' "$(date -Is 2>/dev/null || date)"
     } > "$PUBLIC_AP_STATUS_FILE"
 }

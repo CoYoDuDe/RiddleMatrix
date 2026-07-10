@@ -55,6 +55,7 @@ SERVER_HOST = os.environ.get("RIDDLEMATRIX_SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.environ.get("RIDDLEMATRIX_SERVER_PORT", "8080"))
 SHUTDOWN_COMMAND_ENV_VAR = "SHUTDOWN_COMMAND"
 HIDE_SHUTDOWN = os.environ.get("RIDDLEMATRIX_HIDE_SHUTDOWN", "").strip().lower() in {"1", "true", "yes", "on"}
+HOTSPOT_STATUS_FILE = os.environ.get("RIDDLEMATRIX_HOTSPOT_STATUS_FILE", "/run/riddlematrix-hotspot.status")
 BOX_MANAGER_KEY_HEADER = "X-RiddleMatrix-Manager-Key"
 
 
@@ -1294,6 +1295,33 @@ def webspace_config():
 @app.route("/local_networks")
 def local_networks():
     return jsonify({"subnets": _local_ipv4_subnet_candidates(), "defaultSubnet": SCAN_SUBNET})
+
+
+@app.route("/hotspot_status")
+def hotspot_status():
+    if not os.path.isfile(HOTSPOT_STATUS_FILE):
+        return jsonify({"available": False, "state": "unavailable"})
+
+    values = {}
+    try:
+        with open(HOTSPOT_STATUS_FILE, "r", encoding="utf-8", errors="replace") as status_file:
+            for raw_line in status_file:
+                key, separator, value = raw_line.rstrip("\r\n").partition("=")
+                if separator and key in {"STATE", "MESSAGE", "INTERFACES", "AP_CAPABLE", "DRIVERS", "UPDATED"}:
+                    values[key] = value
+    except OSError as exc:
+        app.logger.warning("Hotspot-Status konnte nicht gelesen werden: %s", exc)
+        return jsonify({"available": False, "state": "unavailable"})
+
+    return jsonify({
+        "available": True,
+        "state": values.get("STATE", "unknown"),
+        "message": values.get("MESSAGE", ""),
+        "interfaces": [item for item in values.get("INTERFACES", "").split(",") if item],
+        "apCapable": [item for item in values.get("AP_CAPABLE", "").split(",") if item],
+        "drivers": [item for item in values.get("DRIVERS", "").split(",") if item],
+        "updated": values.get("UPDATED", ""),
+    })
 
 
 @app.route("/devices")

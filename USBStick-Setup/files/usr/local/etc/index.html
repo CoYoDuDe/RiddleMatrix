@@ -171,6 +171,14 @@
       position: fixed; inset: 0; z-index: 9999; background: #1f2937; color: white;
       display: flex; align-items: center; justify-content: center; padding: 20px;
     }
+    #runtimeAlert {
+      display: none; position: fixed; z-index: 3000; top: 12px; left: 272px; right: 12px;
+      padding: 14px 16px; border: 2px solid #991b1b; border-radius: 7px;
+      background: #fef2f2; color: #7f1d1d; box-shadow: 0 8px 24px rgba(0,0,0,.22);
+      line-height: 1.4;
+    }
+    #runtimeAlert strong { display: block; margin-bottom: 3px; }
+    #runtimeAlert small { display: block; margin-top: 4px; }
     .auth-card {
       width: min(420px, 100%); background: #fff; color: #111827; padding: 22px;
       border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,.35);
@@ -208,6 +216,7 @@
   </style>
 </head>
 <body onload="init()">
+<div id="runtimeAlert" role="alert" aria-live="assertive"></div>
 <div id="sidebar">
   <div>
     <h3>RiddleMatrix</h3>
@@ -239,6 +248,7 @@ let devicesPollInFlight = false;
 let devicesPollPromise = null;
 let devicesPollTimeoutId = null;
 const devicesPollIntervalMs = 2000;
+let hotspotStatusTimer = null;
 let emptyConnectedPolls = 0;
 const maxEmptyConnectedPollsBeforeClear = 30;
 let localBrowserMode = false;
@@ -1418,7 +1428,45 @@ async function init() {
   if (!allowed) {
     return;
   }
+  pollHotspotStatus();
   fetchDevices();
+}
+
+async function pollHotspotStatus() {
+  const alertBox = document.getElementById("runtimeAlert");
+  if (!alertBox || shouldUseLocalBrowserMode()) {
+    return;
+  }
+
+  try {
+    const response = await fetch(managerPath("/hotspot_status"), { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const status = await response.json();
+    if (!status.available || status.state === "running") {
+      alertBox.style.display = "none";
+    } else if (status.state === "failed") {
+      const interfaces = Array.isArray(status.interfaces) && status.interfaces.length
+        ? status.interfaces.join(", ")
+        : "keines erkannt";
+      const drivers = Array.isArray(status.drivers) && status.drivers.length
+        ? status.drivers.join(", ")
+        : "kein Treiber erkannt";
+      alertBox.innerHTML = `<strong>Hotspot konnte nicht gestartet werden</strong>${escapeHtml(status.message || "Unbekannter Fehler.")}<small>WLAN: ${escapeHtml(interfaces)} | Treiber: ${escapeHtml(drivers)}. Falls kein AP-fähiges Interface erkannt wird, bitte einen Linux-kompatiblen USB-WLAN-Adapter verwenden.</small>`;
+      alertBox.style.display = "block";
+    } else {
+      alertBox.innerHTML = `<strong>Hotspot wird vorbereitet</strong>${escapeHtml(status.message || "Bitte kurz warten.")}`;
+      alertBox.style.display = "block";
+    }
+  } catch (error) {
+    alertBox.style.display = "none";
+  } finally {
+    if (hotspotStatusTimer) {
+      clearTimeout(hotspotStatusTimer);
+    }
+    hotspotStatusTimer = window.setTimeout(pollHotspotStatus, 5000);
+  }
 }
 
 function normalizeBox(box) {
