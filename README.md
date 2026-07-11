@@ -209,3 +209,12 @@ Ein fertiges Raw-Image fuer Win32DiskImager/Rufus/balenaEtcher kann mit dem Buil
 - Die Windows-App blendet den Shutdown-Button aus, weil dort das Herunterfahren des Notebooks nicht zur Boxenverwaltung gehört.
 - Tests für diesen Pfad befinden sich in [`tests/test_webserver.py`](tests/test_webserver.py) und decken den direkten Shutdown-Aufruf ab.
 
+## Unterstützung
+
+Dieses Projekt wird unabhängig und privat entwickelt und kostenlos bereitgestellt. Freiwillige Unterstützung hilft bei Infrastruktur, Servern, Domains, Tests, Wartung und Weiterentwicklung.
+
+- [PayPal](https://paypal.me/CoYoDuDe)
+- [Buy Me a Coffee](https://www.buymeacoffee.com/CoYoDuDe)
+- [Weitere Projekte und Informationen](https://dnsmith.net/)
+
+Unterstützung ist freiwillig. Es gibt keinen Abo-Zwang und daraus entsteht kein Anspruch auf bestimmte Funktionen oder persönlichen Support.
